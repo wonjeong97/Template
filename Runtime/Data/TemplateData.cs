@@ -92,7 +92,7 @@ namespace Wonjeong.Data
     public class SoundSetting
     {
         public string key;
-        public String clipPath;
+        public string clipPath;
         public float volume = 1.0f;
     }
 
