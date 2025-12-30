@@ -125,5 +125,13 @@ namespace Wonjeong.UI
             _isTransitioning = false;
             onComplete?.Invoke();
         }
+
+        private void OnDestroy()
+        {
+            if (_instance == this)
+            {
+                _instance = null;
+            }
+        }
     }
 }
