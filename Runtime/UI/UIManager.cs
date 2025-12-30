@@ -1,4 +1,4 @@
-using System; // [필수] Exception 사용을 위해 추가
+using System;
 using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
