@@ -63,6 +63,12 @@ namespace Wonjeong.UI
         /// <summary> VideoPlayer와 RawImage를 위한 RenderTexture를 생성하고 연결합니다. </summary>
         public RenderTexture WireRawImageAndRenderTexture(VideoPlayer vp, RawImage raw, Vector2Int size)
         {
+            if (vp == null)
+            {
+                Debug.LogError("VideoPlayer cannot be null");
+                return null;
+            }
+            
             // 기존 텍스처 해제
             if (vp.targetTexture != null)
             {
@@ -70,7 +76,8 @@ namespace Wonjeong.UI
                 vp.targetTexture.Release();
                 Destroy(vp.targetTexture);
             }
-
+            
+            // Unity RenderTexture 최소 크기는 2x2
             int rtW = Mathf.Max(2, size.x);
             int rtH = Mathf.Max(2, size.y);
             RenderTexture rTex = new RenderTexture(rtW, rtH, 24);
@@ -87,6 +94,18 @@ namespace Wonjeong.UI
         /// <summary> 비디오를 준비(Prepare)하고 완료되면 재생합니다. </summary>
         public IEnumerator PrepareAndPlayRoutine(VideoPlayer vp, string url, AudioSource audio, float volume)
         {
+            if (vp == null)
+            {
+                Debug.LogError("VideoPlayer cannot be null");
+                yield break;
+            }
+    
+            if (string.IsNullOrEmpty(url))
+            {
+                Debug.LogError("Video URL cannot be null or empty");
+                yield break;
+            }
+    
             vp.source = VideoSource.Url;
             vp.url = url;
             vp.playOnAwake = false;
@@ -99,12 +118,46 @@ namespace Wonjeong.UI
                 audio.volume = Mathf.Clamp01(volume);
             }
 
+            // 에러 추적을 위한 플래그
+            bool hasError = false;
+            string errorMessage = string.Empty;
+    
+            VideoPlayer.ErrorEventHandler errorHandler = (VideoPlayer source, string message) =>
+            {
+                hasError = true;
+                errorMessage = message;
+            };
+    
+            // 에러 이벤트 구독
+            vp.errorReceived += errorHandler;
+
             vp.Prepare();
 
-            // 고용량 비디오(100MB+)의 경우 Prepare 시간이 걸릴 수 있으므로 완료될 때까지 대기
-            while (!vp.isPrepared)
+            // 타임아웃 설정 (30초)
+            float timeoutSeconds = 30f;
+            float elapsedTime = 0f;
+    
+            while (!vp.isPrepared && elapsedTime < timeoutSeconds && !hasError)
             {
+                elapsedTime += Time.deltaTime;
                 yield return null;
+            }
+    
+            // 이벤트 구독 해제
+            vp.errorReceived -= errorHandler;
+    
+            // 에러 체크
+            if (hasError)
+            {
+                Debug.LogError($"Video preparation failed: {url}. Error: {errorMessage}");
+                yield break;
+            }
+    
+            // 타임아웃 체크
+            if (!vp.isPrepared)
+            {
+                Debug.LogError($"Video preparation timed out after {timeoutSeconds}s: {url}");
+                yield break;
             }
 
             vp.Play();

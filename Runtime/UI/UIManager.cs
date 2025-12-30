@@ -213,7 +213,7 @@ namespace Wonjeong.UI
     
             RawImage rawImage = target.GetComponent<RawImage>();
             VideoPlayer vp = target.GetComponent<VideoPlayer>();
-            AudioSource audio = target.GetComponent<AudioSource>(); // 오디오 소스 추가 확인
+            AudioSource audioSource = target.GetComponent<AudioSource>(); // 오디오 소스 추가 확인
 
             if (vp != null && rawImage != null)
             {
@@ -226,7 +226,7 @@ namespace Wonjeong.UI
 
                 // 3. 경로 해석 및 코루틴 재생 시작
                 string url = VideoManager.Instance.ResolvePlayableUrl(setting.fileName);
-                StartCoroutine(VideoManager.Instance.PrepareAndPlayRoutine(vp, url, audio, setting.volume));
+                StartCoroutine(VideoManager.Instance.PrepareAndPlayRoutine(vp, url, audioSource, setting.volume));
             }
         }
 
