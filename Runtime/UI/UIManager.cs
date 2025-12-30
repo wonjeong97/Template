@@ -33,9 +33,14 @@ namespace Wonjeong.UI
         }
 
         private FontMaps _fontMaps;
+        private bool _fontsLoaded;
         
         // 로드된 폰트를 저장할 캐시
         private readonly Dictionary<string, TMP_FontAsset> _loadedFonts = new Dictionary<string, TMP_FontAsset>();
+        
+        // 폰트 로딩을 기다리는 텍스트 컴포넌트 대기 명단
+        // Key: "font1", Value: 해당 폰트를 기다리는 TMP 객체 리스트
+        private readonly Dictionary<string, List<TextMeshProUGUI>> _pendingLabels = new Dictionary<string, List<TextMeshProUGUI>>();
 
         private void Awake()
         {
@@ -53,13 +58,21 @@ namespace Wonjeong.UI
         private void Start()
         {
             // 1. Settings 로드
-            var settings = JsonLoader.Load<Settings>("Settings.json");
+            Settings settings = JsonLoader.Load<Settings>("Settings.json");
             if (settings != null)
             {
                 _fontMaps = settings.fontMap;
                 
-                // 2. [변경] 폰트 비동기 프리로드 시작
-                PreloadFonts();
+                // 2. 폰트 비동기 프리로드 시작
+                if (!_fontsLoaded)
+                {
+                    PreloadFonts();
+                    _fontsLoaded = true;
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[UIManager] Failed to load settings.json");
             }
         }
 
@@ -68,7 +81,11 @@ namespace Wonjeong.UI
             if (settings != null)
             {
                 _fontMaps = settings.fontMap;
-                PreloadFonts();
+                if (!_fontsLoaded)
+                {
+                    PreloadFonts();
+                    _fontsLoaded = true;
+                }
             }
         }
 
@@ -94,10 +111,27 @@ namespace Wonjeong.UI
             {
                 if (handle.Status == AsyncOperationStatus.Succeeded)
                 {
+                    TMP_FontAsset loadedFont = handle.Result;
+
+                    // 1. 캐시에 저장
                     if (!_loadedFonts.ContainsKey(key))
                     {
-                        _loadedFonts.Add(key, handle.Result);
-                        // Debug.Log($"[UIManager] Font loaded: {key} ({address})");
+                        _loadedFonts.Add(key, loadedFont);
+                    }
+
+                    // 2. 이 폰트를 기다리던 대기 명단이 있는지 확인하고 적용
+                    if (_pendingLabels.TryGetValue(key, out List<TextMeshProUGUI> waitingList))
+                    {
+                        foreach (TextMeshProUGUI tmp in waitingList)
+                        {
+                            // 객체가 파괴되지 않았다면 폰트 적용
+                            if (tmp != null) 
+                            {
+                                tmp.font = loadedFont;
+                            }
+                        }
+                        // 처리가 끝났으니 대기 명단에서 삭제
+                        _pendingLabels.Remove(key);
                     }
                 }
                 else
@@ -214,15 +248,20 @@ namespace Wonjeong.UI
             // 캐시된 폰트 딕셔너리에서 가져오기
             if (!string.IsNullOrEmpty(setting.fontName))
             {
-                // fontName은 "font1", "font2" 같은 키값
+                // CASE 1: 이미 로딩이 끝난 폰트 (바로 적용)
                 if (_loadedFonts.TryGetValue(setting.fontName, out TMP_FontAsset fontAsset))
                 {
                     tmp.font = fontAsset;
                 }
+                // CASE 2: 아직 로딩 중인 폰트 (대기 명단 등록)
                 else
                 {
-                    // 아직 로드가 안 끝났거나, 키가 잘못된 경우
-                    Debug.LogWarning($"[UIManager] Font not ready or missing: {setting.fontName}");
+                    if (!_pendingLabels.ContainsKey(setting.fontName))
+                    {
+                        _pendingLabels[setting.fontName] = new List<TextMeshProUGUI>();
+                    }
+
+                    _pendingLabels[setting.fontName].Add(tmp);
                 }
             }
         }
@@ -273,5 +312,19 @@ namespace Wonjeong.UI
         }
 
         #endregion
+
+        private void OnDestroy()
+        {
+            // Addressables로 로드한 폰트 해제
+            foreach (TMP_FontAsset fontAssets in _loadedFonts.Values)
+            {
+                if (fontAssets != null)
+                {
+                    Addressables.Release(fontAssets);
+                }
+            }
+            _loadedFonts.Clear();
+            _pendingLabels.Clear(); // 대기열도 정리
+        }
     }
 }
