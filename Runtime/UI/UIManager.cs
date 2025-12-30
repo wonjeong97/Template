@@ -210,16 +210,23 @@ namespace Wonjeong.UI
             if (target == null || setting == null) return;
 
             target.name = setting.name;
-            ApplyTransform(target.GetComponent<RectTransform>(), setting);
-
+    
+            RawImage rawImage = target.GetComponent<RawImage>();
             VideoPlayer vp = target.GetComponent<VideoPlayer>();
-            if (vp != null)
+            AudioSource audioSource = target.GetComponent<AudioSource>(); // 오디오 소스 추가 확인
+
+            if (vp != null && rawImage != null)
             {
-                string path = Path.Combine(Application.streamingAssetsPath, setting.fileName).Replace("\\", "/");
-                
-                vp.source = VideoSource.Url;
-                vp.url = path;
-                vp.SetDirectAudioVolume(0, setting.volume);
+                // 1. 변환 적용
+                ApplyTransform(rawImage.rectTransform, setting);
+
+                // 2. VideoManager를 통한 RenderTexture 연결
+                Vector2Int size = new Vector2Int((int)setting.size.x, (int)setting.size.y);
+                VideoManager.Instance.WireRawImageAndRenderTexture(vp, rawImage, size);
+
+                // 3. 경로 해석 및 코루틴 재생 시작
+                string url = VideoManager.Instance.ResolvePlayableUrl(setting.fileName);
+                StartCoroutine(VideoManager.Instance.PrepareAndPlayRoutine(vp, url, audioSource, setting.volume));
             }
         }
 
