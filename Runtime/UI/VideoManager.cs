@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
@@ -10,6 +11,8 @@ namespace Wonjeong.UI
     public class VideoManager : MonoBehaviour
     {
         private static VideoManager _instance;
+        private readonly List<RenderTexture> _activeRenderTextures = new List<RenderTexture>();
+
         public static VideoManager Instance
         {
             get
@@ -23,6 +26,7 @@ namespace Wonjeong.UI
                         _instance = go.AddComponent<VideoManager>();
                     }
                 }
+
                 return _instance;
             }
         }
@@ -44,15 +48,15 @@ namespace Wonjeong.UI
         public string ResolvePlayableUrl(string relativePath)
         {
             string fullPath = Path.Combine(Application.streamingAssetsPath, relativePath).Replace("\\", "/");
-            
-#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+
+            #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
             // Windows에서 webm 문제 대응을 위해 mp4 우선 확인 로직 (필요 시)
             if (relativePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase))
             {
                 string mp4Path = Path.ChangeExtension(fullPath, ".mp4");
                 if (File.Exists(mp4Path)) return new Uri(mp4Path).AbsoluteUri;
             }
-#endif
+            #endif
             return new Uri(fullPath).AbsoluteUri;
         }
 
@@ -62,6 +66,7 @@ namespace Wonjeong.UI
             // 기존 텍스처 해제
             if (vp.targetTexture != null)
             {
+                _activeRenderTextures.Remove(vp.targetTexture);
                 vp.targetTexture.Release();
                 Destroy(vp.targetTexture);
             }
@@ -70,6 +75,7 @@ namespace Wonjeong.UI
             int rtH = Mathf.Max(2, size.y);
             RenderTexture rTex = new RenderTexture(rtW, rtH, 24);
             rTex.Create();
+            _activeRenderTextures.Add(rTex);
 
             vp.renderMode = VideoRenderMode.RenderTexture;
             vp.targetTexture = rTex;
@@ -85,7 +91,7 @@ namespace Wonjeong.UI
             vp.url = url;
             vp.playOnAwake = false;
 
-            if (audio != null)
+            if (audio)
             {
                 vp.audioOutputMode = VideoAudioOutputMode.AudioSource;
                 vp.EnableAudioTrack(0, true);
@@ -102,7 +108,21 @@ namespace Wonjeong.UI
             }
 
             vp.Play();
-            if (audio != null && audio.volume > 0) audio.Play();
+        }
+
+        private void OnDestroy()
+        {
+            // 모든 생성된 RenderTexture 정리
+            foreach (RenderTexture rt in _activeRenderTextures)
+            {
+                if (rt != null)
+                {
+                    rt.Release();
+                    Destroy(rt);
+                }
+            }
+
+            _activeRenderTextures.Clear();
         }
     }
 }
