@@ -1,3 +1,4 @@
+using System; // [필수] Exception 사용을 위해 추가
 using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
@@ -46,7 +47,6 @@ namespace Wonjeong.UI
         public void SetImage(GameObject target, ImageSetting setting)
         {
             if (target == null || setting == null) return;
-
             ApplyTransform(target.GetComponent<RectTransform>(), setting);
 
             Image img = target.GetComponent<Image>();
@@ -80,9 +80,6 @@ namespace Wonjeong.UI
                 tmp.color = setting.fontColor;
                 tmp.alignment = setting.alignment;
                 
-                // 폰트 변경이 필요하다면 여기에 로직 추가 (Resources.Load 등)
-                // if (!string.IsNullOrEmpty(setting.fontName)) ...
-
                 if (setting.useGradient)
                 {
                     tmp.enableVertexGradient = true;
@@ -107,7 +104,6 @@ namespace Wonjeong.UI
             // 1. 버튼 배경 이미지 적용
             if (setting.buttonBackgroundImage != null)
             {
-                // 버튼 자체에 Image 컴포넌트가 있다고 가정
                 Image bgImg = target.GetComponent<Image>(); 
                 if (bgImg != null)
                 {
@@ -117,13 +113,12 @@ namespace Wonjeong.UI
                 }
             }
 
-            // 2. 버튼 텍스트 적용 (자식 오브젝트 검색)
+            // 2. 버튼 텍스트 적용
             if (setting.buttonText != null)
             {
                 TextMeshProUGUI btnText = target.GetComponentInChildren<TextMeshProUGUI>();
                 if (btnText != null)
                 {
-                    // 텍스트 내용은 별도 설정 객체를 재사용하거나 직접 주입
                     btnText.text = setting.buttonText.text;
                     btnText.fontSize = setting.buttonText.fontSize;
                     btnText.color = setting.buttonText.fontColor;
@@ -131,14 +126,15 @@ namespace Wonjeong.UI
                 }
             }
 
-            // 3. 클릭 이벤트 연결 (필요 시)
+            // 3. 클릭 이벤트 연결
             Button btn = target.GetComponent<Button>();
             if (btn != null)
             {
+                // 기존에 연결된 이벤트가 있다면 제거 (중복 실행 방지)
+                btn.onClick.RemoveAllListeners();
                 btn.onClick.AddListener(() => 
                 {
                     Debug.Log($"[UIManager] Button Clicked: {setting.name}");
-                    // 사운드 재생 등 공통 로직 추가 가능
                 });
             }
         }
@@ -159,9 +155,6 @@ namespace Wonjeong.UI
                 vp.source = VideoSource.Url;
                 vp.url = path;
                 vp.SetDirectAudioVolume(0, setting.volume);
-                
-                // 즉시 재생할지 여부는 기획에 따라 결정
-                // vp.Play(); 
             }
         }
 
@@ -169,7 +162,6 @@ namespace Wonjeong.UI
 
         #region Helper Methods
 
-        // 공통 Transform 적용 (RectTransform 기준)
         private void ApplyTransform(RectTransform rt, UISettingBase setting)
         {
             if (rt == null) return;
@@ -180,11 +172,9 @@ namespace Wonjeong.UI
             rt.localScale = setting.scale;
         }
 
-        // StreamingAssets에서 이미지 로드 후 Sprite 변환
         private Sprite LoadSprite(string fileName)
         {
             if (string.IsNullOrEmpty(fileName)) return null;
-
             string path = Path.Combine(Application.streamingAssetsPath, fileName).Replace("\\", "/");
 
             if (File.Exists(path))
@@ -192,15 +182,17 @@ namespace Wonjeong.UI
                 try
                 {
                     byte[] fileData = File.ReadAllBytes(path);
+                    
                     Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                    
                     if (texture.LoadImage(fileData))
                     {
-                        texture.Apply(false, true); // makeNoLongerReadable = true로 메모리 절약
-                        return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f))
+                        texture.Apply(false, true); 
+                        return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
                     }
                     else
                     {
-                        Destroy(texture); // 로드 실패 시 텍스처 정리
+                        Destroy(texture); // 로드 실패 시 제거
                         Debug.LogError($"[UIManager] Failed to load image data: {path}");
                         return null;
                     }
@@ -212,7 +204,6 @@ namespace Wonjeong.UI
                 }
             }
             
-            // 파일이 없을 땐 경고만 (빈 이미지 사용 시)
             Debug.LogWarning($"[UIManager] Image not found: {path}");
             return null;
         }
