@@ -79,17 +79,6 @@ namespace Wonjeong.UI
                 tmp.fontSize = setting.fontSize;
                 tmp.color = setting.fontColor;
                 tmp.alignment = setting.alignment;
-                
-                if (setting.useGradient)
-                {
-                    tmp.enableVertexGradient = true;
-                    tmp.colorGradient = new VertexGradient(
-                        setting.gradientTopLeft, 
-                        setting.gradientTopRight, 
-                        setting.gradientBottomLeft, 
-                        setting.gradientBottomRight
-                    );
-                }
             }
         }
 
