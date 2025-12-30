@@ -13,7 +13,7 @@ namespace Wonjeong.UI
             {
                 if (_instance == null)
                 {
-                    _instance = FindFirstObjectByType<FadeManager>();
+                    _instance = FindObjectOfType<FadeManager>();
                     if (_instance == null)
                     {
                         GameObject go = new GameObject("FadeManager");
@@ -78,12 +78,22 @@ namespace Wonjeong.UI
         public void FadeOut(float duration, System.Action onComplete = null)
         {
             if (_isTransitioning) return;
+            if (duration <= 0f)
+            {
+                Debug.LogWarning("FadeOut duration must be positive. Using default 0.5f.");
+                duration = 0.5f;
+            }
             StartCoroutine(FadeRoutine(0f, 1f, duration, true, onComplete));
         }
 
         public void FadeIn(float duration, System.Action onComplete = null)
         {
             if (_isTransitioning) return;
+            if (duration <= 0f)
+            {
+                Debug.LogWarning("FadeIn duration must be positive. Using default 0.5f.");
+                duration = 0.5f;
+            }
             StartCoroutine(FadeRoutine(1f, 0f, duration, false, onComplete));
         }
 
