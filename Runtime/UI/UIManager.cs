@@ -33,10 +33,11 @@ namespace Wonjeong.UI
         }
 
         private FontMaps _fontMaps;
-        private bool _fontsLoaded;
+        private bool _fontsLoadedStarted;
         
         // 로드된 폰트를 저장할 캐시
         private readonly Dictionary<string, TMP_FontAsset> _loadedFonts = new Dictionary<string, TMP_FontAsset>();
+        private readonly List<AsyncOperationHandle> _fontHandles = new List<AsyncOperationHandle>();
         
         // 폰트 로딩을 기다리는 텍스트 컴포넌트 대기 명단
         // Key: "font1", Value: 해당 폰트를 기다리는 TMP 객체 리스트
@@ -64,10 +65,10 @@ namespace Wonjeong.UI
                 _fontMaps = settings.fontMap;
                 
                 // 2. 폰트 비동기 프리로드 시작
-                if (!_fontsLoaded)
+                if (!_fontsLoadedStarted)
                 {
                     PreloadFonts();
-                    _fontsLoaded = true;
+                    _fontsLoadedStarted = true;
                 }
             }
             else
@@ -81,10 +82,10 @@ namespace Wonjeong.UI
             if (settings != null)
             {
                 _fontMaps = settings.fontMap;
-                if (!_fontsLoaded)
+                if (!_fontsLoadedStarted)
                 {
                     PreloadFonts();
-                    _fontsLoaded = true;
+                    _fontsLoadedStarted = true;
                 }
             }
         }
@@ -108,7 +109,8 @@ namespace Wonjeong.UI
 
             // Addressables를 통해 폰트 비동기 로드
             Addressables.LoadAssetAsync<TMP_FontAsset>(address).Completed += (handle) =>
-            {
+            {   
+                _fontHandles.Add(handle);
                 if (handle.Status == AsyncOperationStatus.Succeeded)
                 {
                     TMP_FontAsset loadedFont = handle.Result;
@@ -316,13 +318,14 @@ namespace Wonjeong.UI
         private void OnDestroy()
         {
             // Addressables로 로드한 폰트 해제
-            foreach (TMP_FontAsset fontAssets in _loadedFonts.Values)
+            foreach (AsyncOperationHandle handle in _fontHandles)
             {
-                if (fontAssets != null)
+                if (handle.IsValid())
                 {
-                    Addressables.Release(fontAssets);
+                    Addressables.Release(handle);
                 }
             }
+            _fontHandles.Clear();
             _loadedFonts.Clear();
             _pendingLabels.Clear(); // 대기열도 정리
         }
