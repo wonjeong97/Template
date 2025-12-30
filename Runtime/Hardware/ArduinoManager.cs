@@ -35,7 +35,7 @@ namespace Wonjeong.Hardware
 
         private SerialPort _serialPort;
         private Thread _readThread;
-        private bool _isRunning = false;
+        private volatile bool _isRunning = false;
 
         // 스레드 간 안전한 데이터 전달을 위한 큐
         private readonly ConcurrentQueue<string> _messageQueue = new ConcurrentQueue<string>();
@@ -121,7 +121,7 @@ namespace Wonjeong.Hardware
 
             if (_readThread != null && _readThread.IsAlive)
             {
-                _readThread.Join(100); 
+                _readThread.Join(600); // ReadTimeout(500ms)보다 약간 길게 설정
             }
 
             if (_serialPort != null && _serialPort.IsOpen)
