@@ -1,0 +1,11 @@
+{
+  "name": "com.wonjeong.template",
+  "version": "1.0.0",
+  "displayName": "Wonjeong Template",
+  "description": "기본 템플릿 패키지",
+  "unity": "2022.3",
+  "author": {
+    "name": "Wonjeong",
+    "email": "Wonjeong@huliac.com"
+  }
+}
