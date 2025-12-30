@@ -77,19 +77,6 @@ namespace Wonjeong.UI
             }
         }
 
-        public void Init(Settings settings)
-        {
-            if (settings != null)
-            {
-                _fontMaps = settings.fontMap;
-                if (!_fontsLoadedStarted)
-                {
-                    PreloadFonts();
-                    _fontsLoadedStarted = true;
-                }
-            }
-        }
-
         // 폰트맵에 있는 주소로 Addressables 로드 시도
         private void PreloadFonts()
         {
@@ -258,15 +245,35 @@ namespace Wonjeong.UI
                 // CASE 2: 아직 로딩 중인 폰트 (대기 명단 등록)
                 else
                 {
+                    // 유효하지 않은 폰트 키 체크
+                    if (_fontMaps == null || !IsFontKeyValid(setting.fontName))
+                    {
+                        Debug.LogWarning($"[UIManager] Invalid font name: {setting.fontName}");
+                        return;
+                    }
+                    
                     if (!_pendingLabels.ContainsKey(setting.fontName))
                     {
                         _pendingLabels[setting.fontName] = new List<TextMeshProUGUI>();
                     }
-
-                    _pendingLabels[setting.fontName].Add(tmp);
+                        
+                    // 중복 등록 방지
+                    if (!_pendingLabels[setting.fontName].Contains(tmp))
+                    {
+                        _pendingLabels[setting.fontName].Add(tmp);    
+                    }
                 }
             }
         }
+        
+        private bool IsFontKeyValid(string fontName)
+        {
+            return fontName == "font1" && !string.IsNullOrEmpty(_fontMaps.font1) ||
+                   fontName == "font2" && !string.IsNullOrEmpty(_fontMaps.font2) ||
+                   fontName == "font3" && !string.IsNullOrEmpty(_fontMaps.font3) ||
+                   fontName == "font4" && !string.IsNullOrEmpty(_fontMaps.font4) ||
+                   fontName == "font5" && !string.IsNullOrEmpty(_fontMaps.font5);
+            }
 
         private void ApplyTransform(RectTransform rt, UISettingBase setting)
         {
