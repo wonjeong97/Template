@@ -47,7 +47,6 @@ namespace Wonjeong.UI
         {
             if (target == null || setting == null) return;
 
-            target.name = setting.name; // 디버깅 편의를 위해 이름 변경
             ApplyTransform(target.GetComponent<RectTransform>(), setting);
 
             Image img = target.GetComponent<Image>();
@@ -136,7 +135,6 @@ namespace Wonjeong.UI
             Button btn = target.GetComponent<Button>();
             if (btn != null)
             {
-                btn.onClick.RemoveAllListeners(); // 기존 리스너 제거 (중복 방지)
                 btn.onClick.AddListener(() => 
                 {
                     Debug.Log($"[UIManager] Button Clicked: {setting.name}");
@@ -186,17 +184,31 @@ namespace Wonjeong.UI
         private Sprite LoadSprite(string fileName)
         {
             if (string.IsNullOrEmpty(fileName)) return null;
-            if (!fileName.Contains(".")) fileName += ".png";
 
             string path = Path.Combine(Application.streamingAssetsPath, fileName).Replace("\\", "/");
 
             if (File.Exists(path))
             {
-                byte[] fileData = File.ReadAllBytes(path);
-                Texture2D texture = new Texture2D(2, 2);
-                if (texture.LoadImage(fileData))
+                try
                 {
-                    return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                    byte[] fileData = File.ReadAllBytes(path);
+                    Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                    if (texture.LoadImage(fileData))
+                    {
+                        texture.Apply(false, true); // makeNoLongerReadable = true로 메모리 절약
+                        return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f))
+                    }
+                    else
+                    {
+                        Destroy(texture); // 로드 실패 시 텍스처 정리
+                        Debug.LogError($"[UIManager] Failed to load image data: {path}");
+                        return null;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[UIManager] Exception loading sprite: {path}, Error: {e.Message}");
+                    return null;
                 }
             }
             
