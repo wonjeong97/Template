@@ -1,10 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
 using TMPro;
+using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
 using Wonjeong.Data;
+using Wonjeong.Utils;
 
 namespace Wonjeong.UI
 {
@@ -28,6 +32,11 @@ namespace Wonjeong.UI
             }
         }
 
+        private FontMaps _fontMaps;
+        
+        // 로드된 폰트를 저장할 캐시
+        private readonly Dictionary<string, TMP_FontAsset> _loadedFonts = new Dictionary<string, TMP_FontAsset>();
+
         private void Awake()
         {
             if (_instance == null) 
@@ -41,12 +50,70 @@ namespace Wonjeong.UI
             }
         }
 
+        private void Start()
+        {
+            // 1. Settings 로드
+            var settings = JsonLoader.Load<Settings>("Settings.json");
+            if (settings != null)
+            {
+                _fontMaps = settings.fontMap;
+                
+                // 2. [변경] 폰트 비동기 프리로드 시작
+                PreloadFonts();
+            }
+        }
+
+        public void Init(Settings settings)
+        {
+            if (settings != null)
+            {
+                _fontMaps = settings.fontMap;
+                PreloadFonts();
+            }
+        }
+
+        // 폰트맵에 있는 주소로 Addressables 로드 시도
+        private void PreloadFonts()
+        {
+            if (_fontMaps == null) return;
+
+            // font1 ~ font5 순회하며 로드
+            LoadSingleFont("font1", _fontMaps.font1);
+            LoadSingleFont("font2", _fontMaps.font2);
+            LoadSingleFont("font3", _fontMaps.font3);
+            LoadSingleFont("font4", _fontMaps.font4);
+            LoadSingleFont("font5", _fontMaps.font5);
+        }
+
+        private void LoadSingleFont(string key, string address)
+        {
+            if (string.IsNullOrEmpty(address)) return;
+
+            // Addressables를 통해 폰트 비동기 로드
+            Addressables.LoadAssetAsync<TMP_FontAsset>(address).Completed += (handle) =>
+            {
+                if (handle.Status == AsyncOperationStatus.Succeeded)
+                {
+                    if (!_loadedFonts.ContainsKey(key))
+                    {
+                        _loadedFonts.Add(key, handle.Result);
+                        // Debug.Log($"[UIManager] Font loaded: {key} ({address})");
+                    }
+                }
+                else
+                {
+                    Debug.LogError($"[UIManager] Failed to load font: {address}");
+                }
+            };
+        }
+
         #region Set Methods (Configuration)
 
-        /// <summary> 기존 게임오브젝트에 이미지 설정을 적용 </summary>
         public void SetImage(GameObject target, ImageSetting setting)
         {
             if (target == null || setting == null) return;
+            
+            target.name = setting.name;
             ApplyTransform(target.GetComponent<RectTransform>(), setting);
 
             Image img = target.GetComponent<Image>();
@@ -55,7 +122,6 @@ namespace Wonjeong.UI
                 img.color = setting.color;
                 img.type = (Image.Type)setting.type;
 
-                // StreamingAssets에서 이미지 로드
                 Sprite sprite = LoadSprite(setting.sourceImage);
                 if (sprite != null)
                 {
@@ -64,7 +130,6 @@ namespace Wonjeong.UI
             }
         }
 
-        /// <summary> 기존 게임오브젝트에 텍스트 설정을 적용 </summary>
         public void SetText(GameObject target, TextSetting setting)
         {
             if (target == null || setting == null) return;
@@ -75,14 +140,10 @@ namespace Wonjeong.UI
             TextMeshProUGUI tmp = target.GetComponent<TextMeshProUGUI>();
             if (tmp != null)
             {
-                tmp.text = setting.text;
-                tmp.fontSize = setting.fontSize;
-                tmp.color = setting.fontColor;
-                tmp.alignment = setting.alignment;
+                ApplyTextSettings(tmp, setting);
             }
         }
 
-        /// <summary> 기존 버튼 오브젝트(이미지+텍스트)에 설정을 적용 </summary>
         public void SetButton(GameObject target, ButtonSetting setting)
         {
             if (target == null || setting == null) return;
@@ -90,7 +151,6 @@ namespace Wonjeong.UI
             target.name = setting.name;
             ApplyTransform(target.GetComponent<RectTransform>(), setting);
 
-            // 1. 버튼 배경 이미지 적용
             if (setting.buttonBackgroundImage != null)
             {
                 Image bgImg = target.GetComponent<Image>(); 
@@ -102,24 +162,18 @@ namespace Wonjeong.UI
                 }
             }
 
-            // 2. 버튼 텍스트 적용
             if (setting.buttonText != null)
             {
                 TextMeshProUGUI btnText = target.GetComponentInChildren<TextMeshProUGUI>();
                 if (btnText != null)
                 {
-                    btnText.text = setting.buttonText.text;
-                    btnText.fontSize = setting.buttonText.fontSize;
-                    btnText.color = setting.buttonText.fontColor;
-                    btnText.alignment = setting.buttonText.alignment;
+                    ApplyTextSettings(btnText, setting.buttonText);
                 }
             }
 
-            // 3. 클릭 이벤트 연결
             Button btn = target.GetComponent<Button>();
             if (btn != null)
             {
-                // 기존에 연결된 이벤트가 있다면 제거 (중복 실행 방지)
                 btn.onClick.RemoveAllListeners();
                 btn.onClick.AddListener(() => 
                 {
@@ -128,7 +182,6 @@ namespace Wonjeong.UI
             }
         }
 
-        /// <summary> 기존 VideoPlayer 오브젝트에 설정을 적용 </summary>
         public void SetVideo(GameObject target, VideoSetting setting)
         {
             if (target == null || setting == null) return;
@@ -151,6 +204,29 @@ namespace Wonjeong.UI
 
         #region Helper Methods
 
+        private void ApplyTextSettings(TextMeshProUGUI tmp, TextSetting setting)
+        {
+            tmp.text = setting.text;
+            tmp.fontSize = setting.fontSize;
+            tmp.color = setting.fontColor;
+            tmp.alignment = setting.alignment;
+
+            // 캐시된 폰트 딕셔너리에서 가져오기
+            if (!string.IsNullOrEmpty(setting.fontName))
+            {
+                // fontName은 "font1", "font2" 같은 키값
+                if (_loadedFonts.TryGetValue(setting.fontName, out TMP_FontAsset fontAsset))
+                {
+                    tmp.font = fontAsset;
+                }
+                else
+                {
+                    // 아직 로드가 안 끝났거나, 키가 잘못된 경우
+                    Debug.LogWarning($"[UIManager] Font not ready or missing: {setting.fontName}");
+                }
+            }
+        }
+
         private void ApplyTransform(RectTransform rt, UISettingBase setting)
         {
             if (rt == null) return;
@@ -171,7 +247,6 @@ namespace Wonjeong.UI
                 try
                 {
                     byte[] fileData = File.ReadAllBytes(path);
-                    
                     Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
                     
                     if (texture.LoadImage(fileData))
@@ -181,7 +256,7 @@ namespace Wonjeong.UI
                     }
                     else
                     {
-                        Destroy(texture); // 로드 실패 시 제거
+                        Destroy(texture); 
                         Debug.LogError($"[UIManager] Failed to load image data: {path}");
                         return null;
                     }
