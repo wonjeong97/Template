@@ -98,7 +98,7 @@ namespace Wonjeong.Utils
 #if !UNITY_EDITOR
             if (enableEmail)
             {
-                TrySendPendingLogsAsync().ConfigureAwait(false);
+                Task.Run(async () => await TrySendPendingLogsAsync());
             }
 #endif
         }
