@@ -1,21 +1,25 @@
 ﻿using UnityEngine;
 using System.Collections;
 
-public class ReporterGUI : MonoBehaviour
+namespace Wonjeong.Reporter
 {
-	Reporter reporter;
-	void Awake()
-	{
-		reporter = gameObject.GetComponent<Reporter>();
-        if (reporter == null)
+    public class ReporterGUI : MonoBehaviour
+    {
+        Reporter reporter;
+        void Awake()
         {
-            Debug.LogError("ReporterGUI requires a Reporter component on the same GameObject.");
-            enabled = false;
+            reporter = gameObject.GetComponent<Reporter>();
+            if (reporter == null)
+            {
+                Debug.LogError("ReporterGUI requires a Reporter component on the same GameObject.");
+                enabled = false;
+            }
         }
-	}
 
-	void OnGUI()
-	{
-        if (reporter != null) reporter.OnGUIDraw();
-	}
+        void OnGUI()
+        {
+            if (reporter != null) reporter.OnGUIDraw();
+        }
+    }
+
 }
