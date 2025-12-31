@@ -7,10 +7,15 @@ public class ReporterGUI : MonoBehaviour
 	void Awake()
 	{
 		reporter = gameObject.GetComponent<Reporter>();
+        if (reporter == null)
+        {
+            Debug.LogError("ReporterGUI requires a Reporter component on the same GameObject.");
+            enabled = false;
+        }
 	}
 
 	void OnGUI()
 	{
-		reporter.OnGUIDraw();
+        if (reporter != null) reporter.OnGUIDraw();
 	}
 }

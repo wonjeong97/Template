@@ -16,6 +16,12 @@ public class ReporterMessageReceiver : MonoBehaviour
 		if (reporter == null)
 			reporter = gameObject.GetComponent<Reporter>();
 
+        if (reporter == null)
+        {
+            Debug.LogError("ReporterMessageReceiver requires a Reporter component.");
+            return;
+        }
+        
 		if (Screen.width < 1000)
 			reporter.size = new Vector2(32, 32);
 		else

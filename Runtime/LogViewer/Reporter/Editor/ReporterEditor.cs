@@ -82,10 +82,11 @@ public class ReporterModificationProcessor : UnityEditor.AssetModificationProces
 				if (!Directory.Exists(Application.dataPath + "/StreamingAssets")) {
 					Directory.CreateDirectory(Application.dataPath + "/StreamingAssets");
 				}
-				string info_path = Application.dataPath + "/StreamingAssets/build_info"; 
-				StreamWriter build_info = new StreamWriter(info_path);
-				build_info.Write("Build from " + SystemInfo.deviceName + " at " + System.DateTime.Now.ToString());
-				build_info.Close();
+				string info_path = Application.dataPath + "/StreamingAssets/build_info";
+                using (StreamWriter build_info = new StreamWriter(info_path))
+                {
+                    build_info.Write("Build from " + SystemInfo.deviceName + " at " + System.DateTime.Now.ToString());
+                }
 			}
 
 			isCompiling = EditorApplication.isCompiling;
