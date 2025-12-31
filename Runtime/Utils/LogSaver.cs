@@ -1,3 +1,13 @@
+/*==============================================================================================================================
+* Gmail 설정 방법 (필수)
+* Gmail을 보내는 메일로 사용하려면 다음 설정이 필요합니다.
+* * 1. 구글 계정 관리 > 보안 탭으로 이동.
+* * 2. 2단계 인증이 켜져 있어야 합니다.
+* * 3. 2단계 인증 설정 하단에 [앱 비밀번호] 항목을 찾아 클릭합니다. (검색창에 '앱 비밀번호' 검색 가능)
+* * 4. 앱 이름에 'UnityLog' 등으로 입력하고 생성하기를 누릅니다.
+* * 생성된 16자리 비밀번호를 복사해서 위 코드의 senderPassword 변수에 붙여넣으세요. (기존 구글 로그인 비번은 작동하지 않습니다)
+*==============================================================================================================================*/
+
 using System;
 using System.IO;
 using System.Net;
@@ -68,15 +78,16 @@ namespace Wonjeong.Utils
             try
             {
                 if (!Directory.Exists(_logFolder)) Directory.CreateDirectory(_logFolder);
+                
+                string fileName = $"Log_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.txt";
+                _currentLogPath = Path.Combine(_logFolder, fileName);
             }
             catch (Exception e)
             {
                 Debug.LogError($"[LogSaver] 로그 폴더 생성 실패({_logFolder}): {e.Message}");
-                return;
+                // 파일 저장은 불가능하지만 로그 수집은 계속
+                _currentLogPath = null; // 파일 저장 비활성화 표시
             }
-            
-            string fileName = $"Log_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.txt";
-            _currentLogPath = Path.Combine(_logFolder, fileName);
 
             Application.logMessageReceived += HandleLog;
         }
@@ -138,7 +149,7 @@ namespace Wonjeong.Utils
 
         private void SaveLogToFile()
         {
-            if (_logBuffer.Length > 0)
+            if (_logBuffer.Length > 0 && !string.IsNullOrEmpty(_currentLogPath))
             {
                 try 
                 {
@@ -188,7 +199,7 @@ namespace Wonjeong.Utils
                             smtpClient.Credentials = new NetworkCredential(senderEmail, senderPassword) as ICredentialsByHost;
                             smtpClient.EnableSsl = true;
                             smtpClient.Timeout = 5000;
-                            ServicePointManager.ServerCertificateValidationCallback = (s, certificate, chain, sslPolicyErrors) => true;
+                            
                             smtpClient.Send(mail);
                         }
                     } 
