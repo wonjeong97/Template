@@ -35,7 +35,7 @@ namespace Wonjeong.Core
 
             if (reporter == null)
             {
-                reporter = FindFirstObjectByType<Wonjeong.Reporter.Reporter>();
+                reporter = FindObjectOfType<Wonjeong.Reporter.Reporter>();
             }
         }
 
@@ -112,6 +112,12 @@ namespace Wonjeong.Core
 
         private IEnumerator ReturnToTitleRoutine()
         {
+            if (FadeManager.Instance == null)
+            {
+                Debug.LogError("[GameManager] FadeManager instance not found. Cannot perform transition.");
+                _isTransitioning = false;
+                yield break;
+            }
             // 1. 페이드 아웃 실행
             bool fadeDone = false;
             FadeManager.Instance.FadeOut(_fadeTime, () => { fadeDone = true; });
