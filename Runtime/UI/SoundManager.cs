@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.Networking;
 using Wonjeong.Data;
@@ -35,6 +36,8 @@ namespace Wonjeong.UI
         private readonly Dictionary<string, SoundSetting> _soundSettings = new Dictionary<string, SoundSetting>();
         // 로드된 클립 캐시
         private readonly Dictionary<string, AudioClip> _clipCache = new Dictionary<string, AudioClip>();
+        
+        private const int MAX_CACHE_COUNT = 20;
 
         private void Awake()
         {
@@ -43,6 +46,7 @@ namespace Wonjeong.UI
                 _instance = this;
                 DontDestroyOnLoad(gameObject);
                 InitSources();
+                LoadSoundSettings();
             }
             else if (_instance != this)
             {
@@ -63,7 +67,7 @@ namespace Wonjeong.UI
             _sfxSource.playOnAwake = false;
         }
 
-        private void Start()
+        private void LoadSoundSettings()
         {
             // Settings.json 로드 및 딕셔너리 구성
             Settings settings = JsonLoader.Load<Settings>("Settings.json");
@@ -97,6 +101,16 @@ namespace Wonjeong.UI
 
         public void StopBGM() => _bgmSource.Stop();
         public void StopSFX() => _sfxSource.Stop();
+        
+        public void ClearCache()
+        {
+            foreach (AudioClip clip in _clipCache.Values)
+            {
+                if (clip != null) Resources.UnloadAsset(clip); // 메모리 해제
+            }
+            _clipCache.Clear();
+            Debug.Log("[SoundManager] Audio cache cleared.");
+        }
 
         #endregion
 
@@ -110,7 +124,16 @@ namespace Wonjeong.UI
                 clip = cachedClip;
             }
             else
-            {
+            {       
+                // 캐시가 꽉 찼다면 가장 오래된 것 중 하나를 삭제
+                if (_clipCache.Count >= MAX_CACHE_COUNT)
+                {
+                    string firstKey = _clipCache.Keys.First();
+                    AudioClip oldClip = _clipCache[firstKey];
+                    _clipCache.Remove(firstKey);
+                    if (oldClip != null) Resources.UnloadAsset(oldClip);
+                }
+                
                 // 2. StreamingAssets에서 로드 (UnityWebRequest 사용)
                 string path = Path.Combine(Application.streamingAssetsPath, setting.clipPath).Replace("\\", "/");
                 string uri = "file://" + path;
@@ -161,6 +184,11 @@ namespace Wonjeong.UI
                 ".ogg" => AudioType.OGGVORBIS,
                 _ => AudioType.UNKNOWN
             };
+        }
+        
+        private void OnDestroy()
+        {
+            ClearCache(); // 파괴 시 메모리 정리
         }
     }
 }
