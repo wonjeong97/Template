@@ -2,25 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="b9db6fcd-bf04-4f3c-89c0-f75c60cd3ce6" name="변경" comment="">
-      <change beforePath="$PROJECT_DIR$/../../Assets/Readme.asset.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/Readme.asset.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/Scenes/SampleScene.unity.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/Scenes/SampleScene.unity.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/Settings.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/Settings.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/Settings/SampleSceneProfile.asset.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/Settings/SampleSceneProfile.asset.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/Settings/URP-Balanced-Renderer.asset.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/Settings/URP-Balanced-Renderer.asset.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/Settings/URP-Balanced.asset.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/Settings/URP-Balanced.asset.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/Settings/URP-HighFidelity-Renderer.asset.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/Settings/URP-HighFidelity-Renderer.asset.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/Settings/URP-HighFidelity.asset.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/Settings/URP-HighFidelity.asset.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/Settings/URP-Performant-Renderer.asset.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/Settings/URP-Performant-Renderer.asset.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/Settings/URP-Performant.asset.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/Settings/URP-Performant.asset.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/TutorialInfo.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/TutorialInfo.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/TutorialInfo/Icons.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/TutorialInfo/Icons.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/TutorialInfo/Icons/URP.png.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/TutorialInfo/Icons/URP.png.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/TutorialInfo/Layout.wlt.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/TutorialInfo/Layout.wlt.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/TutorialInfo/Scripts.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/TutorialInfo/Scripts.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/TutorialInfo/Scripts/Editor.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/TutorialInfo/Scripts/Editor.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/TutorialInfo/Scripts/Editor/ReadmeEditor.cs.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/TutorialInfo/Scripts/Editor/ReadmeEditor.cs.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/TutorialInfo/Scripts/Readme.cs.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/TutorialInfo/Scripts/Readme.cs.meta" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../../Assets/UniversalRenderPipelineGlobalSettings.asset.meta" beforeDir="false" afterPath="$PROJECT_DIR$/../../Assets/UniversalRenderPipelineGlobalSettings.asset.meta" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../../package.json" beforeDir="false" afterPath="$PROJECT_DIR$/../../package.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -30,9 +12,13 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../.." />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 5
-}]]></component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://$PROJECT_DIR$/UIManager.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/../../package.json" root0="FORCE_HIGHLIGHTING" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5
+}</component>
   <component name="ProjectId" id="37YH4tWtaR7EiX091GSVjzmcKXv" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -44,7 +30,9 @@
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "feature/ui-manager",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "git-widget-placeholder": "main",
+    "ignore.virus.scanning.warn.message": "true",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -62,6 +50,7 @@
       <option name="presentableId" value="Default" />
       <updated>1767072897500</updated>
       <workItem from="1767072900338" duration="322000" />
+      <workItem from="1768185936183" duration="300000" />
     </task>
     <servers />
   </component>
