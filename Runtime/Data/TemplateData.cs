@@ -1,5 +1,4 @@
 using System;
-using TMPro;
 using UnityEngine;
 
 namespace Wonjeong.Data
@@ -11,7 +10,7 @@ namespace Wonjeong.Data
         public Vector2 position;
         public Vector2 size;
         public Vector3 rotation;
-        public Vector3 scale = Vector3.one; // 기본값 (1,1,1)
+        public Vector3 scale = Vector3.one;
     }
 
     [Serializable]
@@ -56,9 +55,9 @@ namespace Wonjeong.Data
     {
         public string text;
         public string fontName;
-        public float fontSize;
+        public int fontSize;
         public Color fontColor = Color.white;
-        public TextAlignmentOptions alignment = TextAlignmentOptions.Center;
+        public TextAnchor alignment = TextAnchor.MiddleCenter;
     }
 
     [Serializable]

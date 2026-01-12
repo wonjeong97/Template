@@ -4,7 +4,6 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
-using TMPro;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using Wonjeong.Data;
@@ -35,13 +34,12 @@ namespace Wonjeong.UI
         private FontMaps _fontMaps;
         private bool _fontsLoadedStarted;
         
-        // 로드된 폰트를 저장할 캐시
-        private readonly Dictionary<string, TMP_FontAsset> _loadedFonts = new Dictionary<string, TMP_FontAsset>();
+        // 변경: TMP_FontAsset -> Font
+        private readonly Dictionary<string, Font> _loadedFonts = new Dictionary<string, Font>();
         private readonly List<AsyncOperationHandle> _fontHandles = new List<AsyncOperationHandle>();
         
-        // 폰트 로딩을 기다리는 텍스트 컴포넌트 대기 명단
-        // Key: "font1", Value: 해당 폰트를 기다리는 TMP 객체 리스트
-        private readonly Dictionary<string, List<TextMeshProUGUI>> _pendingLabels = new Dictionary<string, List<TextMeshProUGUI>>();
+        // 변경: TextMeshProUGUI -> Text
+        private readonly Dictionary<string, List<Text>> _pendingLabels = new Dictionary<string, List<Text>>();
 
         private void Awake()
         {
@@ -94,13 +92,13 @@ namespace Wonjeong.UI
         {
             if (string.IsNullOrEmpty(address)) return;
 
-            // Addressables를 통해 폰트 비동기 로드
-            Addressables.LoadAssetAsync<TMP_FontAsset>(address).Completed += (handle) =>
+            // 변경: Font 타입으로 로드
+            Addressables.LoadAssetAsync<Font>(address).Completed += (handle) =>
             {   
                 _fontHandles.Add(handle);
                 if (handle.Status == AsyncOperationStatus.Succeeded)
                 {
-                    TMP_FontAsset loadedFont = handle.Result;
+                    Font loadedFont = handle.Result;
 
                     // 1. 캐시에 저장
                     if (!_loadedFonts.ContainsKey(key))
@@ -109,14 +107,14 @@ namespace Wonjeong.UI
                     }
 
                     // 2. 이 폰트를 기다리던 대기 명단이 있는지 확인하고 적용
-                    if (_pendingLabels.TryGetValue(key, out List<TextMeshProUGUI> waitingList))
+                    if (_pendingLabels.TryGetValue(key, out List<Text> waitingList))
                     {
-                        foreach (TextMeshProUGUI tmp in waitingList)
+                        foreach (Text txt in waitingList)
                         {
                             // 객체가 파괴되지 않았다면 폰트 적용
-                            if (tmp != null) 
+                            if (txt != null) 
                             {
-                                tmp.font = loadedFont;
+                                txt.font = loadedFont;
                             }
                         }
                         // 처리가 끝났으니 대기 명단에서 삭제
@@ -160,10 +158,11 @@ namespace Wonjeong.UI
             target.name = setting.name;
             ApplyTransform(target.GetComponent<RectTransform>(), setting);
 
-            TextMeshProUGUI tmp = target.GetComponent<TextMeshProUGUI>();
-            if (tmp != null)
+            // 변경: Text 컴포넌트 사용
+            Text txt = target.GetComponent<Text>();
+            if (txt != null)
             {
-                ApplyTextSettings(tmp, setting);
+                ApplyTextSettings(txt, setting);
             }
         }
 
@@ -187,7 +186,8 @@ namespace Wonjeong.UI
 
             if (setting.buttonText != null)
             {
-                TextMeshProUGUI btnText = target.GetComponentInChildren<TextMeshProUGUI>();
+                // 변경: 자식에서 Text 컴포넌트 찾기
+                Text btnText = target.GetComponentInChildren<Text>();
                 if (btnText != null)
                 {
                     ApplyTextSettings(btnText, setting.buttonText);
@@ -234,20 +234,21 @@ namespace Wonjeong.UI
 
         #region Helper Methods
 
-        private void ApplyTextSettings(TextMeshProUGUI tmp, TextSetting setting)
+       private void ApplyTextSettings(Text txt, TextSetting setting)
         {
-            tmp.text = setting.text;
-            tmp.fontSize = setting.fontSize;
-            tmp.color = setting.fontColor;
-            tmp.alignment = setting.alignment;
+            txt.text = setting.text;
+            txt.fontSize = setting.fontSize;
+            txt.color = setting.fontColor;
+            txt.alignment = setting.alignment;
 
             // 캐시된 폰트 딕셔너리에서 가져오기
             if (!string.IsNullOrEmpty(setting.fontName))
             {
                 // CASE 1: 이미 로딩이 끝난 폰트 (바로 적용)
-                if (_loadedFonts.TryGetValue(setting.fontName, out TMP_FontAsset fontAsset))
+                // 변경: Font 타입 사용
+                if (_loadedFonts.TryGetValue(setting.fontName, out Font fontAsset))
                 {
-                    tmp.font = fontAsset;
+                    txt.font = fontAsset;
                 }
                 // CASE 2: 아직 로딩 중인 폰트 (대기 명단 등록)
                 else
@@ -261,13 +262,13 @@ namespace Wonjeong.UI
                     
                     if (!_pendingLabels.ContainsKey(setting.fontName))
                     {
-                        _pendingLabels[setting.fontName] = new List<TextMeshProUGUI>();
+                        _pendingLabels[setting.fontName] = new List<Text>();
                     }
                         
                     // 중복 등록 방지
-                    if (!_pendingLabels[setting.fontName].Contains(tmp))
+                    if (!_pendingLabels[setting.fontName].Contains(txt))
                     {
-                        _pendingLabels[setting.fontName].Add(tmp);    
+                        _pendingLabels[setting.fontName].Add(txt);    
                     }
                 }
             }
