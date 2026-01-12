@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
   <component name="ChangeListManager">
-    <list default="true" id="b9db6fcd-bf04-4f3c-89c0-f75c60cd3ce6" name="변경" comment="">
-      <change beforePath="$PROJECT_DIR$/../../package.json" beforeDir="false" afterPath="$PROJECT_DIR$/../../package.json" afterDir="false" />
-    </list>
+    <list default="true" id="b9db6fcd-bf04-4f3c-89c0-f75c60cd3ce6" name="변경" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -50,7 +51,7 @@
       <option name="presentableId" value="Default" />
       <updated>1767072897500</updated>
       <workItem from="1767072900338" duration="322000" />
-      <workItem from="1768185936183" duration="300000" />
+      <workItem from="1768185936183" duration="343000" />
     </task>
     <servers />
   </component>

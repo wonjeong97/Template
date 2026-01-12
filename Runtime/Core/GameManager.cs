@@ -19,6 +19,8 @@ namespace Wonjeong.Core
         private bool _isTransitioning;
         private float _inactivityLimit = 60f;
         private float _fadeTime = 1.0f;
+        
+        public int firstTaggedPlayer = 0;
 
         private void Awake()
         {

@@ -47,6 +47,8 @@ namespace Wonjeong.UI
             {
                 _instance = this;
                 DontDestroyOnLoad(gameObject);
+                
+                LoadSettings();
             }
             else if (_instance != this)
             {
@@ -56,18 +58,20 @@ namespace Wonjeong.UI
 
         private void Start()
         {
-            // 1. Settings 로드
+            if (_fontMaps != null && !_fontsLoadedStarted)
+            {
+                PreloadFonts();
+                _fontsLoadedStarted = true;
+            }
+        }
+        
+        private void LoadSettings()
+        {
             Settings settings = JsonLoader.Load<Settings>("Settings.json");
             if (settings != null)
             {
                 _fontMaps = settings.fontMap;
-                
-                // 2. 폰트 비동기 프리로드 시작
-                if (!_fontsLoadedStarted)
-                {
-                    PreloadFonts();
-                    _fontsLoadedStarted = true;
-                }
+                Debug.Log("[UIManager] Settings loaded successfully.");
             }
             else
             {

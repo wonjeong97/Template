@@ -58,6 +58,7 @@ namespace Wonjeong.Data
         public int fontSize;
         public Color fontColor = Color.white;
         public TextAnchor alignment = TextAnchor.MiddleCenter;
+        public bool isBold = false;
     }
 
     [Serializable]
