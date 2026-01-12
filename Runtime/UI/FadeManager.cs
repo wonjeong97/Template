@@ -51,9 +51,13 @@ namespace Wonjeong.UI
             canvasObj.transform.SetParent(transform);
             _fadeCanvas = canvasObj.AddComponent<Canvas>();
             _fadeCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            _fadeCanvas.sortingOrder = -1; // 초기엔 제일 뒤로
+            _fadeCanvas.sortingOrder = -1; 
 
-            canvasObj.AddComponent<CanvasScaler>();
+            // CanvasScaler 설정 (필요시 해상도에 맞게 조정)
+            CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920, 1080);
+
             canvasObj.AddComponent<GraphicRaycaster>();
 
             // 2. 페이드용 이미지 생성
@@ -61,14 +65,29 @@ namespace Wonjeong.UI
             imageObj.transform.SetParent(canvasObj.transform);
             
             _fadeImage = imageObj.AddComponent<RawImage>();
-            _fadeImage.color = Color.black; // 까만 이미지 설정
+            _fadeImage.color = Color.black; 
             _fadeImage.raycastTarget = false;
 
             // 화면 가득 채우기 (RectTransform 설정)
             RectTransform rt = _fadeImage.rectTransform;
+            
+            // 1. 앵커를 전체 화면으로 설정 (Stretch-Stretch)
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
+            
+            // 2. 피벗을 중앙으로 설정
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            
+            // 3. 위치와 크기 델타를 0으로 초기화 (중요)
+            rt.anchoredPosition = Vector2.zero;
             rt.sizeDelta = Vector2.zero;
+
+            // 4. 오프셋(Left, Right, Top, Bottom)을 강제로 0으로 설정
+            rt.offsetMin = Vector2.zero; // Left, Bottom = 0
+            rt.offsetMax = Vector2.zero; // Right, Top = 0
+            
+            // 5. 스케일 초기화
+            rt.localScale = Vector3.one;
 
             // 3. 투명도 조절을 위한 CanvasGroup 추가
             _canvasGroup = imageObj.AddComponent<CanvasGroup>();
