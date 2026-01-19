@@ -86,6 +86,9 @@ namespace Wonjeong.Data
         public string font3;
         public string font4;
         public string font5;
+        public string font6;
+        public string font7;
+        public string font8;
     }
 
     [Serializable]
