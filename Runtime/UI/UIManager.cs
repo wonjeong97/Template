@@ -93,6 +93,7 @@ namespace Wonjeong.UI
             LoadSingleFont("font6", _fontMaps.font6);
             LoadSingleFont("font7", _fontMaps.font7);
             LoadSingleFont("font8", _fontMaps.font8);
+            LoadSingleFont("font9", _fontMaps.font9);
         }
 
         private void LoadSingleFont(string key, string address)
@@ -290,7 +291,8 @@ namespace Wonjeong.UI
                    fontName == "font5" && !string.IsNullOrEmpty(_fontMaps.font5) ||
                    fontName == "font6" && !string.IsNullOrEmpty(_fontMaps.font6) ||
                    fontName == "font7" && !string.IsNullOrEmpty(_fontMaps.font7) ||
-                   fontName == "font8" && !string.IsNullOrEmpty(_fontMaps.font8);
+                   fontName == "font8" && !string.IsNullOrEmpty(_fontMaps.font8) ||
+                   fontName == "font9" && !string.IsNullOrEmpty(_fontMaps.font9);
             }
 
         private void ApplyTransform(RectTransform rt, UISettingBase setting)
