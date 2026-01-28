@@ -1,9 +1,9 @@
-﻿using UnityEngine;
-using UnityEditor;
-using UnityEditor.Callbacks;
+﻿#if UNITY_EDITOR
 
+using System;
 using System.IO;
-using System.Collections;
+using UnityEditor;
+using UnityEngine;
 
 namespace Wonjeong.Reporter
 {
@@ -64,7 +64,7 @@ namespace Wonjeong.Reporter
 	    }
     }
 
-    public class ReporterModificationProcessor : UnityEditor.AssetModificationProcessor
+    public class ReporterModificationProcessor : AssetModificationProcessor
     {
 	    [InitializeOnLoad]
 	    public class BuildInfo
@@ -86,7 +86,7 @@ namespace Wonjeong.Reporter
 				    string info_path = Application.dataPath + "/StreamingAssets/build_info";
                     using (StreamWriter build_info = new StreamWriter(info_path))
                     {
-                        build_info.Write("Build from " + SystemInfo.deviceName + " at " + System.DateTime.Now.ToString());
+                        build_info.Write("Build from " + SystemInfo.deviceName + " at " + DateTime.Now.ToString());
                     }
 			    }
 
@@ -95,4 +95,5 @@ namespace Wonjeong.Reporter
 	    }
     }
 }
+#endif
 

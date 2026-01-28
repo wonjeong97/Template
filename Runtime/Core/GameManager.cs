@@ -1,11 +1,10 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.SceneManagement;
-using UnityEngine.UI;
+using Wonjeong.Data;
 using Wonjeong.UI;
 using Wonjeong.Utils;
-using Wonjeong.Data;
-using Wonjeong.Reporter; // Reporter 네임스페이스 참조
+
+// Reporter 네임스페이스 참조
 
 namespace Wonjeong.Core
 {
@@ -13,7 +12,7 @@ namespace Wonjeong.Core
     {
         public static GameManager Instance;
         
-        [SerializeField] private Wonjeong.Reporter.Reporter reporter; 
+        [SerializeField] private Reporter.Reporter reporter; 
 
         private float _currentInactivityTimer;
         private bool _isTransitioning;
@@ -37,7 +36,7 @@ namespace Wonjeong.Core
 
             if (reporter == null)
             {
-                reporter = FindObjectOfType<Wonjeong.Reporter.Reporter>();
+                reporter = FindObjectOfType<Reporter.Reporter>();
             }
         }
 
