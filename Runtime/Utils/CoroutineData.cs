@@ -5,9 +5,11 @@ namespace Wonjeong.Utils
 {
     public static class CoroutineData
     {
-        #region private 변수
+        #region 변수
 
         private static readonly Dictionary<float, WaitForSeconds> DicWaitForSeconds = new Dictionary<float, WaitForSeconds>();
+        
+        public static readonly WaitForEndOfFrame WaitForEndOfFrame = new WaitForEndOfFrame();
 
         #endregion
 
