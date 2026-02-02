@@ -56,7 +56,7 @@ namespace Wonjeong.Core
             Settings settings = JsonLoader.Load<Settings>("Settings.json");
             if (settings != null)
             {
-                _inactivityLimit = settings.inactivityTime;
+                //_inactivityLimit = settings.inactivityTime;
                 _fadeTime = settings.fadeTime;
             }
         }

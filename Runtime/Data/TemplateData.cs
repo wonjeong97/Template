@@ -103,7 +103,8 @@ namespace Wonjeong.Data
     [Serializable]
     public class Settings
     {
-        public float inactivityTime;
+        public float warningTime;
+        public float resetTime;
         public float fadeTime;
         public SerialSetting serial;
         public CloseSetting closeSetting;
