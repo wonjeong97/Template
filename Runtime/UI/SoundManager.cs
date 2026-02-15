@@ -31,12 +31,13 @@ namespace Wonjeong.UI
 
         private AudioSource _bgmSource;
         private AudioSource _sfxSource;
-        
-        // 사운드 설정 데이터를 키값으로 관리
+
+        // BGM 페이드아웃 코루틴 참조 변수 (중복 실행 방지용)
+        private Coroutine _bgmFadeRoutine;
+
         private readonly Dictionary<string, SoundSetting> _soundSettings = new Dictionary<string, SoundSetting>();
-        // 로드된 클립 캐시
         private readonly Dictionary<string, AudioClip> _clipCache = new Dictionary<string, AudioClip>();
-        
+
         private const int MAX_CACHE_COUNT = 20;
 
         private void Awake()
@@ -56,12 +57,10 @@ namespace Wonjeong.UI
 
         private void InitSources()
         {
-            // BGM용 오디오 소스 설정
             _bgmSource = gameObject.AddComponent<AudioSource>();
             _bgmSource.loop = true;
             _bgmSource.playOnAwake = false;
 
-            // SFX용 오디오 소스 설정
             _sfxSource = gameObject.AddComponent<AudioSource>();
             _sfxSource.loop = false;
             _sfxSource.playOnAwake = false;
@@ -69,7 +68,6 @@ namespace Wonjeong.UI
 
         private void LoadSoundSettings()
         {
-            // Settings.json 로드 및 딕셔너리 구성
             Settings settings = JsonLoader.Load<Settings>("Settings.json");
             if (settings != null && settings.sounds != null)
             {
@@ -81,17 +79,22 @@ namespace Wonjeong.UI
             }
         }
 
-        #region Public Methods (Play / Stop)
+        #region Public Methods (Play / Stop / Fade)
 
-        /// <summary> BGM을 재생합니다. (하나만 루프 재생) </summary>
         public void PlayBGM(string key)
         {
             if (!_soundSettings.TryGetValue(key, out SoundSetting setting)) return;
-            
+
+            // 새 BGM 재생 시 기존 페이드아웃 중단
+            if (_bgmFadeRoutine != null)
+            {
+                StopCoroutine(_bgmFadeRoutine);
+                _bgmFadeRoutine = null;
+            }
+
             StartCoroutine(LoadAndPlayRoutine(setting, _bgmSource, true));
         }
 
-        /// <summary> 효과음을 재생합니다. (중첩 가능) </summary>
         public void PlaySFX(string key)
         {
             if (!_soundSettings.TryGetValue(key, out SoundSetting setting)) return;
@@ -99,20 +102,66 @@ namespace Wonjeong.UI
             StartCoroutine(LoadAndPlayRoutine(setting, _sfxSource, false));
         }
 
-        public void StopBGM() => _bgmSource.Stop();
+        public void StopBGM()
+        {
+            // 정지 시 페이드아웃 중단
+            if (_bgmFadeRoutine != null)
+            {
+                StopCoroutine(_bgmFadeRoutine);
+                _bgmFadeRoutine = null;
+            }
+            _bgmSource.Stop();
+        }
+
         public void StopSFX() => _sfxSource.Stop();
-        
+
+        /// <summary>
+        /// BGM을 지정된 시간에 걸쳐 서서히 줄이고 정지합니다.
+        /// </summary>
+        /// <param name="duration">페이드아웃 소요 시간(초)</param>
+        public void FadeOutBGM(float duration)
+        {
+            if (!_bgmSource.isPlaying) return;
+
+            // 이미 페이드 중이라면 취소하고 새로 시작
+            if (_bgmFadeRoutine != null) StopCoroutine(_bgmFadeRoutine);
+
+            _bgmFadeRoutine = StartCoroutine(FadeOutRoutine(duration));
+        }
+
         public void ClearCache()
         {
             foreach (AudioClip clip in _clipCache.Values)
             {
-                if (clip != null) Resources.UnloadAsset(clip); // 메모리 해제
+                if (clip != null) Resources.UnloadAsset(clip);
             }
             _clipCache.Clear();
             Debug.Log("[SoundManager] Audio cache cleared.");
         }
 
         #endregion
+
+        // --- Coroutines ---
+
+        private IEnumerator FadeOutRoutine(float duration)
+        {
+            float startVolume = _bgmSource.volume;
+            float timer = 0f;
+
+            if (duration <= 0f) duration = 0.01f; // 0 나누기 방지
+
+            while (timer < duration)
+            {
+                timer += Time.deltaTime;
+                // 현재 볼륨에서 0까지 선형 보간
+                _bgmSource.volume = Mathf.Lerp(startVolume, 0f, timer / duration);
+                yield return null;
+            }
+
+            _bgmSource.volume = 0f;
+            _bgmSource.Stop();
+            _bgmFadeRoutine = null;
+        }
 
         private IEnumerator LoadAndPlayRoutine(SoundSetting setting, AudioSource source, bool isBGM)
         {
@@ -124,8 +173,8 @@ namespace Wonjeong.UI
                 clip = cachedClip;
             }
             else
-            {       
-                // 캐시가 꽉 찼다면 가장 오래된 것 중 하나를 삭제
+            {
+                // 캐시 관리
                 if (_clipCache.Count >= MAX_CACHE_COUNT)
                 {
                     string firstKey = _clipCache.Keys.First();
@@ -133,8 +182,8 @@ namespace Wonjeong.UI
                     _clipCache.Remove(firstKey);
                     if (oldClip != null) Resources.UnloadAsset(oldClip);
                 }
-                
-                // 2. StreamingAssets에서 로드 (UnityWebRequest 사용)
+
+                // 2. 로드
                 string path = Path.Combine(Application.streamingAssetsPath, setting.clipPath).Replace("\\", "/");
                 string uri = "file://" + path;
 
@@ -156,19 +205,24 @@ namespace Wonjeong.UI
                 }
             }
 
-            // 3. 재생 처리
+            // 3. 재생
             if (clip != null)
             {
                 if (isBGM)
                 {
-                    if (source.clip == clip && source.isPlaying) yield break; // 이미 재생 중이면 무시
+                    // 같은 곡 재생 중이면 무시 (볼륨만 원복)
+                    if (source.clip == clip && source.isPlaying)
+                    {
+                        source.volume = setting.volume; // 페이드아웃 중이었다면 볼륨 복구
+                        yield break;
+                    }
+
                     source.clip = clip;
-                    source.volume = setting.volume;
+                    source.volume = setting.volume; // 볼륨 초기화
                     source.Play();
                 }
                 else
                 {
-                    // 효과음은 한 번에 여러 개가 겹쳐 나올 수 있도록 PlayOneShot 사용
                     source.PlayOneShot(clip, setting.volume);
                 }
             }
@@ -185,10 +239,10 @@ namespace Wonjeong.UI
                 _ => AudioType.UNKNOWN
             };
         }
-        
+
         private void OnDestroy()
         {
-            ClearCache(); // 파괴 시 메모리 정리
+            ClearCache();
         }
     }
 }
