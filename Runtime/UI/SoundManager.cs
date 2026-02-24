@@ -129,14 +129,17 @@ namespace Wonjeong.UI
             _bgmFadeRoutine = StartCoroutine(FadeOutRoutine(duration));
         }
 
+        /// <summary>
+        /// 캐시된 모든 오디오 클립의 메모리를 해제하고 딕셔너리를 비움.
+        /// </summary>
         public void ClearCache()
         {
             foreach (AudioClip clip in _clipCache.Values)
             {
-                if (clip != null) Resources.UnloadAsset(clip);
+                if (clip) Destroy(clip);
             }
             _clipCache.Clear();
-            Debug.Log("[SoundManager] Audio cache cleared.");
+            Debug.Log("[SoundManager] 오디오 캐시 메모리를 정리했습니다.");
         }
 
         #endregion
@@ -180,7 +183,8 @@ namespace Wonjeong.UI
                     string firstKey = _clipCache.Keys.First();
                     AudioClip oldClip = _clipCache[firstKey];
                     _clipCache.Remove(firstKey);
-                    if (oldClip != null) Resources.UnloadAsset(oldClip);
+                    
+                    if (oldClip) Destroy(oldClip);
                 }
 
                 // 2. 로드
