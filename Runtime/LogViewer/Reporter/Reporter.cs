@@ -118,6 +118,8 @@ namespace Wonjeong.Reporter
             public string stacktrace;
 
             public int sampleId;
+			public string timestamp;
+			public string displayCondition;
             //public string   objectName="" ;//object who send error
             //public string   rootName =""; //root of object send error
 
@@ -1458,12 +1460,23 @@ namespace Wonjeong.Reporter
 
                 GUIStyle currentLogStyle = ((startIndex + index) % 2 == 0) ? evenLogStyle : oddLogStyle;
                 if (log == selectedLog)
-                {
+                {	
+					GUILayout.Box(content, nonStyle, GUILayout.Width(size.x), GUILayout.Height(size.y));
+					GUILayout.Label(log.displayCondition, selectedLogFontStyle);
                     //selectedLog = log ;
                     currentLogStyle = selectedLogStyle;
                 }
                 else
                 {
+                    if (GUILayout.Button(content, nonStyle, GUILayout.Width(size.x), GUILayout.Height(size.y)))
+                    {
+                        selectedLog = log;
+                    }
+
+                    if (GUILayout.Button(log.displayCondition, logButtonStyle))
+                    {
+                        selectedLog = log;
+                    }
                 }
 
                 tempContent.text = log.count.ToString();
@@ -2210,9 +2223,15 @@ namespace Wonjeong.Reporter
             bool newLogAdded = false;
 
             AddSample();
+            string currentTime = DateTime.Now.ToString("HH:mm:ss");
             Log log = new Log()
             {
-                logType = (LogType)type, condition = _condition, stacktrace = _stacktrace, sampleId = samples.Count - 1
+                logType = (LogType)type, 
+                condition = _condition, 
+                stacktrace = _stacktrace, 
+                sampleId = samples.Count - 1,
+                timestamp = currentTime,
+                displayCondition = $"[{currentTime}] {_condition}"
             };
             memUsage += log.GetMemoryUsage();
             //memUsage += samples.Count * 13 ;
@@ -2300,7 +2319,14 @@ namespace Wonjeong.Reporter
 
         void CaptureLogThread(string condition, string stacktrace, UnityEngine.LogType type)
         {
-            Log log = new Log() { condition = condition, stacktrace = stacktrace, logType = (LogType)type };
+            string currentTime = DateTime.Now.ToString("HH:mm:ss");
+            Log log = new Log() { 
+                condition = condition, 
+                stacktrace = stacktrace, 
+                logType = (LogType)type,
+                timestamp = currentTime,
+                displayCondition = $"[{currentTime}] {condition}"
+            };
             lock (threadedLogs)
             {
                 threadedLogs.Add(log);
@@ -2412,9 +2438,10 @@ namespace Wonjeong.Reporter
             List<string> fileContentsList = new List<string>();
             Debug.Log("Saving logs to " + filePath);
             File.Delete(filePath);
-            foreach (var t in logs)
+    
+            foreach (Log t in logs) 
             {
-                fileContentsList.Add(t.logType + "\n" + t.condition + "\n" + t.stacktrace);
+                fileContentsList.Add($"[{t.timestamp}] {t.logType}\n{t.condition}\n{t.stacktrace}");
             }
 
             File.WriteAllLines(filePath, fileContentsList.ToArray());
