@@ -1428,200 +1428,142 @@ namespace Wonjeong.Reporter
             endIndex = Mathf.Clamp(endIndex, 0, totalCount);
             bool scrollerVisible = (totalVisibleCount < totalCount);
             for (int i = startIndex; (startIndex + index) < endIndex; i++)
-            {
-                if (i >= currentLog.Count)
-                    break;
-                Log log = currentLog[i];
+    {
+        if (i >= currentLog.Count)
+            break;
+            
+        Log log = currentLog[i];
 
-                if (log.logType == LogType.Log && !showLog)
-                    continue;
-                if (log.logType == LogType.Warning && !showWarning)
-                    continue;
-                if (log.logType == LogType.Error && !showError)
-                    continue;
-                if (log.logType == LogType.Assert && !showError)
-                    continue;
-                if (log.logType == LogType.Exception && !showError)
-                    continue;
+        if (log.logType == LogType.Log && !showLog) continue;
+        if (log.logType == LogType.Warning && !showWarning) continue;
+        if (log.logType == LogType.Error && !showError) continue;
+        if (log.logType == LogType.Assert && !showError) continue;
+        if (log.logType == LogType.Exception && !showError) continue;
 
-                if (index >= totalVisibleCount)
-                {
-                    break;
-                }
+        if (index >= totalVisibleCount) break;
 
-                GUIContent content = null;
-                if (log.logType == LogType.Log)
-                    content = logContent;
-                else if (log.logType == LogType.Warning)
-                    content = warningContent;
-                else
-                    content = errorContent;
-                //content.text = log.condition ;
+        GUIContent content = null;
+        if (log.logType == LogType.Log) content = logContent;
+        else if (log.logType == LogType.Warning) content = warningContent;
+        else content = errorContent;
 
-                GUIStyle currentLogStyle = ((startIndex + index) % 2 == 0) ? evenLogStyle : oddLogStyle;
-                if (log == selectedLog)
-                {	
-					GUILayout.Box(content, nonStyle, GUILayout.Width(size.x), GUILayout.Height(size.y));
-					GUILayout.Label(log.displayCondition, selectedLogFontStyle);
-                    //selectedLog = log ;
-                    currentLogStyle = selectedLogStyle;
-                }
-                else
-                {
-                    if (GUILayout.Button(content, nonStyle, GUILayout.Width(size.x), GUILayout.Height(size.y)))
-                    {
-                        selectedLog = log;
-                    }
+        GUIStyle currentLogStyle = ((startIndex + index) % 2 == 0) ? evenLogStyle : oddLogStyle;
+        if (log == selectedLog) currentLogStyle = selectedLogStyle;
 
-                    if (GUILayout.Button(log.displayCondition, logButtonStyle))
-                    {
-                        selectedLog = log;
-                    }
-                }
-
-                tempContent.text = log.count.ToString();
-                float w = 0f;
-                if (collapse)
-                    w = barStyle.CalcSize(tempContent).x + 3;
-                countRect.x = Screen.width - w;
-                countRect.y = size.y * i;
-                if (beforeHeight > 0)
-                    countRect.y += 8;
-                countRect.width = w;
-                countRect.height = size.y;
-
-                if (scrollerVisible)
-                    countRect.x -= size.x * 2;
-
-                Sample sample = samples[log.sampleId];
-                fpsRect = countRect;
-                if (showFps)
-                {
-                    tempContent.text = sample.fpsText;
-                    w = currentLogStyle.CalcSize(tempContent).x + size.x;
-                    fpsRect.x -= w;
-                    fpsRect.width = size.x;
-                    fpsLabelRect = fpsRect;
-                    fpsLabelRect.x += size.x;
-                    fpsLabelRect.width = w - size.x;
-                }
-
-
-                memoryRect = fpsRect;
-                if (showMemory)
-                {
-                    tempContent.text = sample.memory.ToString("0.000");
-                    w = currentLogStyle.CalcSize(tempContent).x + size.x;
-                    memoryRect.x -= w;
-                    memoryRect.width = size.x;
-                    memoryLabelRect = memoryRect;
-                    memoryLabelRect.x += size.x;
-                    memoryLabelRect.width = w - size.x;
-                }
-
-                sceneRect = memoryRect;
-                if (showScene)
-                {
-                    tempContent.text = sample.GetSceneName();
-                    w = currentLogStyle.CalcSize(tempContent).x + size.x;
-                    sceneRect.x -= w;
-                    sceneRect.width = size.x;
-                    sceneLabelRect = sceneRect;
-                    sceneLabelRect.x += size.x;
-                    sceneLabelRect.width = w - size.x;
-                }
-
-                timeRect = sceneRect;
-                if (showTime)
-                {
-                    tempContent.text = sample.time.ToString("0.000");
-                    w = currentLogStyle.CalcSize(tempContent).x + size.x;
-                    timeRect.x -= w;
-                    timeRect.width = size.x;
-                    timeLabelRect = timeRect;
-                    timeLabelRect.x += size.x;
-                    timeLabelRect.width = w - size.x;
-                }
-
-
-                GUILayout.BeginHorizontal(currentLogStyle);
-                if (log == selectedLog)
-                {
-                    GUILayout.Box(content, nonStyle, GUILayout.Width(size.x), GUILayout.Height(size.y));
-    
-                    // 선택된 로그의 타임스탬프 텍스트 렌더링
-                    GUILayout.Label(log.displayCondition, selectedLogFontStyle);
+        tempContent.text = log.count.ToString();
+        float w = 0f;
+        if (collapse) w = barStyle.CalcSize(tempContent).x + 3;
         
-                if (showTime)
-                {
-                    GUI.Box(timeRect, showTimeContent, currentLogStyle);
-                    GUI.Label(timeLabelRect, sample.time.ToString("0.000"), currentLogStyle);
-                }
+        countRect.x = Screen.width - w;
+        countRect.y = size.y * i;
+        if (beforeHeight > 0) countRect.y += 8;
+        countRect.width = w;
+        countRect.height = size.y;
 
-                if (showScene)
-                {
-                    GUI.Box(sceneRect, showSceneContent, currentLogStyle);
-                    GUI.Label(sceneLabelRect, sample.GetSceneName(), currentLogStyle);
-                }
+        if (scrollerVisible) countRect.x -= size.x * 2;
 
-                if (showMemory)
-                {
-                    GUI.Box(memoryRect, showMemoryContent, currentLogStyle);
-                    GUI.Label(memoryLabelRect, sample.memory.ToString("0.000") + " mb", currentLogStyle);
-                }
+        Sample sample = samples[log.sampleId];
+        fpsRect = countRect;
+        if (showFps)
+        {
+            tempContent.text = sample.fpsText;
+            w = currentLogStyle.CalcSize(tempContent).x + size.x;
+            fpsRect.x -= w;
+            fpsRect.width = size.x;
+            fpsLabelRect = fpsRect;
+            fpsLabelRect.x += size.x;
+            fpsLabelRect.width = w - size.x;
+        }
 
-                if (showFps)
-                {
-                    GUI.Box(fpsRect, showFpsContent, currentLogStyle);
-                    GUI.Label(fpsLabelRect, sample.fpsText, currentLogStyle);
-                }
-            }
-            else
+        memoryRect = fpsRect;
+        if (showMemory)
+        {
+            tempContent.text = sample.memory.ToString("0.000");
+            w = currentLogStyle.CalcSize(tempContent).x + size.x;
+            memoryRect.x -= w;
+            memoryRect.width = size.x;
+            memoryLabelRect = memoryRect;
+            memoryLabelRect.x += size.x;
+            memoryLabelRect.width = w - size.x;
+        }
+
+        sceneRect = memoryRect;
+        if (showScene)
+        {
+            tempContent.text = sample.GetSceneName();
+            w = currentLogStyle.CalcSize(tempContent).x + size.x;
+            sceneRect.x -= w;
+            sceneRect.width = size.x;
+            sceneLabelRect = sceneRect;
+            sceneLabelRect.x += size.x;
+            sceneLabelRect.width = w - size.x;
+        }
+
+        timeRect = sceneRect;
+        if (showTime)
+        {
+            tempContent.text = sample.time.ToString("0.000");
+            w = currentLogStyle.CalcSize(tempContent).x + size.x;
+            timeRect.x -= w;
+            timeRect.width = size.x;
+            timeLabelRect = timeRect;
+            timeLabelRect.x += size.x;
+            timeLabelRect.width = w - size.x;
+        }
+
+        // --- 여기서부터 수평 렌더링 블록 시작 (기존 BeginHorizontal ~ EndHorizontal 전체 교체 대상) ---
+        GUILayout.BeginHorizontal(currentLogStyle);
+        
+        // 핫리로드 전 과거 로그의 displayCondition이 null일 때 발생하는 예외 방지용 Fallback
+        string displayText = !string.IsNullOrEmpty(log.displayCondition) ? log.displayCondition : log.condition;
+
+        if (log == selectedLog)
+        {
+            GUILayout.Box(content, nonStyle, GUILayout.Width(size.x), GUILayout.Height(size.y));
+            GUILayout.Label(displayText, selectedLogFontStyle);
+        }
+        else
+        {
+            if (GUILayout.Button(content, nonStyle, GUILayout.Width(size.x), GUILayout.Height(size.y)))
             {
-                if (GUILayout.Button(content, nonStyle, GUILayout.Width(size.x), GUILayout.Height(size.y)))
-                {
-                    selectedLog = log;
-                }
-            
-                // 일반 로그의 타임스탬프 텍스트 버튼 렌더링
-                if (GUILayout.Button(log.displayCondition, logButtonStyle))
-                {
-                    selectedLog = log;
-                }
-    
-                if (showTime)
-                {
-                    GUI.Box(timeRect, showTimeContent, currentLogStyle);
-                    GUI.Label(timeLabelRect, sample.time.ToString("0.000"), currentLogStyle);
-                }
-            
-                if (showScene)
-                {
-                    GUI.Box(sceneRect, showSceneContent, currentLogStyle);
-                    GUI.Label(sceneLabelRect, sample.GetSceneName(), currentLogStyle);
-                }
-    
-                if (showMemory)
-                {
-                    GUI.Box(memoryRect, showMemoryContent, currentLogStyle);
-                    GUI.Label(memoryLabelRect, sample.memory.ToString("0.000") + " mb", currentLogStyle);
-                }
-
-                if (showFps)
-                {
-                    GUI.Box(fpsRect, showFpsContent, currentLogStyle);
-                    GUI.Label(fpsLabelRect, sample.fpsText, currentLogStyle);
-                }
+                selectedLog = log;
             }
-
-            if (collapse)
+            if (GUILayout.Button(displayText, logButtonStyle))
             {
-                GUI.Label(countRect, log.count.ToString(), barStyle);
+                selectedLog = log;
             }
-            
-            GUILayout.EndHorizontal();
-            index++; 
-            }
+        }
+
+        // 우측 성능 지표들 공통 렌더링 (중복 방지를 위해 조건문 밖으로 분리)
+        if (showTime)
+        {
+            GUI.Box(timeRect, showTimeContent, currentLogStyle);
+            GUI.Label(timeLabelRect, sample.time.ToString("0.000"), currentLogStyle);
+        }
+        if (showScene)
+        {
+            GUI.Box(sceneRect, showSceneContent, currentLogStyle);
+            GUI.Label(sceneLabelRect, sample.GetSceneName(), currentLogStyle);
+        }
+        if (showMemory)
+        {
+            GUI.Box(memoryRect, showMemoryContent, currentLogStyle);
+            GUI.Label(memoryLabelRect, sample.memory.ToString("0.000") + " mb", currentLogStyle);
+        }
+        if (showFps)
+        {
+            GUI.Box(fpsRect, showFpsContent, currentLogStyle);
+            GUI.Label(fpsLabelRect, sample.fpsText, currentLogStyle);
+        }
+
+        if (collapse) 
+        {
+            GUI.Label(countRect, log.count.ToString(), barStyle);
+        }
+        
+        GUILayout.EndHorizontal();
+        index++;
+    }
 
             int afterHeight = (int)((totalCount - (startIndex + totalVisibleCount)) * size.y);
             if (afterHeight > 0)
