@@ -1548,76 +1548,79 @@ namespace Wonjeong.Reporter
                 if (log == selectedLog)
                 {
                     GUILayout.Box(content, nonStyle, GUILayout.Width(size.x), GUILayout.Height(size.y));
-                    GUILayout.Label(log.condition, selectedLogFontStyle);
-                    //GUILayout.FlexibleSpace();
-                    if (showTime)
-                    {
-                        GUI.Box(timeRect, showTimeContent, currentLogStyle);
-                        GUI.Label(timeLabelRect, sample.time.ToString("0.000"), currentLogStyle);
-                    }
-
-                    if (showScene)
-                    {
-                        GUI.Box(sceneRect, showSceneContent, currentLogStyle);
-                        GUI.Label(sceneLabelRect, sample.GetSceneName(), currentLogStyle);
-                    }
-
-                    if (showMemory)
-                    {
-                        GUI.Box(memoryRect, showMemoryContent, currentLogStyle);
-                        GUI.Label(memoryLabelRect, sample.memory.ToString("0.000") + " mb", currentLogStyle);
-                    }
-
-                    if (showFps)
-                    {
-                        GUI.Box(fpsRect, showFpsContent, currentLogStyle);
-                        GUI.Label(fpsLabelRect, sample.fpsText, currentLogStyle);
-                    }
-                }
-                else
+    
+                    // 선택된 로그의 타임스탬프 텍스트 렌더링
+                    GUILayout.Label(log.displayCondition, selectedLogFontStyle);
+        
+                if (showTime)
                 {
-                    if (GUILayout.Button(content, nonStyle, GUILayout.Width(size.x), GUILayout.Height(size.y)))
-                    {
-                        //selectedIndex = startIndex + index ;
-                        selectedLog = log;
-                    }
-
-                    if (GUILayout.Button(log.condition, logButtonStyle))
-                    {
-                        //selectedIndex = startIndex + index ;
-                        selectedLog = log;
-                    }
-
-                    //GUILayout.FlexibleSpace();
-                    if (showTime)
-                    {
-                        GUI.Box(timeRect, showTimeContent, currentLogStyle);
-                        GUI.Label(timeLabelRect, sample.time.ToString("0.000"), currentLogStyle);
-                    }
-
-                    if (showScene)
-                    {
-                        GUI.Box(sceneRect, showSceneContent, currentLogStyle);
-                        GUI.Label(sceneLabelRect, sample.GetSceneName(), currentLogStyle);
-                    }
-
-                    if (showMemory)
-                    {
-                        GUI.Box(memoryRect, showMemoryContent, currentLogStyle);
-                        GUI.Label(memoryLabelRect, sample.memory.ToString("0.000") + " mb", currentLogStyle);
-                    }
-
-                    if (showFps)
-                    {
-                        GUI.Box(fpsRect, showFpsContent, currentLogStyle);
-                        GUI.Label(fpsLabelRect, sample.fpsText, currentLogStyle);
-                    }
+                    GUI.Box(timeRect, showTimeContent, currentLogStyle);
+                    GUI.Label(timeLabelRect, sample.time.ToString("0.000"), currentLogStyle);
                 }
 
-                if (collapse)
-                    GUI.Label(countRect, log.count.ToString(), barStyle);
-                GUILayout.EndHorizontal();
-                index++;
+                if (showScene)
+                {
+                    GUI.Box(sceneRect, showSceneContent, currentLogStyle);
+                    GUI.Label(sceneLabelRect, sample.GetSceneName(), currentLogStyle);
+                }
+
+                if (showMemory)
+                {
+                    GUI.Box(memoryRect, showMemoryContent, currentLogStyle);
+                    GUI.Label(memoryLabelRect, sample.memory.ToString("0.000") + " mb", currentLogStyle);
+                }
+
+                if (showFps)
+                {
+                    GUI.Box(fpsRect, showFpsContent, currentLogStyle);
+                    GUI.Label(fpsLabelRect, sample.fpsText, currentLogStyle);
+                }
+            }
+            else
+            {
+                if (GUILayout.Button(content, nonStyle, GUILayout.Width(size.x), GUILayout.Height(size.y)))
+                {
+                    selectedLog = log;
+                }
+            
+                // 일반 로그의 타임스탬프 텍스트 버튼 렌더링
+                if (GUILayout.Button(log.displayCondition, logButtonStyle))
+                {
+                    selectedLog = log;
+                }
+    
+                if (showTime)
+                {
+                    GUI.Box(timeRect, showTimeContent, currentLogStyle);
+                    GUI.Label(timeLabelRect, sample.time.ToString("0.000"), currentLogStyle);
+                }
+            
+                if (showScene)
+                {
+                    GUI.Box(sceneRect, showSceneContent, currentLogStyle);
+                    GUI.Label(sceneLabelRect, sample.GetSceneName(), currentLogStyle);
+                }
+    
+                if (showMemory)
+                {
+                    GUI.Box(memoryRect, showMemoryContent, currentLogStyle);
+                    GUI.Label(memoryLabelRect, sample.memory.ToString("0.000") + " mb", currentLogStyle);
+                }
+
+                if (showFps)
+                {
+                    GUI.Box(fpsRect, showFpsContent, currentLogStyle);
+                    GUI.Label(fpsLabelRect, sample.fpsText, currentLogStyle);
+                }
+            }
+
+            if (collapse)
+            {
+                GUI.Label(countRect, log.count.ToString(), barStyle);
+            }
+            
+            GUILayout.EndHorizontal();
+            index++; 
             }
 
             int afterHeight = (int)((totalCount - (startIndex + totalVisibleCount)) * size.y);
