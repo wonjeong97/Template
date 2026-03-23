@@ -118,8 +118,6 @@ namespace Wonjeong.Reporter
             public string stacktrace;
 
             public int sampleId;
-			public string timestamp;
-			public string displayCondition;
             //public string   objectName="" ;//object who send error
             //public string   rootName =""; //root of object send error
 
@@ -1511,11 +1509,8 @@ namespace Wonjeong.Reporter
             timeLabelRect.width = w - size.x;
         }
 
-        // --- 여기서부터 수평 렌더링 블록 시작 (기존 BeginHorizontal ~ EndHorizontal 전체 교체 대상) ---
         GUILayout.BeginHorizontal(currentLogStyle);
-        
-        // 핫리로드 전 과거 로그의 displayCondition이 null일 때 발생하는 예외 방지용 Fallback
-        string displayText = !string.IsNullOrEmpty(log.displayCondition) ? log.displayCondition : log.condition;
+        string displayText = log.condition;
 
         if (log == selectedLog)
         {
@@ -2175,8 +2170,6 @@ namespace Wonjeong.Reporter
                 condition = _condition, 
                 stacktrace = _stacktrace, 
                 sampleId = samples.Count - 1,
-                timestamp = currentTime,
-                displayCondition = $"[{currentTime}] {_condition}"
             };
             memUsage += log.GetMemoryUsage();
             //memUsage += samples.Count * 13 ;
@@ -2268,9 +2261,7 @@ namespace Wonjeong.Reporter
             Log log = new Log() { 
                 condition = condition, 
                 stacktrace = stacktrace, 
-                logType = (LogType)type,
-                timestamp = currentTime,
-                displayCondition = $"[{currentTime}] {condition}"
+                logType = (LogType)type
             };
             lock (threadedLogs)
             {
@@ -2386,7 +2377,7 @@ namespace Wonjeong.Reporter
     
             foreach (Log t in logs) 
             {
-                fileContentsList.Add($"[{t.timestamp}] {t.logType}\n{t.condition}\n{t.stacktrace}");
+                fileContentsList.Add($"{t.logType}\n{t.condition}\n{t.stacktrace}");
             }
 
             File.WriteAllLines(filePath, fileContentsList.ToArray());
