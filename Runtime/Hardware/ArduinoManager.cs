@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.IO.Ports;
 using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 using Wonjeong.Data;
 using Wonjeong.Utils;
@@ -15,10 +16,10 @@ namespace Wonjeong.Hardware
         {
             get
             {
-                if (_instance == null)
+                if (!_instance)
                 {
                     _instance = FindFirstObjectByType<ArduinoManager>();
-                    if (_instance == null)
+                    if (!_instance)
                     {
                         GameObject go = new GameObject("ArduinoManager");
                         _instance = go.AddComponent<ArduinoManager>();
@@ -28,16 +29,9 @@ namespace Wonjeong.Hardware
             }
         }
 
-        [Header("Serial Settings (JSON에서 로드됨)")]
-        public string portName = "COM3"; // 기본값
-        public int baudRate = 9600;
-        public bool autoConnect = true;
-
         private SerialPort _serialPort;
         private Thread _readThread;
-        private volatile bool _isRunning = false;
-
-        // 스레드 간 안전한 데이터 전달을 위한 큐
+        private volatile bool _isRunning;
         private readonly ConcurrentQueue<string> _messageQueue = new ConcurrentQueue<string>();
 
         // 데이터 수신 이벤트
@@ -48,7 +42,7 @@ namespace Wonjeong.Hardware
 
         private void Awake()
         {
-            if (_instance == null) 
+            if (!_instance) 
             {
                 _instance = this;
                 DontDestroyOnLoad(gameObject);
@@ -58,60 +52,80 @@ namespace Wonjeong.Hardware
                 Destroy(gameObject);
             }
         }
-
-        private void Start()
+        
+        private void Update()
         {
-            // 1. JSON 설정 로드
-            LoadSettings();
-
-            // 2. 설정에 따라 자동 연결 시도
-            if (autoConnect)
+            while (_messageQueue.TryDequeue(out string message))
             {
-                Connect();
+                OnDataReceived?.Invoke(message);
             }
         }
-
-        /// <summary> StreamingAssets/Settings.json에서 시리얼 설정을 불러와 적용 </summary>
-        private void LoadSettings()
+        
+        public void Connect(int baudRate, string expectedHandshake)
         {
-            // JsonLoader를 통해 Settings 객체 전체를 불러옴
-            Settings data = JsonLoader.Load<Settings>("Settings.json");
-
-            if (data != null && data.serial != null)
+            if (IsConnected)
             {
-                this.portName = data.serial.portName;
-                this.baudRate = data.serial.baudRate;
-                this.autoConnect = data.serial.autoConnect;
+                return;
+            }
+
+            Task.Run(() => TryHandshake(baudRate, expectedHandshake));
+        }
+        
+        private void TryHandshake(int baudRate, string expectedHandshake)
+        {
+            string[] ports = SerialPort.GetPortNames();
+    
+            foreach (string port in ports)
+            {
+                try
+                {
+                    SerialPort testPort = new SerialPort(port, baudRate);
+                    testPort.ReadTimeout = 5000;
+                    testPort.WriteTimeout = 500;
+                    testPort.Open();
+
+                    string received = testPort.ReadLine().Trim();
+            
+                    if (received.Contains(expectedHandshake))
+                    {
+                        // 응답 전송 로직 삭제, 일치 시 바로 스레드 시작 및 연결 확정
+                        _serialPort = testPort;
+                        _isRunning = true;
+                        _readThread = new Thread(ReadSerialLoop);
+                        _readThread.Start();
                 
-                Debug.Log($"[ArduinoManager] JSON 설정 로드 완료: {portName} / {baudRate}");
+                        Debug.Log($"[ArduinoManager] Connection success: {port}");
+                        return;
+                    }
+            
+                    testPort.Close();
+                    testPort.Dispose();
+                }
+                catch (Exception)
+                {
+                    // 실패 시 다음 포트로 넘어가기 위해 예외 무시
+                }
             }
-            else
-            {
-                Debug.LogWarning("[ArduinoManager] Settings.json에서 'serial' 설정을 찾을 수 없어 기본값을 사용합니다.");
-            }
+    
+            Debug.LogWarning("[ArduinoManager] Can't connect to Arduino");
         }
-
-        public void Connect()
+        
+        public void RebootDevice()
         {
-            if (IsConnected) return;
+            if (!IsConnected) return;
 
             try
             {
-                _serialPort = new SerialPort(portName, baudRate);
-                _serialPort.ReadTimeout = 500;
-                _serialPort.WriteTimeout = 500;
-                _serialPort.Open();
-
-                _isRunning = true;
-                
-                _readThread = new Thread(ReadSerialLoop);
-                _readThread.Start();
-
-                Debug.Log($"[ArduinoManager] {portName} 연결 성공");
+                // DTR 신호를 순간적으로 껐다 켜서 보드 리셋을 유도합니다.
+                _serialPort.DtrEnable = false;
+                Thread.Sleep(100); 
+                _serialPort.DtrEnable = true;
+        
+                Debug.Log("[ArduinoManager] Rebooting arduino.");
             }
             catch (Exception e)
             {
-                Debug.LogError($"[ArduinoManager] 연결 실패 ({portName}): {e.Message}");
+                Debug.LogWarning($"[ArduinoManager] Device reboot failed: {e.Message}");
             }
         }
 
@@ -121,7 +135,7 @@ namespace Wonjeong.Hardware
 
             if (_readThread != null && _readThread.IsAlive)
             {
-                _readThread.Join(600); // ReadTimeout(500ms)보다 약간 길게 설정
+                _readThread.Join(600);
             }
 
             if (_serialPort != null && _serialPort.IsOpen)
@@ -131,19 +145,20 @@ namespace Wonjeong.Hardware
             }
 
             _serialPort = null;
-            Debug.Log("[ArduinoManager] 연결 해제됨");
+            Debug.Log("[ArduinoManager] Disconnected");
         }
 
         public void Send(string msg)
         {
             if (!IsConnected) return;
+            
             try
             {
                 _serialPort.WriteLine(msg);
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"[ArduinoManager] 전송 실패: {e.Message}");
+                Debug.LogWarning($"[ArduinoManager] Send fail: {e.Message}");
             }
         }
 
@@ -159,10 +174,19 @@ namespace Wonjeong.Hardware
                         _messageQueue.Enqueue(data);
                     }
                 }
-                catch (TimeoutException) { }
+                catch (TimeoutException) 
+                { 
+                    // 대기 시간 초과 시 루프 유지
+                }
                 catch (Exception e)
                 {
-                    if (_isRunning) Debug.LogWarning($"[ReadThread] Error: {e.Message}");
+                    if (_isRunning)
+                    {
+                        Debug.LogWarning($"[ArduinoManager] Read error (Disconnected): {e.Message}");
+                        
+                        // USB가 강제로 뽑히는 등 치명적 통신 에러 발생 시 즉시 포트를 닫고 상태를 초기화합니다.
+                        Disconnect(); 
+                    }
                 }
             }
         }
@@ -170,14 +194,6 @@ namespace Wonjeong.Hardware
         private void OnApplicationQuit()
         {
             Disconnect();
-        }
-        
-        private void Update()
-        {
-            while (_messageQueue.TryDequeue(out string message))
-            {
-                OnDataReceived?.Invoke(message);
-            }
         }
     }
 }
