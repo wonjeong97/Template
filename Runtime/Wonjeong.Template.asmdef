@@ -1,19 +1,20 @@
 {
-  "name": "Wonjeong.Template",
-  "rootNamespace": "Wonjeong",
-  "references": [
-	"GUID:6055be8ebefd69e48b49212b09b47b2f",
-	"Unity.Addressables",
-	"Unity.ResourceManager",
-	"UnityEngine.UI"
-  ],
-  "includePlatforms": [],
-  "excludePlatforms": [],
-  "allowUnsafeCode": false,
-  "overrideReferences": false,
-  "precompiledReferences": [],
-  "autoReferenced": true,
-  "defineConstraints": [],
-  "versionDefines": [],
-  "noEngineReferences": false
+    "name": "Wonjeong.Template",
+    "rootNamespace": "Wonjeong",
+    "references": [
+        "GUID:6055be8ebefd69e48b49212b09b47b2f",
+        "GUID:9e24947de15b9834991c9d8411ea37cf",
+        "GUID:84651a3751eca9349aac36a66bba901b",
+        "GUID:2bafac87e7f4b9b418d9448d219b01ab",
+        "GUID:f788db3016ca07d438af148d6935bf80"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
 }
