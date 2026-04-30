@@ -37,11 +37,8 @@ namespace Wonjeong.Core
         {
             Cursor.visible = false;
     
-            if (reporter) 
-            {
-                if (reporter.show) reporter.show = false;
-                else Debug.LogWarning("[GameManagerBase] reporter is null. Debug UI will be disabled.");
-            }
+            if (reporter && reporter.show) reporter.show = false;
+            else Debug.LogWarning("[GameManagerBase] reporter is null. Debug UI will be disabled.");
             
             if (inspectorContainer) inspectorContainer.SetActive(false);
             else Debug.LogWarning("[GameManagerBase] inspectorContainer is null.");
