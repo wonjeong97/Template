@@ -5,67 +5,61 @@ using Wonjeong.Utils;
 
 namespace Wonjeong.Core
 {
-    public abstract class GameManagerBase : MonoBehaviour
+    public abstract class GameManagerBase<T> : MonoBehaviour where T : GameManagerBase<T>
     {
-        public static GameManagerBase Instance;
+        public static T Instance { get; private set; }
 
         [SerializeField] private Reporter.Reporter reporter;
         [SerializeField] private GameObject systemCanvas;
-        [SerializeField] protected GameObject inspectorContainer;
+        [SerializeField] private GameObject inspectorContainer;
         
-        private Settings settings;
+        protected Settings settings;
         public event Action OnInspectorClosed;
 
-        private void Awake()
+        protected virtual void Awake()
         {
-            if (Instance)
+            if (Instance != null && Instance != this)
             {
                 Destroy(gameObject);
                 return;
             }
 
-            Instance = this;
+            Instance = (T)this;
             DontDestroyOnLoad(gameObject);
     
-            if (systemCanvas)
-            {
-                DontDestroyOnLoad(systemCanvas);
-            }
-            else
-            {
-                Debug.LogWarning("[GameManager] systemCanvas is null.");
-            }
+            if (systemCanvas) DontDestroyOnLoad(systemCanvas);
+            else  Debug.LogWarning("[GameManagerBase] systemCanvas is null.");
 
             TimestampLogHandler.Attach();
         }
 
-        private void Start()
+        protected virtual void Start()
         {
             Cursor.visible = false;
     
             if (reporter) 
             {
                 if (reporter.show) reporter.show = false;
-                else Debug.LogWarning("[GameManager] reporter is null. Debug UI will be disabled.");
+                else Debug.LogWarning("[GameManagerBase] reporter is null. Debug UI will be disabled.");
             }
             
             if (inspectorContainer) inspectorContainer.SetActive(false);
-            else Debug.LogWarning("[GameManager] inspectorContainer is null.");
+            else Debug.LogWarning("[GameManagerBase] inspectorContainer is null.");
             
             LoadSettings();
         }
 
-        private void LoadSettings()
+        protected virtual void LoadSettings()
         {
             settings = JsonLoader.Load<Settings>("Settings.json");
             if (settings == null)
             {
-                Debug.LogWarning("[GameManager] Settings file not found.");
+                Debug.LogWarning("[GameManagerBase] Settings file not found.");
                 settings = new Settings();
             }
         }
 
-        private void Update()
+        protected virtual void Update()
         {
             if (Input.GetKeyDown(KeyCode.D))
             {
@@ -74,7 +68,7 @@ namespace Wonjeong.Core
                     reporter.showGameManagerControl = !reporter.showGameManagerControl;
                     if (reporter.show) reporter.show = false;
                 }
-                else Debug.LogWarning("[GameManager] reporter is null. Cannot toggle control.");
+                else Debug.LogWarning("[GameManagerBase] reporter is null. Cannot toggle control.");
             }
             else if (Input.GetKeyDown(KeyCode.M)) Cursor.visible = !Cursor.visible;
             else if (Input.GetKeyDown(KeyCode.I))
@@ -83,9 +77,9 @@ namespace Wonjeong.Core
                 {
                     bool isActivating = !inspectorContainer.activeSelf;
                     inspectorContainer.SetActive(isActivating);
-                    if (!isActivating) OnInspectorClosed?.Invoke(); // 상태가 비활성화(닫힘)로 전환되었을 때만 구독된 이벤트 호출
+                    if (!isActivating) OnInspectorClosed?.Invoke(); 
                 }
-                else Debug.LogWarning("[GameManager] inspectorContainer is null. Cannot toggle inspector.");
+                else Debug.LogWarning("[GameManagerBase] inspectorContainer is null. Cannot toggle inspector.");
             }
         }
     }
