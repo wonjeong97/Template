@@ -8,7 +8,7 @@ namespace Wonjeong.Utils
     /// </summary>
     public class TimestampLogHandler : ILogHandler
     {
-        private ILogHandler _defaultLogHandler;
+        private readonly ILogHandler _defaultLogHandler;
 
         private long _lastSecondTicks = -1;
         private string _cachedTimestamp;
@@ -17,8 +17,7 @@ namespace Wonjeong.Utils
         /// TimestampLogHandler 생성자입니다.
         /// 핸들러의 이중 래핑(Decorator Leak)을 방지합니다.
         /// </summary>
-        /// <param name="defaultLogHandler">래핑할 원본 로그 핸들러</param>
-        public TimestampLogHandler(ILogHandler defaultLogHandler)
+        private TimestampLogHandler(ILogHandler defaultLogHandler)
         {
             if (defaultLogHandler == null)
             {
@@ -58,10 +57,6 @@ namespace Wonjeong.Utils
         /// <summary>
         /// 일반 로그 메시지를 포맷팅하여 출력합니다.
         /// </summary>
-        /// <param name="logType">로그의 심각도 타입</param>
-        /// <param name="context">로그를 발생시킨 객체 컨텍스트</param>
-        /// <param name="format">출력할 로그 메시지 형식</param>
-        /// <param name="args">포맷에 들어갈 인자 배열</param>
         public void LogFormat(LogType logType, UnityEngine.Object context, string format, params object[] args)
         {
             if (_defaultLogHandler == null) return;
@@ -72,8 +67,6 @@ namespace Wonjeong.Utils
         /// <summary>
         /// 예외 로그 메시지를 포맷팅하여 출력합니다.
         /// </summary>
-        /// <param name="exception">발생한 예외 객체</param>
-        /// <param name="context">로그를 발생시킨 객체 컨텍스트</param>
         public void LogException(Exception exception, UnityEngine.Object context)
         {
             if (_defaultLogHandler == null) return;

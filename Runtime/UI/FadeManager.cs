@@ -27,7 +27,7 @@ namespace Wonjeong.UI
         private Canvas _fadeCanvas;
         private CanvasGroup _canvasGroup;
         private RawImage _fadeImage;
-        private bool _isTransitioning = false;
+        private bool _isTransitioning;
 
         private void Awake()
         {

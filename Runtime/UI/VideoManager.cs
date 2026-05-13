@@ -92,9 +92,9 @@ namespace Wonjeong.UI
         }
 
         /// <summary> 비디오를 준비(Prepare)하고 완료되면 재생합니다. </summary>
-        public IEnumerator PrepareAndPlayRoutine(VideoPlayer vp, string url, AudioSource audio, float volume)
+        public IEnumerator PrepareAndPlayRoutine(VideoPlayer vp, string url, AudioSource audioSource, float volume)
         {
-            if (vp == null)
+            if (!vp)
             {
                 Debug.LogError("VideoPlayer cannot be null");
                 yield break;
@@ -110,19 +110,19 @@ namespace Wonjeong.UI
             vp.url = url;
             vp.playOnAwake = false;
 
-            if (audio)
+            if (audioSource)
             {
                 vp.audioOutputMode = VideoAudioOutputMode.AudioSource;
                 vp.EnableAudioTrack(0, true);
-                vp.SetTargetAudioSource(0, audio);
-                audio.volume = Mathf.Clamp01(volume);
+                vp.SetTargetAudioSource(0, audioSource);
+                audioSource.volume = Mathf.Clamp01(volume);
             }
 
             // 에러 추적을 위한 플래그
             bool hasError = false;
             string errorMessage = string.Empty;
     
-            VideoPlayer.ErrorEventHandler errorHandler = (VideoPlayer source, string message) =>
+            VideoPlayer.ErrorEventHandler errorHandler = (_, message) =>
             {
                 hasError = true;
                 errorMessage = message;

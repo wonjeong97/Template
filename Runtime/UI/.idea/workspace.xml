@@ -4,7 +4,18 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b9db6fcd-bf04-4f3c-89c0-f75c60cd3ce6" name="변경" comment="" />
+    <list default="true" id="b9db6fcd-bf04-4f3c-89c0-f75c60cd3ce6" name="변경" comment="">
+      <change beforePath="$PROJECT_DIR$/../Core/GameManagerBase.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Core/GameManagerBase.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../Data/TemplateData.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Data/TemplateData.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../Hardware/ArduinoManager.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Hardware/ArduinoManager.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/FadeManager.cs" beforeDir="false" afterPath="$PROJECT_DIR$/FadeManager.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/VideoManager.cs" beforeDir="false" afterPath="$PROJECT_DIR$/VideoManager.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../Utils/CoroutineData.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Utils/CoroutineData.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../Utils/GameCloser.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Utils/GameCloser.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../Utils/SystemCanvas.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Utils/SystemCanvas.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../Utils/TimestampLogHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Utils/TimestampLogHandler.cs" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -14,8 +25,10 @@
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../.." />
   </component>
   <component name="HighlightingSettingsPerFile">
-    <setting file="file://$PROJECT_DIR$/SoundManager.cs" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/UIManager.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/FadeManager.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/SoundManager.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/UIManager.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/VideoManager.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/../../package.json" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="ProjectColorInfo">{
@@ -40,7 +53,7 @@
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
     &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;com.dp.ai.tool.code.settings.CodeAssistSettingsConfigurable&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;reference.settingsdialog.IDE.editor.colors.Rainbow Brackets Lite&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
@@ -55,6 +68,13 @@
       <workItem from="1768185936183" duration="343000" />
       <workItem from="1771915730841" duration="668000" />
       <workItem from="1774247773852" duration="752000" />
+      <workItem from="1778572433402" duration="1740000" />
+      <workItem from="1778575589828" duration="21000" />
+      <workItem from="1778575625115" duration="92000" />
+      <workItem from="1778632011319" duration="372000" />
+      <workItem from="1778632391935" duration="75000" />
+      <workItem from="1778632570262" duration="30000" />
+      <workItem from="1778632604291" duration="7000" />
     </task>
     <servers />
   </component>
@@ -82,5 +102,9 @@
         </breakpoint>
       </breakpoints>
     </breakpoint-manager>
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
   </component>
 </project>

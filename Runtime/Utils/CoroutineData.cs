@@ -7,17 +7,12 @@ namespace Wonjeong.Utils
     {
         #region 변수
 
-        private static readonly Dictionary<float, WaitForSeconds> DicWaitForSeconds = new Dictionary<float, WaitForSeconds>();
-        
-        public static readonly WaitForEndOfFrame WaitForEndOfFrame = new WaitForEndOfFrame();
+        private readonly static Dictionary<float, WaitForSeconds> DicWaitForSeconds = new Dictionary<float, WaitForSeconds>();
+        public readonly static WaitForEndOfFrame WaitForEndOfFrame = new WaitForEndOfFrame();
 
         #endregion
 
-        /// <summary>
-        /// WaitForSeconds 반환 (재사용을 위해 하나의 Dictionary에서 계속 반환해줌)
-        /// </summary>
-        /// <param name="seconds">찾는 시간 초</param>
-        /// <returns></returns>
+        /// <summary> WaitForSeconds 반환 (재사용을 위해 하나의 Dictionary에서 계속 반환해줌) </summary>
         public static WaitForSeconds GetWaitForSeconds(float seconds)
         {
             if (!DicWaitForSeconds.ContainsKey(seconds))

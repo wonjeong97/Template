@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
 using Wonjeong.Data;
@@ -68,6 +69,7 @@ namespace Wonjeong.UI
         private void LoadSoundSettings()
         {
             Settings settings = JsonLoader.Load<Settings>("Settings.json");
+            
             if (settings != null && settings.sounds != null)
             {
                 foreach (SoundSetting s in settings.sounds)
@@ -83,9 +85,8 @@ namespace Wonjeong.UI
         #region Public Methods (Play / Stop / Fade)
 
         /// <summary>
-        /// 지정된 키의 배경음을 재생함.
+        /// 지정된 키의 배경음을 비동기로 재생함.
         /// </summary>
-        /// <param name="key">재생할 사운드의 키값.</param>
         public void PlayBGM(string key)
         {
             if (!_soundSettings.TryGetValue(key, out SoundSetting setting)) return;
@@ -96,18 +97,18 @@ namespace Wonjeong.UI
                 _bgmFadeRoutine = null;
             }
 
-            StartCoroutine(LoadAndPlayRoutine(setting, _bgmSource, true));
+            // Task를 백그라운드에서 실행 (Fire and Forget)
+            _ = LoadAndPlayAsync(setting, _bgmSource, true);
         }
 
         /// <summary>
-        /// 지정된 키의 효과음을 재생함.
+        /// 지정된 키의 효과음을 비동기로 재생함.
         /// </summary>
-        /// <param name="key">재생할 사운드의 키값.</param>
         public void PlaySFX(string key)
         {
             if (!_soundSettings.TryGetValue(key, out SoundSetting setting)) return;
 
-            StartCoroutine(LoadAndPlayRoutine(setting, _sfxSource, false));
+            _ = LoadAndPlayAsync(setting, _sfxSource, false);
         }
 
         /// <summary>
@@ -134,7 +135,6 @@ namespace Wonjeong.UI
         /// <summary>
         /// 배경음을 지정된 시간에 걸쳐 서서히 줄인 후 정지함.
         /// </summary>
-        /// <param name="duration">페이드 아웃 소요 시간(초).</param>
         public void FadeOutBGM(float duration)
         {
             if (!_bgmSource || !_bgmSource.isPlaying) return;
@@ -146,7 +146,6 @@ namespace Wonjeong.UI
 
         /// <summary>
         /// 캐시된 모든 오디오 클립의 메모리를 해제하고 딕셔너리를 비움.
-        /// Why: 장시간 실행 시 오디오 클립이 메모리에 누적되는 것을 방지하기 위함.
         /// </summary>
         public void ClearCache()
         {
@@ -160,7 +159,7 @@ namespace Wonjeong.UI
 
         #endregion
 
-        // --- Coroutines ---
+        // --- Coroutines & Tasks ---
 
         /// <summary>
         /// 서서히 볼륨을 줄이는 연출을 수행함.
@@ -186,72 +185,128 @@ namespace Wonjeong.UI
 
         /// <summary>
         /// 오디오 클립을 비동기로 로드하고 재생함.
-        /// Why: 메인 스레드 멈춤 없이 로컬 파일 시스템에서 사운드를 동적으로 스트리밍하기 위함.
         /// </summary>
-        private IEnumerator LoadAndPlayRoutine(SoundSetting setting, AudioSource source, bool isBGM)
+        private async Task LoadAndPlayAsync(SoundSetting setting, AudioSource source, bool isBGM)
         {
-            AudioClip clip = null;
+            AudioClip targetClip;
 
             if (_clipCache.TryGetValue(setting.key, out AudioClip cachedClip))
             {
-                clip = cachedClip;
+                targetClip = cachedClip;
             }
             else
             {
-                if (_clipCache.Count >= MAX_CACHE_COUNT)
-                {
-                    string firstKey = _clipCache.Keys.First();
-                    AudioClip oldClip = _clipCache[firstKey];
-                    _clipCache.Remove(firstKey);
-                    
-                    if (oldClip) Destroy(oldClip);
-                }
-
-                string path = Path.Combine(Application.streamingAssetsPath, setting.clipPath).Replace("\\", "/");
-                string uri = "file://" + path;
-
-                using (UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, GetAudioType(path)))
-                {
-                    yield return www.SendWebRequest();
-
-                    if (www.result == UnityWebRequest.Result.Success)
-                    {
-                        clip = DownloadHandlerAudioClip.GetContent(www);
-                        clip.name = setting.key;
-                        
-                        // 비동기 다운로드 중 중복 요청으로 인한 딕셔너리 키 충돌 예외를 방지함.
-                        if (!_clipCache.ContainsKey(setting.key))
-                        {
-                            _clipCache.Add(setting.key, clip);
-                        }
-                    }
-                    else
-                    {
-                        Debug.LogError($"[SoundManager] Failed to load sound: {path} / {www.error}");
-                        yield break;
-                    }
-                }
+                targetClip = await DownloadAndCacheClipAsync(setting);
             }
 
-            if (clip)
+            if (!targetClip)
             {
-                if (isBGM)
-                {
-                    if (source.clip == clip && source.isPlaying)
-                    {
-                        source.volume = setting.volume; 
-                        yield break;
-                    }
-
-                    source.clip = clip;
-                    source.volume = setting.volume; 
-                    source.Play();
-                }
-                else
-                {
-                    source.PlayOneShot(clip, setting.volume);
-                }
+                Debug.LogWarning("[SoundManager] targetClip is null. Cannot play sound.");
+                return;
             }
+
+            ApplyClipToSource(targetClip, setting, source, isBGM);
+        }
+        
+        /// <summary>
+        /// 로컬 경로에서 오디오 클립을 비동기로 다운로드하고 캐시에 저장함.
+        /// </summary>
+        private async Task<AudioClip> DownloadAndCacheClipAsync(SoundSetting setting)
+        {
+            ManageCacheCapacity();
+
+            string path = Path.Combine(Application.streamingAssetsPath, setting.clipPath).Replace("\\", "/");
+            string uri = "file://" + path;
+
+            using (UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, GetAudioType(path)))
+            {
+                UnityWebRequestAsyncOperation operation = www.SendWebRequest();
+
+                while (!operation.isDone)
+                {
+                    await Task.Yield();
+                }
+
+                if (www.result != UnityWebRequest.Result.Success)
+                {
+                    Debug.LogError($"[SoundManager] Failed to load sound: {path} / {www.error}");
+                    return null;
+                }
+
+                AudioClip clip = DownloadHandlerAudioClip.GetContent(www);
+        
+                if (!clip)
+                {
+                    Debug.LogWarning("[SoundManager] Downloaded clip is null.");
+                    return null;
+                }
+
+                clip.name = setting.key;
+        
+                if (!_clipCache.ContainsKey(setting.key))
+                {
+                    _clipCache.Add(setting.key, clip);
+                }
+
+                return clip;
+            }
+        }
+
+        /// <summary>
+        /// 캐시 용량을 초과할 경우 가장 오래된 캐시를 삭제함.
+        /// </summary>
+        private void ManageCacheCapacity()
+        {
+            if (_clipCache.Count < MAX_CACHE_COUNT)
+            {
+                return;
+            }
+
+            string firstKey = _clipCache.Keys.First();
+            AudioClip oldClip = _clipCache[firstKey];
+            _clipCache.Remove(firstKey);
+            
+            if (oldClip)
+            {
+                Destroy(oldClip);
+            }
+        }
+
+        /// <summary>
+        /// 오디오 클립을 오디오 소스에 할당하고 재생함.
+        /// </summary>
+        private void ApplyClipToSource(AudioClip clip, SoundSetting setting, AudioSource source, bool isBGM)
+        {
+            if (!source)
+            {
+                Debug.LogWarning("[SoundManager] source is null. Cannot apply clip.");
+                return;
+            }
+
+            if (isBGM)
+            {
+                PlayBGMClip(clip, setting, source);
+            }
+            else
+            {
+                source.PlayOneShot(clip, setting.volume);
+            }
+        }
+
+        /// <summary>
+        /// BGM 전용 오디오 클립 재생 로직을 처리함.
+        /// </summary>
+        private void PlayBGMClip(AudioClip clip, SoundSetting setting, AudioSource source)
+        {
+            if (source.clip == clip && source.isPlaying)
+            {
+                source.volume = setting.volume; 
+                return;
+            }
+
+            source.clip = clip;
+            source.volume = setting.volume; 
+            source.Play();
         }
 
         /// <summary> 파일 확장자를 기반으로 오디오 타입을 반환함. </summary>

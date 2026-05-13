@@ -4,8 +4,7 @@ using System.IO.Ports;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
-using Wonjeong.Data;
-using Wonjeong.Utils;
+using ThreadPriority = System.Threading.ThreadPriority;
 
 namespace Wonjeong.Hardware
 {
@@ -74,58 +73,105 @@ namespace Wonjeong.Hardware
         private void TryHandshake(int baudRate, string expectedHandshake)
         {
             string[] ports = SerialPort.GetPortNames();
-    
+
             foreach (string port in ports)
             {
-                try
+                if (TryConnectPort(port, baudRate, expectedHandshake))
                 {
-                    SerialPort testPort = new SerialPort(port, baudRate);
-                    testPort.ReadTimeout = 5000;
-                    testPort.WriteTimeout = 500;
-                    testPort.Open();
-
-                    string received = testPort.ReadLine().Trim();
-            
-                    if (received.Contains(expectedHandshake))
-                    {
-                        // 응답 전송 로직 삭제, 일치 시 바로 스레드 시작 및 연결 확정
-                        _serialPort = testPort;
-                        _isRunning = true;
-                        _readThread = new Thread(ReadSerialLoop);
-                        _readThread.Start();
-                
-                        Debug.Log($"[ArduinoManager] Connection success: {port}");
-                        return;
-                    }
-            
-                    testPort.Close();
-                    testPort.Dispose();
-                }
-                catch (Exception)
-                {
-                    // 실패 시 다음 포트로 넘어가기 위해 예외 무시
+                    return;
                 }
             }
-    
-            Debug.LogWarning("[ArduinoManager] Can't connect to Arduino");
+
+            Debug.LogWarning("[ArduinoManager] Can't connect to Arduino.");
         }
         
-        public void RebootDevice()
+        private bool TryConnectPort(string port, int baudRate, string expectedHandshake)
         {
-            if (!IsConnected) return;
+            try
+            {
+                SerialPort testPort = new SerialPort(port, baudRate);
+        
+                // Prevents Arduino auto-reset on connection to ensure fast response within 500ms.
+                testPort.DtrEnable = false; 
+        
+                testPort.ReadTimeout = 500;
+                testPort.WriteTimeout = 500;
+                testPort.Open();
+
+                string received = testPort.ReadLine().Trim();
+
+                if (received.Contains(expectedHandshake))
+                {
+                    EstablishConnection(testPort, port);
+                    return true;
+                }
+
+                testPort.Close();
+                testPort.Dispose();
+            }
+            catch (Exception)
+            {
+                // Fails gracefully to allow testing the next available port.
+            }
+
+            return false;
+        }
+        
+        private void EstablishConnection(SerialPort validPort, string portName)
+        {
+            _serialPort = validPort;
+            _isRunning = true;
+    
+            _readThread = new Thread(ReadSerialLoop);
+            _readThread.Priority = ThreadPriority.BelowNormal; 
+            _readThread.Start();
+
+            Debug.Log($"[ArduinoManager] Connection success: {portName}");
+        }
+        
+        public async Task RebootDeviceAsync()
+        {
+            if (!IsConnected) 
+            {
+                Debug.LogWarning("[ArduinoManager] Cannot reboot. Device is not connected.");
+                return;
+            }
 
             try
             {
-                // DTR 신호를 순간적으로 껐다 켜서 보드 리셋을 유도합니다.
-                _serialPort.DtrEnable = false;
-                Thread.Sleep(100); 
+                // 불완전한 시리얼 데이터 파싱 방지.
+                _isRunning = false; 
+
+                // DTR 핀 제어로 하드웨어 리셋 유도.
                 _serialPort.DtrEnable = true;
-        
-                Debug.Log("[ArduinoManager] Rebooting arduino.");
+                await Task.Delay(100);
+                _serialPort.DtrEnable = false;
+
+                // 부트로더 대기.
+                await Task.Delay(2000);
+
+                ClearMessageQueue();
+
+                // 초기화 완료 후 읽기 루프 재시작.
+                _isRunning = true;
+                _readThread = new Thread(ReadSerialLoop);
+                _readThread.Priority = ThreadPriority.BelowNormal;
+                _readThread.Start();
+
+                Debug.Log("[ArduinoManager] Device reboot complete. Clean state restored.");
             }
             catch (Exception e)
             {
                 Debug.LogWarning($"[ArduinoManager] Device reboot failed: {e.Message}");
+                Disconnect();
+            }
+        }
+        
+        private void ClearMessageQueue()
+        {
+            while (_messageQueue.TryDequeue(out string discardedMessage)) 
+            {
+                // 이전 루프의 잔여 데이터 폐기.
             }
         }
 
@@ -164,31 +210,53 @@ namespace Wonjeong.Hardware
 
         private void ReadSerialLoop()
         {
-            while (_isRunning && _serialPort != null && _serialPort.IsOpen)
+            while (IsSerialPortReady())
             {
-                try
-                {
-                    string data = _serialPort.ReadLine();
-                    if (!string.IsNullOrEmpty(data))
-                    {
-                        _messageQueue.Enqueue(data);
-                    }
-                }
-                catch (TimeoutException) 
-                { 
-                    // 대기 시간 초과 시 루프 유지
-                }
-                catch (Exception e)
-                {
-                    if (_isRunning)
-                    {
-                        Debug.LogWarning($"[ArduinoManager] Read error (Disconnected): {e.Message}");
-                        
-                        // USB가 강제로 뽑히는 등 치명적 통신 에러 발생 시 즉시 포트를 닫고 상태를 초기화합니다.
-                        Disconnect(); 
-                    }
-                }
+                ReadAndQueueData();
+        
+                // Yields execution to prevent CPU spikes if ReadLine timeouts frequently.
+                Thread.Sleep(1); 
             }
+        }
+        
+        private bool IsSerialPortReady()
+        {
+            return _isRunning && _serialPort != null && _serialPort.IsOpen;
+        }
+        
+        private void ReadAndQueueData()
+        {
+            try
+            {
+                string data = _serialPort.ReadLine();
+        
+                if (string.IsNullOrEmpty(data))
+                {
+                    return;
+                }
+        
+                _messageQueue.Enqueue(data);
+            }
+            catch (TimeoutException)
+            {
+                // Timeout is expected behavior for blocking reads. Keeps the loop active.
+            }
+            catch (Exception e)
+            {
+                HandleReadException(e);
+            }
+        }
+        
+        private void HandleReadException(Exception e)
+        {
+            // Ignores exceptions if the thread is already requested to stop.
+            if (!_isRunning)
+            {
+                return;
+            }
+
+            Debug.LogWarning($"[ArduinoManager] Read error (Disconnected): {e.Message}");
+            Disconnect();
         }
 
         private void OnApplicationQuit()

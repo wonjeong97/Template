@@ -63,24 +63,54 @@ namespace Wonjeong.Core
         {
             if (Input.GetKeyDown(KeyCode.D))
             {
-                if (reporter)
-                {
-                    reporter.showGameManagerControl = !reporter.showGameManagerControl;
-                    if (reporter.show) reporter.show = false;
-                }
-                else Debug.LogWarning("[GameManagerBase] reporter is null. Cannot toggle control.");
+                ToggleReporterControl();
             }
-            else if (Input.GetKeyDown(KeyCode.M)) Cursor.visible = !Cursor.visible;
+            else if (Input.GetKeyDown(KeyCode.M))
+            {
+                ToggleCursorVisibility();
+            }
             else if (Input.GetKeyDown(KeyCode.I))
             {
-                if (inspectorContainer) 
-                {
-                    bool isActivating = !inspectorContainer.activeSelf;
-                    inspectorContainer.SetActive(isActivating);
-                    if (!isActivating) OnInspectorClosed?.Invoke(); 
-                }
-                else Debug.LogWarning("[GameManagerBase] inspectorContainer is null. Cannot toggle inspector.");
+                ToggleInspectorUI();
             }
+        }
+        
+        private void ToggleReporterControl()
+        {
+            if (!reporter)
+            {
+                Debug.LogWarning("[GameManagerBase] reporter is null. Cannot toggle control.");
+                return;
+            }
+
+            reporter.showGameManagerControl = !reporter.showGameManagerControl;
+    
+            if (reporter.show) 
+            {
+                reporter.show = false;
+            }
+        }
+        
+        private void ToggleInspectorUI()
+        {
+            if (!inspectorContainer) 
+            {
+                Debug.LogWarning("[GameManagerBase] inspectorContainer is null. Cannot toggle inspector.");
+                return;
+            }
+
+            bool isActivating = !inspectorContainer.activeSelf;
+            inspectorContainer.SetActive(isActivating);
+    
+            if (!isActivating) 
+            {
+                OnInspectorClosed?.Invoke(); 
+            }
+        }
+        
+        private void ToggleCursorVisibility()
+        {
+            Cursor.visible = !Cursor.visible;
         }
     }
 }

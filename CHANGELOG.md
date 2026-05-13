@@ -1,6 +1,11 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.4.30] - 2026-05-13
+### Changed
+- 메서드 복잡도를 개선하여 향후 유지보수를 향상 시킴.
+- GetComponent를 TryGetComponent로 변경하여 성능 오버헤드를 방지함.
+
 ## [26.4.30] - 2026-04-30
 ### Changed
 - `GameManager`를 `GameManagerBase<T>` 기반의 제네릭 싱글톤 상속 구조로 리팩토링하여 인스턴스 관리 일관성 확보 및 중복 코드 제거

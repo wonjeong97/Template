@@ -34,12 +34,11 @@ namespace Wonjeong.UI
         private FontMaps _fontMaps;
         private bool _fontsLoadedStarted;
         
-        // 변경: TMP_FontAsset -> Font
         private readonly Dictionary<string, Font> _loadedFonts = new Dictionary<string, Font>();
         private readonly List<AsyncOperationHandle> _fontHandles = new List<AsyncOperationHandle>();
         
-        // 변경: TextMeshProUGUI -> Text
-        private readonly Dictionary<string, List<Text>> _pendingLabels = new Dictionary<string, List<Text>>();
+        private readonly Dictionary<string, HashSet<Text>> _pendingLabels = new Dictionary<string, HashSet<Text>>();
+        private readonly Dictionary<string, UnityEngine.Events.UnityAction> _buttonActions = new Dictionary<string, UnityEngine.Events.UnityAction>();
 
         private void Awake()
         {
@@ -96,44 +95,52 @@ namespace Wonjeong.UI
             LoadSingleFont("font9", _fontMaps.font9);
         }
 
+        /// <summary> Addressable 시스템을 통해 단일 폰트 에셋을 비동기 로드함. </summary>
         private void LoadSingleFont(string key, string address)
         {
             if (string.IsNullOrEmpty(address)) return;
 
-            // 변경: Font 타입으로 로드
-            Addressables.LoadAssetAsync<Font>(address).Completed += (handle) =>
-            {   
-                _fontHandles.Add(handle);
-                if (handle.Status == AsyncOperationStatus.Succeeded)
-                {
-                    Font loadedFont = handle.Result;
+            Addressables.LoadAssetAsync<Font>(address).Completed += (handle) => ProcessLoadedFont(handle, key, address);
+        }
+        
+        /// <summary> 비동기 로드된 폰트 결과를 처리하고 캐싱함. </summary>
+        private void ProcessLoadedFont(AsyncOperationHandle<Font> handle, string key, string address)
+        {
+            _fontHandles.Add(handle);
 
-                    // 1. 캐시에 저장
-                    if (!_loadedFonts.ContainsKey(key))
-                    {
-                        _loadedFonts.Add(key, loadedFont);
-                    }
+            if (handle.Status != AsyncOperationStatus.Succeeded)
+            {
+                Debug.LogError($"[UIManager] Failed to load font: {address}");
+                return;
+            }
 
-                    // 2. 이 폰트를 기다리던 대기 명단이 있는지 확인하고 적용
-                    if (_pendingLabels.TryGetValue(key, out List<Text> waitingList))
-                    {
-                        foreach (Text txt in waitingList)
-                        {
-                            // 객체가 파괴되지 않았다면 폰트 적용
-                            if (txt != null) 
-                            {
-                                txt.font = loadedFont;
-                            }
-                        }
-                        // 처리가 끝났으니 대기 명단에서 삭제
-                        _pendingLabels.Remove(key);
-                    }
-                }
-                else
+            Font loadedFont = handle.Result;
+            CacheFont(key, loadedFont);
+            ApplyPendingFonts(key, loadedFont);
+        }
+        
+        /// <summary> 로드된 폰트를 딕셔너리에 보관함. </summary>
+        private void CacheFont(string key, Font loadedFont)
+        {
+            if (!_loadedFonts.ContainsKey(key))
+            {
+                _loadedFonts.Add(key, loadedFont);
+            }
+        }
+        
+        /// <summary> 로드 이전에 폰트를 요청하고 대기 중이던 텍스트 컴포넌트들에 폰트를 일괄 적용함. </summary>
+        private void ApplyPendingFonts(string key, Font loadedFont)
+        {
+            if (!_pendingLabels.TryGetValue(key, out HashSet<Text> waitingSet)) return;
+
+            foreach (Text txt in waitingSet)
+            {
+                if (txt) 
                 {
-                    Debug.LogError($"[UIManager] Failed to load font: {address}");
+                    txt.font = loadedFont;
                 }
-            };
+            }
+            _pendingLabels.Remove(key);
         }
 
         #region Set Methods (Configuration)
@@ -143,19 +150,27 @@ namespace Wonjeong.UI
             if (target == null || setting == null) return;
             
             target.name = setting.name;
-            ApplyTransform(target.GetComponent<RectTransform>(), setting);
-
-            Image img = target.GetComponent<Image>();
-            if (img != null)
+    
+            if (!target.TryGetComponent(out RectTransform rt))
             {
-                img.color = setting.color;
-                img.type = (Image.Type)setting.type;
+                rt = target.AddComponent<RectTransform>();
+                Debug.LogWarning("[UIManager] RectTransform component missing. Added default at runtime.");
+            }
+            ApplyTransform(rt, setting);
 
-                Sprite sprite = LoadSprite(setting.sourceImage);
-                if (sprite != null)
-                {
-                    img.sprite = sprite;
-                }
+            if (!target.TryGetComponent(out Image img))
+            {
+                img = target.AddComponent<Image>();
+                Debug.LogWarning("[UIManager] Image component missing. Added default at runtime.");
+            }
+    
+            img.color = setting.color;
+            img.type = (Image.Type)setting.type;
+
+            Sprite sprite = LoadSprite(setting.sourceImage);
+            if (sprite)
+            {
+                img.sprite = sprite;
             }
         }
 
@@ -164,53 +179,105 @@ namespace Wonjeong.UI
             if (target == null || setting == null) return;
 
             target.name = setting.name;
-            ApplyTransform(target.GetComponent<RectTransform>(), setting);
-
-            // 변경: Text 컴포넌트 사용
-            Text txt = target.GetComponent<Text>();
-            if (txt != null)
+    
+            if (!target.TryGetComponent(out RectTransform rt))
             {
-                ApplyTextSettings(txt, setting);
+                rt = target.AddComponent<RectTransform>();
+                Debug.LogWarning("[UIManager] RectTransform component missing. Added default at runtime.");
             }
+            ApplyTransform(rt, setting);
+
+            if (!target.TryGetComponent(out Text txt))
+            {
+                txt = target.AddComponent<Text>();
+                Debug.LogWarning("[UIManager] Text component missing. Added default at runtime.");
+            }
+    
+            ApplyTextSettings(txt, setting);
         }
 
+        /// <summary> 버튼 UI 요소의 위치, 배경, 텍스트 및 이벤트를 설정함. </summary>
         public void SetButton(GameObject target, ButtonSetting setting)
         {
-            if (target == null || setting == null) return;
+            if (!target || setting == null) 
+            {
+                Debug.LogWarning("[UIManager] Target or setting is null. Cannot set button.");
+                return;
+            }
 
             target.name = setting.name;
-            ApplyTransform(target.GetComponent<RectTransform>(), setting);
-
-            if (setting.buttonBackgroundImage != null)
+    
+            if (!target.TryGetComponent(out RectTransform rt))
             {
-                Image bgImg = target.GetComponent<Image>(); 
-                if (bgImg != null)
-                {
-                    bgImg.color = setting.buttonBackgroundImage.color;
-                    Sprite sprite = LoadSprite(setting.buttonBackgroundImage.sourceImage);
-                    if (sprite != null) bgImg.sprite = sprite;
-                }
+                rt = target.AddComponent<RectTransform>();
+                Debug.LogWarning("[UIManager] RectTransform component missing. Added default at runtime.");
+            }
+            ApplyTransform(rt, setting);
+
+            ApplyButtonBackground(target, setting.buttonBackgroundImage);
+            ApplyButtonText(target, setting.buttonText);
+            ConfigureButtonListener(target, setting.name);
+        }
+        
+        /// <summary> 버튼의 배경 이미지와 색상을 적용함. </summary>
+        private void ApplyButtonBackground(GameObject target, ImageSetting bgSetting)
+        {
+            if (bgSetting == null) return;
+
+            if (!target.TryGetComponent(out Image bgImg))
+            {
+                bgImg = target.AddComponent<Image>();
+                Debug.LogWarning("[UIManager] Image component missing. Added default at runtime.");
             }
 
-            if (setting.buttonText != null)
+            bgImg.color = bgSetting.color;
+            Sprite sprite = LoadSprite(bgSetting.sourceImage);
+
+            if (sprite)
             {
-                // 변경: 자식에서 Text 컴포넌트 찾기
-                Text btnText = target.GetComponentInChildren<Text>();
-                if (btnText != null)
-                {
-                    ApplyTextSettings(btnText, setting.buttonText);
-                }
+                bgImg.sprite = sprite;
+            }
+        }
+        
+        /// <summary> 버튼 하위의 텍스트 컴포넌트 설정을 적용함. </summary>
+        private void ApplyButtonText(GameObject target, TextSetting textSetting)
+        {
+            if (textSetting == null) return;
+
+            Text btnText = target.GetComponentInChildren<Text>();
+            if (!btnText)
+            {
+                btnText = target.AddComponent<Text>();
+                Debug.LogWarning("[UIManager] Child Text component missing. Added default to root object at runtime.");
             }
 
-            Button btn = target.GetComponent<Button>();
-            if (btn != null)
+            ApplyTextSettings(btnText, textSetting);
+        }
+        
+        /// <summary> 버튼의 클릭 이벤트 리스너를 초기화하고 재설정함. </summary>
+        private void ConfigureButtonListener(GameObject target, string buttonName)
+        {
+            if (!target.TryGetComponent(out Button btn))
             {
-                btn.onClick.RemoveAllListeners();
-                btn.onClick.AddListener(() => 
-                {
-                    Debug.Log($"[UIManager] Button Clicked: {setting.name}");
-                });
+                btn = target.AddComponent<Button>();
+                Debug.LogWarning("[UIManager] Button component missing. Added default at runtime.");
             }
+
+            btn.onClick.RemoveAllListeners();
+
+            if (!_buttonActions.TryGetValue(buttonName, out UnityEngine.Events.UnityAction action))
+            {
+                action = () => OnButtonClicked(buttonName);
+                _buttonActions.Add(buttonName, action);
+            }
+
+            btn.onClick.AddListener(action);
+        }
+        
+        /// <summary> 버튼 클릭 시 호출되는 공통 콜백 메서드. </summary>
+        private void OnButtonClicked(string buttonName)
+        {
+            Debug.Log($"[UIManager] Button Clicked: {buttonName}");
         }
 
         public void SetVideo(GameObject target, VideoSetting setting)
@@ -218,82 +285,106 @@ namespace Wonjeong.UI
             if (target == null || setting == null) return;
 
             target.name = setting.name;
-    
-            RawImage rawImage = target.GetComponent<RawImage>();
-            VideoPlayer vp = target.GetComponent<VideoPlayer>();
-            AudioSource audioSource = target.GetComponent<AudioSource>(); // 오디오 소스 추가 확인
 
-            if (vp != null && rawImage != null)
+            if (!target.TryGetComponent(out RawImage rawImage))
             {
-                // 1. 변환 적용
-                ApplyTransform(rawImage.rectTransform, setting);
-
-                // 2. VideoManager를 통한 RenderTexture 연결
-                Vector2Int size = new Vector2Int((int)setting.size.x, (int)setting.size.y);
-                VideoManager.Instance.WireRawImageAndRenderTexture(vp, rawImage, size);
-
-                // 3. 경로 해석 및 코루틴 재생 시작
-                string url = VideoManager.Instance.ResolvePlayableUrl(setting.fileName);
-                StartCoroutine(VideoManager.Instance.PrepareAndPlayRoutine(vp, url, audioSource, setting.volume));
+                rawImage = target.AddComponent<RawImage>();
+                Debug.LogWarning("[UIManager] RawImage component missing. Added default at runtime.");
             }
+    
+            if (!target.TryGetComponent(out VideoPlayer vp))
+            {
+                vp = target.AddComponent<VideoPlayer>();
+                Debug.LogWarning("[UIManager] VideoPlayer component missing. Added default at runtime.");
+            }
+    
+            if (!target.TryGetComponent(out AudioSource audioSource))
+            {
+                audioSource = target.AddComponent<AudioSource>();
+                Debug.LogWarning("[UIManager] AudioSource component missing. Added default at runtime.");
+            }
+
+            ApplyTransform(rawImage.rectTransform, setting);
+
+            Vector2Int size = new Vector2Int((int)setting.size.x, (int)setting.size.y);
+            VideoManager.Instance.WireRawImageAndRenderTexture(vp, rawImage, size);
+
+            string url = VideoManager.Instance.ResolvePlayableUrl(setting.fileName);
+            StartCoroutine(VideoManager.Instance.PrepareAndPlayRoutine(vp, url, audioSource, setting.volume));
         }
 
         #endregion
 
         #region Helper Methods
 
-       private void ApplyTextSettings(Text txt, TextSetting setting)
+        /// <summary> 텍스트 컴포넌트의 텍스트, 크기, 정렬 및 폰트를 설정함. </summary>
+        private void ApplyTextSettings(Text txt, TextSetting setting)
         {
+            if (!txt || setting == null) return;
+
             txt.text = setting.text;
             txt.fontSize = setting.fontSize;
             txt.color = setting.fontColor;
             txt.alignment = setting.alignment;
 
-            // 캐시된 폰트 딕셔너리에서 가져오기
-            if (!string.IsNullOrEmpty(setting.fontName))
-            {
-                // CASE 1: 이미 로딩이 끝난 폰트 (바로 적용)
-                // 변경: Font 타입 사용
-                if (_loadedFonts.TryGetValue(setting.fontName, out Font fontAsset))
-                {
-                    txt.font = fontAsset;
-                }
-                // CASE 2: 아직 로딩 중인 폰트 (대기 명단 등록)
-                else
-                {
-                    // 유효하지 않은 폰트 키 체크
-                    if (_fontMaps == null || !IsFontKeyValid(setting.fontName))
-                    {
-                        Debug.LogWarning($"[UIManager] Invalid font name: {setting.fontName}");
-                        return;
-                    }
-                    
-                    if (!_pendingLabels.ContainsKey(setting.fontName))
-                    {
-                        _pendingLabels[setting.fontName] = new List<Text>();
-                    }
-                        
-                    // 중복 등록 방지
-                    if (!_pendingLabels[setting.fontName].Contains(txt))
-                    {
-                        _pendingLabels[setting.fontName].Add(txt);    
-                    }
-                }
-            }
+            AssignOrQueueFont(txt, setting.fontName);
         }
         
+        /// <summary> 로드된 폰트가 있으면 즉시 적용하고, 없다면 대기열에 등록함. </summary>
+        private void AssignOrQueueFont(Text txt, string fontName)
+        {
+            if (string.IsNullOrEmpty(fontName)) return;
+
+            if (_loadedFonts.TryGetValue(fontName, out Font fontAsset))
+            {
+                txt.font = fontAsset;
+                return;
+            }
+
+            QueuePendingFont(txt, fontName);
+        }
+        
+        /// <summary>
+        /// 비동기 로딩 중인 폰트를 대기하는 리스트에 텍스트 컴포넌트를 추가함.
+        /// </summary>
+        private void QueuePendingFont(Text txt, string fontName)
+        {
+            if (_fontMaps == null || !IsFontKeyValid(fontName))
+            {
+                Debug.LogWarning($"[UIManager] Invalid font name or uninitialized font maps: {fontName}");
+                return;
+            }
+    
+            if (!_pendingLabels.ContainsKey(fontName))
+            {
+                _pendingLabels[fontName] = new HashSet<Text>();
+            }
+        
+            _pendingLabels[fontName].Add(txt);    
+        }
+        
+        /// <summary>
+        /// 요청된 폰트 키가 유효하고 JSON에 매핑된 주소가 존재하는지 검사함.
+        /// </summary>
+        /// <returns>유효한 폰트 키이며 에셋 주소가 존재할 경우 true.</returns>
         private bool IsFontKeyValid(string fontName)
         {
-            return fontName == "font1" && !string.IsNullOrEmpty(_fontMaps.font1) ||
-                   fontName == "font2" && !string.IsNullOrEmpty(_fontMaps.font2) ||
-                   fontName == "font3" && !string.IsNullOrEmpty(_fontMaps.font3) ||
-                   fontName == "font4" && !string.IsNullOrEmpty(_fontMaps.font4) ||
-                   fontName == "font5" && !string.IsNullOrEmpty(_fontMaps.font5) ||
-                   fontName == "font6" && !string.IsNullOrEmpty(_fontMaps.font6) ||
-                   fontName == "font7" && !string.IsNullOrEmpty(_fontMaps.font7) ||
-                   fontName == "font8" && !string.IsNullOrEmpty(_fontMaps.font8) ||
-                   fontName == "font9" && !string.IsNullOrEmpty(_fontMaps.font9);
-            }
+            string fontAddress = fontName switch
+            {
+                "font1" => _fontMaps.font1,
+                "font2" => _fontMaps.font2,
+                "font3" => _fontMaps.font3,
+                "font4" => _fontMaps.font4,
+                "font5" => _fontMaps.font5,
+                "font6" => _fontMaps.font6,
+                "font7" => _fontMaps.font7,
+                "font8" => _fontMaps.font8,
+                "font9" => _fontMaps.font9,
+                _ => null // 일치하는 키가 없으면 null 반환
+            };
+
+            return !string.IsNullOrEmpty(fontAddress);
+        }
 
         private void ApplyTransform(RectTransform rt, UISettingBase setting)
         {
