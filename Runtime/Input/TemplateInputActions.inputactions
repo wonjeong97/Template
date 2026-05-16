@@ -1,0 +1,75 @@
+{
+    "version": 1,
+    "name": "TemplateInputActions",
+    "maps": [
+        {
+            "name": "System",
+            "id": "c09060b1-1e6f-4454-9362-afc350fa4efd",
+            "actions": [
+                {
+                    "name": "ToggleDebug",
+                    "type": "Button",
+                    "id": "7f0626cc-02c8-484f-9d2d-442da1df5a19",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "ToggleInspector",
+                    "type": "Button",
+                    "id": "a503cbea-bf74-4dd9-a68a-11f0a4c8f780",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "ToggleMouse",
+                    "type": "Button",
+                    "id": "841969e3-f16d-4a53-b7c5-2a5f5d32638a",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "3b03cb07-18b2-428d-bb24-6fd8ad830bc5",
+                    "path": "<Keyboard>/d",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "ToggleDebug",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "51442682-a27b-4946-91e2-35e20147f493",
+                    "path": "<Keyboard>/i",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "ToggleInspector",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "8a5e36c0-ae50-4f47-b182-a78d9f52fa41",
+                    "path": "<Keyboard>/m",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "ToggleMouse",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}

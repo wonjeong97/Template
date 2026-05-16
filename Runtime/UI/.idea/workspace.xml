@@ -4,18 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b9db6fcd-bf04-4f3c-89c0-f75c60cd3ce6" name="변경" comment="">
-      <change beforePath="$PROJECT_DIR$/../Core/GameManagerBase.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Core/GameManagerBase.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../Data/TemplateData.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Data/TemplateData.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../Hardware/ArduinoManager.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Hardware/ArduinoManager.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/FadeManager.cs" beforeDir="false" afterPath="$PROJECT_DIR$/FadeManager.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/VideoManager.cs" beforeDir="false" afterPath="$PROJECT_DIR$/VideoManager.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../Utils/CoroutineData.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Utils/CoroutineData.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../Utils/GameCloser.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Utils/GameCloser.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../Utils/SystemCanvas.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Utils/SystemCanvas.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../Utils/TimestampLogHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/../Utils/TimestampLogHandler.cs" afterDir="false" />
-    </list>
+    <list default="true" id="b9db6fcd-bf04-4f3c-89c0-f75c60cd3ce6" name="변경" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -26,7 +15,7 @@
   </component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://$PROJECT_DIR$/FadeManager.cs" root0="SKIP_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/SoundManager.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/SoundManager.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/UIManager.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/VideoManager.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/../../package.json" root0="FORCE_HIGHLIGHTING" />
@@ -75,6 +64,7 @@
       <workItem from="1778632391935" duration="75000" />
       <workItem from="1778632570262" duration="30000" />
       <workItem from="1778632604291" duration="7000" />
+      <workItem from="1778833076772" duration="106000" />
     </task>
     <servers />
   </component>

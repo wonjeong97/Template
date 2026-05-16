@@ -1,83 +1,77 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
+using Cysharp.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
+using VContainer;
+using ZLogger;
 
 namespace Wonjeong.UI
 {
     public class VideoManager : MonoBehaviour
     {
-        private static VideoManager _instance;
         private readonly List<RenderTexture> _activeRenderTextures = new List<RenderTexture>();
+        private ILogger<VideoManager> _logger;
 
-        public static VideoManager Instance
+        /// <summary>
+        /// VContainer 의존성 주입.
+        /// 로거 할당.
+        /// </summary>
+        [Inject]
+        public void Construct(ILogger<VideoManager> logger)
         {
-            get
-            {
-                if (_instance == null)
-                {
-                    _instance = FindFirstObjectByType<VideoManager>();
-                    if (_instance == null)
-                    {
-                        GameObject go = new GameObject("VideoManager");
-                        _instance = go.AddComponent<VideoManager>();
-                    }
-                }
-
-                return _instance;
-            }
+            _logger = logger;
         }
 
+        /// <summary>
+        /// 씬 전환 시 비디오 매니저 파괴를 방지함.
+        /// </summary>
         private void Awake()
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                DontDestroyOnLoad(gameObject);
-            }
-            else if (_instance != this)
-            {
-                Destroy(gameObject);
-            }
+            DontDestroyOnLoad(gameObject);
         }
 
-        /// <summary> 플랫폼별 호환성을 고려하여 재생 가능한 URL을 반환합니다. </summary>
+        /// <summary>
+        /// 플랫폼별 호환성을 고려하여 재생 가능한 URL을 반환함.
+        /// 윈도우 환경의 webm 미지원 이슈를 우회하기 위함.
+        /// </summary>
         public string ResolvePlayableUrl(string relativePath)
         {
             string fullPath = Path.Combine(Application.streamingAssetsPath, relativePath).Replace("\\", "/");
 
-            #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-            // Windows에서 webm 문제 대응을 위해 mp4 우선 확인 로직 (필요 시)
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
             if (relativePath.EndsWith(".webm", StringComparison.OrdinalIgnoreCase))
             {
                 string mp4Path = Path.ChangeExtension(fullPath, ".mp4");
                 if (File.Exists(mp4Path)) return new Uri(mp4Path).AbsoluteUri;
             }
-            #endif
+#endif
             return new Uri(fullPath).AbsoluteUri;
         }
 
-        /// <summary> VideoPlayer와 RawImage를 위한 RenderTexture를 생성하고 연결합니다. </summary>
+        /// <summary>
+        /// 비디오 플레이어와 UI 이미지를 연결할 렌더 텍스처를 동적으로 생성함.
+        /// 런타임 해상도 대응 및 독립적인 메모리 관리를 위함.
+        /// </summary>
         public RenderTexture WireRawImageAndRenderTexture(VideoPlayer vp, RawImage raw, Vector2Int size)
         {
-            if (vp == null)
+            if (!vp)
             {
-                Debug.LogError("VideoPlayer cannot be null");
+                if (_logger != null) _logger.ZLogError($"[VideoManager] VideoPlayer cannot be null.");
                 return null;
             }
             
-            // 기존 텍스처 해제
-            if (vp.targetTexture != null)
+            if (vp.targetTexture)
             {
                 _activeRenderTextures.Remove(vp.targetTexture);
                 vp.targetTexture.Release();
                 Destroy(vp.targetTexture);
             }
             
-            // Unity RenderTexture 최소 크기는 2x2
             int rtW = Mathf.Max(2, size.x);
             int rtH = Mathf.Max(2, size.y);
             RenderTexture rTex = new RenderTexture(rtW, rtH, 24);
@@ -86,24 +80,27 @@ namespace Wonjeong.UI
 
             vp.renderMode = VideoRenderMode.RenderTexture;
             vp.targetTexture = rTex;
-            if (raw != null) raw.texture = rTex;
+            
+            if (raw) raw.texture = rTex;
 
             return rTex;
         }
 
-        /// <summary> 비디오를 준비(Prepare)하고 완료되면 재생합니다. </summary>
-        public IEnumerator PrepareAndPlayRoutine(VideoPlayer vp, string url, AudioSource audioSource, float volume)
+        /// <summary>
+        /// 비디오 스트림을 비동기로 준비하고 완료 시 재생을 시작함.
+        /// </summary>
+        public async UniTask PrepareAndPlayAsync(VideoPlayer vp, string url, AudioSource audioSource, float volume, CancellationToken cancellationToken)
         {
             if (!vp)
             {
-                Debug.LogError("VideoPlayer cannot be null");
-                yield break;
+                if (_logger != null) _logger.ZLogError($"[VideoManager] VideoPlayer cannot be null.");
+                return;
             }
     
             if (string.IsNullOrEmpty(url))
             {
-                Debug.LogError("Video URL cannot be null or empty");
-                yield break;
+                if (_logger != null) _logger.ZLogError($"[VideoManager] Video URL cannot be null or empty.");
+                return;
             }
     
             vp.source = VideoSource.Url;
@@ -118,7 +115,6 @@ namespace Wonjeong.UI
                 audioSource.volume = Mathf.Clamp01(volume);
             }
 
-            // 에러 추적을 위한 플래그
             bool hasError = false;
             string errorMessage = string.Empty;
     
@@ -128,47 +124,58 @@ namespace Wonjeong.UI
                 errorMessage = message;
             };
     
-            // 에러 이벤트 구독
             vp.errorReceived += errorHandler;
-
             vp.Prepare();
 
-            // 타임아웃 설정 (30초)
             float timeoutSeconds = 30f;
             float elapsedTime = 0f;
     
-            while (!vp.isPrepared && elapsedTime < timeoutSeconds && !hasError)
+            try
             {
-                elapsedTime += Time.deltaTime;
-                yield return null;
+                while (!vp.isPrepared && elapsedTime < timeoutSeconds && !hasError)
+                {
+                    elapsedTime += Time.deltaTime;
+                    await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                if (_logger != null) _logger.ZLogInformation($"[VideoManager] Video preparation canceled.");
+                return; // finally 블록으로 이동하여 안전하게 해제됨
+            }
+            finally
+            {
+                // try 블록 안에서 무슨 일이 발생하든 무조건 이벤트 구독을 해제하여 메모리 누수 방지
+                if (vp)
+                {
+                    vp.errorReceived -= errorHandler;
+                }
             }
     
-            // 이벤트 구독 해제
-            vp.errorReceived -= errorHandler;
-    
-            // 에러 체크
             if (hasError)
             {
-                Debug.LogError($"Video preparation failed: {url}. Error: {errorMessage}");
-                yield break;
+                if (_logger != null) _logger.ZLogError($"[VideoManager] Video preparation failed: {url}. Error: {errorMessage}");
+                return;
             }
     
-            // 타임아웃 체크
             if (!vp.isPrepared)
             {
-                Debug.LogError($"Video preparation timed out after {timeoutSeconds}s: {url}");
-                yield break;
+                if (_logger != null) _logger.ZLogError($"[VideoManager] Video preparation timed out after {timeoutSeconds}s: {url}");
+                return;
             }
 
             vp.Play();
         }
 
+        /// <summary>
+        /// 생성된 모든 렌더 텍스처 메모리를 완전 해제함.
+        /// VRAM 누수 방지 목적.
+        /// </summary>
         private void OnDestroy()
         {
-            // 모든 생성된 RenderTexture 정리
             foreach (RenderTexture rt in _activeRenderTextures)
             {
-                if (rt != null)
+                if (rt)
                 {
                     rt.Release();
                     Destroy(rt);
