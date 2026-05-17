@@ -145,6 +145,13 @@ namespace Wonjeong.UI
             catch (OperationCanceledException)
             {
                 if (_logger != null) _logger.ZLogInformation($"[FadeManager] Fade transition canceled.");
+
+                // 강제 취소된 경우, 페이드아웃 중이었더라도 UI 블록을 해제하여 소프트락을 방지함
+                if (isFadeOut)
+                {
+                    _fadeCanvas.sortingOrder = -1;
+                    _fadeImage.raycastTarget = false;
+                }
             }
             finally
             {

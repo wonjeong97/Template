@@ -41,58 +41,106 @@ namespace Wonjeong.Hardware
         
         /// <summary>
         /// 아두이노 장치와 시리얼 통신 연결을 비동기로 시도함.
-        /// 하드웨어 인식 지연 및 부팅 시간을 고려하여 1초 간격으로 최대 10회 재시도함.
         /// </summary>
         public async UniTask ConnectAsync(int baudRate, string expectedHandshake)
         {
             if (IsConnected) return;
 
             int maxRetries = 10;
-            int retryDelayMs = 1000;
+            
+            // 재시도 루프 처리를 전담하는 별도 메서드 호출 (복잡도 분리)
+            bool isSuccess = await ExecuteConnectionRetriesAsync(baudRate, expectedHandshake, maxRetries, 1000);
 
+            if (!isSuccess && _logger != null)
+            {
+                _logger.ZLogWarning($"[ArduinoManager] Failed to connect to Arduino after {maxRetries} attempts.");
+            }
+        }
+
+        /// <summary>
+        /// 지정된 횟수만큼 연결 검증 및 대기를 반복함.
+        /// </summary>
+        private async UniTask<bool> ExecuteConnectionRetriesAsync(int baudRate, string expectedHandshake, int maxRetries, int delayMs)
+        {
             for (int i = 0; i < maxRetries; i++)
             {
-                bool isSuccess = await UniTask.RunOnThreadPool(() => TryHandshake(baudRate, expectedHandshake));
-                
-                if (isSuccess)
-                {
-                    return;
-                }
-
-                if (i < maxRetries - 1)
-                {
-                    if(_logger != null) _logger.ZLogInformation($"[ArduinoManager] Connection retry in {retryDelayMs}ms... ({i + 1}/{maxRetries})");
-                    await UniTask.Delay(retryDelayMs, cancellationToken: this.GetCancellationTokenOnDestroy());
-                }
-            }
-
-            if(_logger != null) _logger.ZLogWarning($"[ArduinoManager] Failed to connect to Arduino after {maxRetries} attempts.");
-        }
-        
-        /// <summary>
-        /// 사용 가능한 모든 시리얼 포트를 순회하며 핸드셰이크 응답을 검증함.
-        /// 장치가 연결된 올바른 포트를 동적으로 식별하기 위해 수행됨.
-        /// </summary>
-        private bool TryHandshake(int baudRate, string expectedHandshake)
-        {
-            string[] ports = SerialPort.GetPortNames();
-
-            foreach (string port in ports)
-            {
-                if (TryConnectPort(port, baudRate, expectedHandshake))
+                if (await TryEstablishConnectionAsync(baudRate, expectedHandshake))
                 {
                     return true;
+                }
+
+                // 마지막 시도가 아닐 경우에만 대기 및 로그 출력
+                if (i < maxRetries - 1)
+                {
+                    LogRetryAttempt(i + 1, maxRetries, delayMs);
+                    await UniTask.Delay(delayMs, cancellationToken: this.GetCancellationTokenOnDestroy());
                 }
             }
 
             return false;
         }
+
+        /// <summary>
+        /// 널 체크 및 재시도 로그 출력을 전담함.
+        /// </summary>
+        private void LogRetryAttempt(int currentAttempt, int maxRetries, int delayMs)
+        {
+            if (_logger != null)
+            {
+                _logger.ZLogInformation($"[ArduinoManager] Connection retry in {delayMs}ms... ({currentAttempt}/{maxRetries})");
+            }
+        }
+
+        /// <summary>
+        /// 백그라운드 스레드에서 단일 포트 검증을 수행하고, 
+        /// 메인 스레드 복귀 후 안전하게 연결을 할당함.
+        /// </summary>
+        private async UniTask<bool> TryEstablishConnectionAsync(int baudRate, string expectedHandshake)
+        {
+            SerialPort validPort = await UniTask.RunOnThreadPool(() => TryHandshake(baudRate, expectedHandshake));
+            
+            if (validPort == null) 
+            {
+                return false;
+            }
+
+            // 메인 스레드 복귀 후 객체 파괴(취소) 여부 검사
+            if (this.GetCancellationTokenOnDestroy().IsCancellationRequested)
+            {
+                validPort.Close();
+                validPort.Dispose();
+                return true; // 이미 파괴 중이므로 추가 재시도 루프를 막기 위해 true 반환
+            }
+
+            EstablishConnection(validPort, validPort.PortName);
+            return true;
+        }
+        
+        /// <summary>
+        /// 사용 가능한 모든 시리얼 포트를 순회하며 핸드셰이크 응답을 검증함.
+        /// 검증에 성공한 SerialPort 객체를 반환함.
+        /// </summary>
+        private SerialPort TryHandshake(int baudRate, string expectedHandshake)
+        {
+            string[] ports = SerialPort.GetPortNames();
+
+            foreach (string port in ports)
+            {
+                SerialPort validPort = TryConnectPort(port, baudRate, expectedHandshake);
+                if (validPort != null)
+                {
+                    return validPort;
+                }
+            }
+
+            return null;
+        }
         
         /// <summary>
         /// 지정된 단일 포트에 연결을 시도하고 기대 응답 문자열을 대기함.
-        /// DTR 제어를 비활성화하여 보드 자동 초기화를 방지하고 빠른 검증을 수행함.
+        /// 백그라운드에서 실행되므로 내부 상태를 변경하지 않고 포트 객체만 반환함.
         /// </summary>
-        private bool TryConnectPort(string port, int baudRate, string expectedHandshake)
+        private SerialPort TryConnectPort(string port, int baudRate, string expectedHandshake)
         {
             try
             {
@@ -107,8 +155,8 @@ namespace Wonjeong.Hardware
 
                 if (received.Contains(expectedHandshake))
                 {
-                    EstablishConnection(testPort, port);
-                    return true;
+                    // 성공 시 포트를 닫지 않고 그대로 반환하여 메인 스레드에 소유권을 넘김
+                    return testPort;
                 }
 
                 testPort.Close();
@@ -119,7 +167,7 @@ namespace Wonjeong.Hardware
                 // 다음 포트 연결 테스트를 진행하기 위해 현재 예외를 무시함.
             }
 
-            return false;
+            return null;
         }
         
         /// <summary>

@@ -23,6 +23,8 @@ namespace Wonjeong.Core
 
         private TemplateInputActions _inputActions;
         
+        private static bool _isInstantiated;
+        
         /// <summary>
         /// 의존성 주입 및 Input Action 초기화.
         /// </summary>
@@ -38,11 +40,29 @@ namespace Wonjeong.Core
             _inputActions.System.ToggleDebug.performed += _ => ToggleReporterControl();
             _inputActions.System.ToggleInspector.performed += _ => ToggleInspectorUI();
             _inputActions.System.ToggleMouse.performed += _ => ToggleCursorVisibility();
+            
+            if (isActiveAndEnabled)
+            {
+                _inputActions.Enable();
+            }
         }
 
+        /// <summary>
+        /// 씬 전환 시 매니저의 파괴를 방지함.
+        /// 중복 생성 시 기존 객체를 보존하고 새로 생성된 객체를 파괴함.
+        /// </summary>
         protected virtual void Awake()
         {
-            DontDestroyOnLoad(gameObject);
+            if (!_isInstantiated)
+            {
+                _isInstantiated = true;
+                DontDestroyOnLoad(gameObject);
+            }
+            else
+            {
+                // 이미 인스턴스가 존재하면 새로 로드된 중복 객체를 즉시 파괴
+                Destroy(gameObject);
+            }
         }
 
         protected virtual void OnEnable()
@@ -55,6 +75,15 @@ namespace Wonjeong.Core
         {
             // 오브젝트 비활성화 시 입력 감지 중지 (메모리 및 오작동 방지)
             _inputActions?.Disable();
+        }
+        
+        protected virtual void OnDestroy()
+        {
+            if (_inputActions != null)
+            {
+                _inputActions.Dispose();
+                _inputActions = null;
+            }
         }
 
         /// <summary>
