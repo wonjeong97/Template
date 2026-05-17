@@ -1,66 +1,62 @@
-using System.Collections;
+using System;
+using System.Threading;
+using Cysharp.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using UnityEngine;
 using UnityEngine.UI;
+using VContainer;
+using ZLogger;
 
 namespace Wonjeong.UI
 {
     public class FadeManager : MonoBehaviour
     {
-        private static FadeManager _instance;
-        public static FadeManager Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    _instance = FindObjectOfType<FadeManager>();
-                    if (_instance == null)
-                    {
-                        GameObject go = new GameObject("FadeManager");
-                        _instance = go.AddComponent<FadeManager>();
-                    }
-                }
-                return _instance;
-            }
-        }
-
         private Canvas _fadeCanvas;
         private CanvasGroup _canvasGroup;
         private RawImage _fadeImage;
         private bool _isTransitioning;
 
-        private void Awake()
+        private ILogger<FadeManager> _logger;
+
+        /// <summary>
+        /// VContainer 의존성 주입.
+        /// ZLogger 할당.
+        /// </summary>
+        [Inject]
+        public void Construct(ILogger<FadeManager> logger)
         {
-            if (_instance == null)
-            {
-                _instance = this;
-                DontDestroyOnLoad(gameObject);
-                CreateFadeUI(); // 스스로 UI 생성
-            }
-            else if (_instance != this)
-            {
-                Destroy(gameObject);
-            }
+            _logger = logger;
         }
 
-        /// <summary> 동적으로 캔버스와 까만 이미지를 생성합니다. </summary>
+        /// <summary>
+        /// 씬 전환 시 페이드 UI 상태 유지를 위해 파괴를 방지하고 초기화함.
+        /// </summary>
+        private void Awake()
+        {
+            DontDestroyOnLoad(gameObject);
+            CreateFadeUI(); 
+        }
+
+        /// <summary>
+        /// 동적으로 캔버스와 페이드용 검은 이미지를 생성함.
+        /// 하드코딩된 UI 의존성을 줄이고 런타임에 독립적으로 동작하기 위함.
+        /// </summary>
         private void CreateFadeUI()
         {
-            // 1. 캔버스 생성 및 설정
             GameObject canvasObj = new GameObject("FadeCanvas");
             canvasObj.transform.SetParent(transform);
+            
             _fadeCanvas = canvasObj.AddComponent<Canvas>();
             _fadeCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
             _fadeCanvas.sortingOrder = -1; 
 
-            // CanvasScaler 설정 (필요시 해상도에 맞게 조정)
             CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
+            scaler.matchWidthOrHeight = 0.5f;
 
             canvasObj.AddComponent<GraphicRaycaster>();
 
-            // 2. 페이드용 이미지 생성
             GameObject imageObj = new GameObject("FadeImage");
             imageObj.transform.SetParent(canvasObj.transform);
             
@@ -68,88 +64,104 @@ namespace Wonjeong.UI
             _fadeImage.color = Color.black; 
             _fadeImage.raycastTarget = false;
 
-            // 화면 가득 채우기 (RectTransform 설정)
             RectTransform rt = _fadeImage.rectTransform;
-            
-            // 1. 앵커를 전체 화면으로 설정 (Stretch-Stretch)
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
-            
-            // 2. 피벗을 중앙으로 설정
             rt.pivot = new Vector2(0.5f, 0.5f);
-            
-            // 3. 위치와 크기 델타를 0으로 초기화 (중요)
             rt.anchoredPosition = Vector2.zero;
             rt.sizeDelta = Vector2.zero;
-
-            // 4. 오프셋(Left, Right, Top, Bottom)을 강제로 0으로 설정
-            rt.offsetMin = Vector2.zero; // Left, Bottom = 0
-            rt.offsetMax = Vector2.zero; // Right, Top = 0
-            
-            // 5. 스케일 초기화
+            rt.offsetMin = Vector2.zero; 
+            rt.offsetMax = Vector2.zero; 
             rt.localScale = Vector3.one;
 
-            // 3. 투명도 조절을 위한 CanvasGroup 추가
             _canvasGroup = imageObj.AddComponent<CanvasGroup>();
             _canvasGroup.alpha = 0f;
         }
 
-        public void FadeOut(float duration, System.Action onComplete = null)
+        /// <summary>
+        /// 화면을 점진적으로 어둡게 처리함.
+        /// </summary>
+        public async UniTask FadeOutAsync(float duration, CancellationToken cancellationToken = default)
         {
             if (_isTransitioning) return;
+            
             if (duration <= 0f)
             {
-                Debug.LogWarning("FadeOut duration must be positive. Using default 0.5f.");
+                if (_logger != null) _logger.ZLogWarning($"[FadeManager] FadeOut duration must be positive. Using default 0.5f.");
                 duration = 0.5f;
             }
-            StartCoroutine(FadeRoutine(0f, 1f, duration, true, onComplete));
+            
+            using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy(), cancellationToken))
+            {
+                await FadeAsync(0f, 1f, duration, true, cts.Token);
+            }
         }
 
-        public void FadeIn(float duration, System.Action onComplete = null)
+        /// <summary>
+        /// 화면을 점진적으로 밝게 처리함.
+        /// </summary>
+        public async UniTask FadeInAsync(float duration, CancellationToken cancellationToken = default)
         {
             if (_isTransitioning) return;
+            
             if (duration <= 0f)
             {
-                Debug.LogWarning("FadeIn duration must be positive. Using default 0.5f.");
+                if (_logger != null) _logger.ZLogWarning($"[FadeManager] FadeIn duration must be positive. Using default 0.5f.");
                 duration = 0.5f;
             }
-            StartCoroutine(FadeRoutine(1f, 0f, duration, false, onComplete));
+            
+            // using 블록을 통해 비동기 작업 완료 시 연동된 토큰 소스를 안전하게 메모리 해제(Dispose)함.
+            using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy(), cancellationToken))
+            {
+                await FadeAsync(1f, 0f, duration, false, cts.Token);
+            }
         }
 
-        private IEnumerator FadeRoutine(float startAlpha, float endAlpha, float duration, bool isFadeOut, System.Action onComplete)
+        /// <summary>
+        /// 페이드 효과의 핵심 알파값 보간 로직.
+        /// </summary>
+        private async UniTask FadeAsync(float startAlpha, float endAlpha, float duration, bool isFadeOut, CancellationToken cancellationToken)
         {
             _isTransitioning = true;
             
-            // 시작 시 최상단으로 이동 및 입력 차단
             _fadeCanvas.sortingOrder = 999;
             _fadeImage.raycastTarget = true;
 
             float elapsed = 0f;
-            while (elapsed < duration)
+
+            try
             {
-                elapsed += Time.deltaTime;
-                _canvasGroup.alpha = Mathf.Lerp(startAlpha, endAlpha, elapsed / duration);
-                yield return null;
+                while (elapsed < duration)
+                {
+                    elapsed += Time.deltaTime;
+                    _canvasGroup.alpha = Mathf.Lerp(startAlpha, endAlpha, elapsed / duration);
+                    
+                    // 프레임 대기 (GC 할당 없는 코루틴 대체재)
+                    await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
+                }
+
+                _canvasGroup.alpha = endAlpha;
             }
-
-            _canvasGroup.alpha = endAlpha;
-
-            // 종료 시 상태 처리
-            if (!isFadeOut) // FadeIn이 끝나서 투명해졌을 때
+            catch (OperationCanceledException)
             {
-                _fadeCanvas.sortingOrder = -1;
-                _fadeImage.raycastTarget = false;
+                if (_logger != null) _logger.ZLogInformation($"[FadeManager] Fade transition canceled.");
+
+                // 강제 취소된 경우, 페이드아웃 중이었더라도 UI 블록을 해제하여 소프트락을 방지함
+                if (isFadeOut)
+                {
+                    _fadeCanvas.sortingOrder = -1;
+                    _fadeImage.raycastTarget = false;
+                }
             }
-
-            _isTransitioning = false;
-            onComplete?.Invoke();
-        }
-
-        private void OnDestroy()
-        {
-            if (_instance == this)
+            finally
             {
-                _instance = null;
+                if (!isFadeOut) 
+                {
+                    _fadeCanvas.sortingOrder = -1;
+                    _fadeImage.raycastTarget = false;
+                }
+
+                _isTransitioning = false;
             }
         }
     }

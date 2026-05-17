@@ -22,15 +22,6 @@ namespace Wonjeong.Data
         Filled
     }
 
-    // 아두이노 시리얼 통신 설정
-    [Serializable]
-    public class SerialSetting
-    {
-        public string portName = "COM3";
-        public int baudRate = 9600;
-        public bool autoConnect = true;
-    }
-
     [Serializable]
     public class CloseSetting
     {
@@ -106,7 +97,6 @@ namespace Wonjeong.Data
         public float warningTime;
         public float resetTime;
         public float fadeTime;
-        public SerialSetting serial;
         public CloseSetting closeSetting;
         public FontMaps fontMap;
         public SoundSetting[] sounds;
