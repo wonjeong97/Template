@@ -324,7 +324,10 @@ namespace Wonjeong.Reporter
             if (Instance == null)
             {
                 Instance = this;
-                DontDestroyOnLoad(gameObject);
+                if (transform.parent == null)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
 
                 if (!initialized)
                     Initialize();
@@ -392,7 +395,10 @@ namespace Wonjeong.Reporter
 			    scenes = new string[Application.levelCount];
 			    currentScene = Application.loadedLevelName;
     #endif
-                DontDestroyOnLoad(gameObject);
+                if (transform.parent == null)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
     #if UNITY_CHANGE1
 			    Application.RegisterLogCallback (new Application.LogCallback (CaptureLog));
 			    Application.RegisterLogCallbackThreaded (new Application.LogCallback (CaptureLogThread));
