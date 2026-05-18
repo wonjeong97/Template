@@ -33,7 +33,10 @@ namespace Wonjeong.UI
         /// </summary>
         private void Awake()
         {
-            DontDestroyOnLoad(gameObject);
+            if (transform.parent == null)
+            {
+                DontDestroyOnLoad(gameObject);
+            }
             CreateFadeUI(); 
         }
 

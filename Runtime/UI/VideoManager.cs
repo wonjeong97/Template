@@ -32,7 +32,10 @@ namespace Wonjeong.UI
         /// </summary>
         private void Awake()
         {
-            DontDestroyOnLoad(gameObject);
+            if (transform.parent == null)
+            {
+                DontDestroyOnLoad(gameObject);
+            }
         }
 
         /// <summary>
@@ -103,6 +106,31 @@ namespace Wonjeong.UI
                 return;
             }
     
+            // 1. 비디오 및 오디오 설정 분리
+            ConfigureVideoPlayer(vp, url, audioSource, volume);
+
+            // 2. 비동기 대기 및 에러 처리 로직 분리 (튜플 반환)
+            var (isSuccess, errorMessage) = await WaitUntilPreparedAsync(vp, 30f, cancellationToken);
+
+            if (!isSuccess)
+            {
+                // 취소된 경우는 이미 내부에서 로깅했으므로 무시
+                if (errorMessage != "Canceled" && _logger != null)
+                {
+                    _logger.ZLogError($"[VideoManager] Video preparation failed: {url}. Error: {errorMessage}");
+                }
+                return;
+            }
+
+            // 3. 성공 시 재생
+            vp.Play();
+        }
+
+        /// <summary>
+        /// 비디오 플레이어 및 오디오 소스의 기본 속성을 설정함.
+        /// </summary>
+        private void ConfigureVideoPlayer(VideoPlayer vp, string url, AudioSource audioSource, float volume)
+        {
             vp.source = VideoSource.Url;
             vp.url = url;
             vp.playOnAwake = false;
@@ -114,7 +142,13 @@ namespace Wonjeong.UI
                 vp.SetTargetAudioSource(0, audioSource);
                 audioSource.volume = Mathf.Clamp01(volume);
             }
+        }
 
+        /// <summary>
+        /// 비디오 준비 완료를 비동기로 대기하며 에러 이벤트를 추적함.
+        /// </summary>
+        private async UniTask<(bool isSuccess, string errorMessage)> WaitUntilPreparedAsync(VideoPlayer vp, float timeoutSeconds, CancellationToken cancellationToken)
+        {
             bool hasError = false;
             string errorMessage = string.Empty;
     
@@ -127,7 +161,6 @@ namespace Wonjeong.UI
             vp.errorReceived += errorHandler;
             vp.Prepare();
 
-            float timeoutSeconds = 30f;
             float elapsedTime = 0f;
     
             try
@@ -141,30 +174,17 @@ namespace Wonjeong.UI
             catch (OperationCanceledException)
             {
                 if (_logger != null) _logger.ZLogInformation($"[VideoManager] Video preparation canceled.");
-                return; // finally 블록으로 이동하여 안전하게 해제됨
+                return (false, "Canceled");
             }
             finally
             {
-                // try 블록 안에서 무슨 일이 발생하든 무조건 이벤트 구독을 해제하여 메모리 누수 방지
-                if (vp)
-                {
-                    vp.errorReceived -= errorHandler;
-                }
+                if (vp) vp.errorReceived -= errorHandler;
             }
     
-            if (hasError)
-            {
-                if (_logger != null) _logger.ZLogError($"[VideoManager] Video preparation failed: {url}. Error: {errorMessage}");
-                return;
-            }
-    
-            if (!vp.isPrepared)
-            {
-                if (_logger != null) _logger.ZLogError($"[VideoManager] Video preparation timed out after {timeoutSeconds}s: {url}");
-                return;
-            }
+            if (hasError) return (false, errorMessage);
+            if (!vp.isPrepared) return (false, $"Timed out after {timeoutSeconds}s");
 
-            vp.Play();
+            return (true, string.Empty);
         }
 
         /// <summary>

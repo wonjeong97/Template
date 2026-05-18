@@ -56,7 +56,11 @@ namespace Wonjeong.Core
             if (!_isInstantiated)
             {
                 _isInstantiated = true;
-                DontDestroyOnLoad(gameObject);
+                
+                if (transform.parent == null)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
             }
             else
             {

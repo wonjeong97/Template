@@ -32,7 +32,10 @@ namespace Wonjeong.Utils
             {
                 _isInstantiated = true;
                 _isOriginal = true; // 내가 최초의 원본임을 기억함
-                DontDestroyOnLoad(gameObject);
+                if (transform.parent == null)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
                 InitializeCanvas();
             }
             else
