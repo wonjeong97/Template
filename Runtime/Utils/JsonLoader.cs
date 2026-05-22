@@ -17,8 +17,9 @@ namespace Wonjeong.Utils
         /// 로컬 스토리지에서 JSON 파일을 동기적으로 읽어옴.
         /// </summary>
         public static T Load<T>(string fileName) where T : new()
-        {
-            string path = Path.Combine(Application.streamingAssetsPath, fileName).Replace("\\", "/");
+        {   
+            string fullFileName = fileName.EndsWith(".json") ? fileName : $"{fileName}.json";
+            string path = Path.Combine(Application.streamingAssetsPath, fullFileName).Replace("\\", "/");
             
             if (File.Exists(path))
             {
@@ -45,7 +46,9 @@ namespace Wonjeong.Utils
         /// </summary>
         public static async UniTask<T> LoadAsync<T>(string fileName, CancellationToken cancellationToken = default) where T : new()
         {
-            string path = Path.Combine(Application.streamingAssetsPath, fileName).Replace("\\", "/");
+           string fullFileName = fileName.EndsWith(".json") ? fileName : $"{fileName}.json";
+    
+    string path = Path.Combine(Application.streamingAssetsPath, fullFileName).Replace("\\", "/");
             
             if (File.Exists(path))
             {
