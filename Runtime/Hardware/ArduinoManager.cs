@@ -146,7 +146,7 @@ namespace Wonjeong.Hardware
             {
                 SerialPort testPort = new SerialPort(port, baudRate);
         
-                testPort.DtrEnable = false; 
+                testPort.DtrEnable = true;
                 testPort.ReadTimeout = 500;
                 testPort.WriteTimeout = 500;
                 testPort.Open();
