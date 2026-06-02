@@ -2,6 +2,7 @@ using Cysharp.Threading.Tasks;
 using MessagePipe;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using VContainer;
 using Wonjeong.App;
 using Wonjeong.Data;
@@ -71,14 +72,14 @@ namespace Wonjeong.Core
 
         protected virtual void OnEnable()
         {
-            // 오브젝트 활성화 시 입력 감지 시작
             _inputActions?.Enable();
+            SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
         protected virtual void OnDisable()
         {
-            // 오브젝트 비활성화 시 입력 감지 중지 (메모리 및 오작동 방지)
             _inputActions?.Disable();
+            SceneManager.sceneLoaded -= OnSceneLoaded;
         }
         
         protected virtual void OnDestroy()
@@ -176,6 +177,11 @@ namespace Wonjeong.Core
         private void ToggleCursorVisibility()
         {
             Cursor.visible = !Cursor.visible;
+        }
+
+        private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (_logger != null) _logger.ZLogInformation($"[GameManagerBase] Scene loaded: {scene.name} (mode: {mode})");
         }
     }
 }

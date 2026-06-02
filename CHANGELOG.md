@@ -1,6 +1,11 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.6.2] - 2026-06-02
+### Changed
+- **`ArduinoManager` DTR 활성화:** `dtrEnable`을 `true`로 변경하여 시리얼 연결 시 DTR 신호를 활성화.
+- **씬 로드 로그 출력 주체 이전:** 기존 `Reporter`에서 로드된 씬 이름을 출력하던 방식을 제거하고, `GameManagerBase`의 `SceneManager.sceneLoaded` 이벤트에서 ZLogger로 씬 이름과 로드 모드를 출력하도록 변경.
+
 ## [26.5.17] - 2026-05-17
 ### Added
 - **VContainer (DI) 시스템 도입:** 전역 싱글톤(`Instance`) 패턴을 걷어내고 `RootLifetimeScope` 및 `TestLifetimeScope`를 통한 의존성 주입(Dependency Injection) 체계 구축. 아키텍처 결합도 대폭 완화.

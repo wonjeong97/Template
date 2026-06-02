@@ -2339,10 +2339,10 @@ namespace Wonjeong.Reporter
 
     #if UNITY_CHANGE3
             currentScene = SceneManager.GetActiveScene().name;
-            Debug.Log("[Reporter] Scene " + currentScene + " is loaded");
+            //Debug.Log("[Reporter] Scene " + currentScene + " is loaded");
     #else
 		    currentScene = Application.loadedLevelName;
-		    Debug.Log("[Reporter] Scene " +  currentScene + " is loaded");
+		    //Debug.Log("[Reporter] Scene " +  currentScene + " is loaded");
     #endif
         }
 
