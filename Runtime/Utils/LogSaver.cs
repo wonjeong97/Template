@@ -80,7 +80,12 @@ namespace Wonjeong.Utils
             }
 
             _productName = Application.productName;
+#if !UNITY_WEBGL
             SetupLogPath();
+#else
+            // WebGL에서는 로컬 파일 시스템 접근 및 SMTP 소켓 통신이 불가능하므로 저장/발송 기능을 비활성화함.
+            Debug.LogWarning("[LogSaver] File logging and email sending are not supported on WebGL.");
+#endif
             Application.logMessageReceived += HandleLog;
         }
 
@@ -111,7 +116,7 @@ namespace Wonjeong.Utils
 
         private void Start()
         {
-#if !UNITY_EDITOR
+#if !UNITY_EDITOR && !UNITY_WEBGL
             if (enableEmail)
             {
                 TrySendPendingLogsAsync().ConfigureAwait(false);
@@ -148,6 +153,7 @@ namespace Wonjeong.Utils
 
         private void OnApplicationQuit()
         {
+#if !UNITY_WEBGL
             if (_shouldSendEmail)
             {
                 SaveLogToFile();
@@ -157,6 +163,7 @@ namespace Wonjeong.Utils
                     TrySendSingleLog(_currentLogPath);
                 }
             }
+#endif
             _logBuffer.Clear(); // 메모리 관리: 로그 버퍼 비우기
         }
 

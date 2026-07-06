@@ -181,6 +181,12 @@ namespace Wonjeong.Utils
 
 #if UNITY_EDITOR
             EditorApplication.isPlaying = false;
+#elif UNITY_WEBGL
+            // 브라우저 환경에서는 Application.Quit()이 동작하지 않으므로 로그만 남김.
+            if (_logger != null)
+            {
+                _logger.ZLogInformation($"[GameCloser] Application.Quit() is not supported on WebGL. Close the browser tab instead.");
+            }
 #else
             Application.Quit();
 #endif

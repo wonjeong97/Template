@@ -47,7 +47,8 @@ namespace Wonjeong.App
                         });
                     });
 
-#if !UNITY_EDITOR
+// WebGL에서는 파일 시스템 및 백그라운드 스레드 기반 파일 로깅이 불가능하므로 Unity 콘솔 로그만 사용함.
+#if !UNITY_EDITOR && !UNITY_WEBGL
                     string logFilePath = Path.Combine(Application.persistentDataPath, "Logs", "GameLog.txt");
                     
                     logging.AddZLoggerFile(logFilePath, options =>
