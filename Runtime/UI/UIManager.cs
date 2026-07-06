@@ -6,6 +6,7 @@ using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
+using UnityEngine.Networking;
 using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.UI;
 using UnityEngine.Video;
@@ -54,7 +55,7 @@ namespace Wonjeong.UI
             {
                 DontDestroyOnLoad(gameObject);
             }
-            LoadSettings();
+            LoadSettingsAsync(this.GetCancellationTokenOnDestroy()).Forget();
         }
 
         /// <summary>
@@ -70,11 +71,12 @@ namespace Wonjeong.UI
         }
 
         /// <summary>
-        /// 로컬 환경 설정을 로드하여 폰트맵 데이터를 캐싱함.
+        /// 환경 설정을 비동기 로드하여 폰트맵 데이터를 캐싱함.
+        /// WebGL 등 URL 기반 플랫폼 지원을 위해 비동기로 동작함.
         /// </summary>
-        private void LoadSettings()
+        private async UniTask LoadSettingsAsync(CancellationToken cancellationToken)
         {
-            Settings settings = JsonLoader.Load<Settings>("Settings.json");
+            Settings settings = await JsonLoader.LoadAsync<Settings>("Settings.json", cancellationToken);
             if (settings != null)
             {
                 _fontMaps = settings.fontMap;
@@ -83,6 +85,12 @@ namespace Wonjeong.UI
             else
             {
                 if (_logger != null) _logger.ZLogWarning($"[UIManager] Failed to load settings.json");
+            }
+
+            if (_fontMaps != null && !_fontsLoadedStarted)
+            {
+                _fontsLoadedStarted = true;
+                PreloadFontsAsync(cancellationToken).Forget();
             }
         }
 
@@ -446,7 +454,8 @@ namespace Wonjeong.UI
         }
 
         /// <summary>
-        /// 로컬 스토리지에서 이미지 파일을 비동기로 읽어와 Sprite로 변환함.
+        /// StreamingAssets에서 이미지 파일을 비동기로 읽어와 Sprite로 변환함.
+        /// URL 기반 플랫폼(WebGL, Android)에서는 UnityWebRequest, 그 외에는 파일 I/O를 사용함.
         /// 메모리 최적화를 위해 이미 로드된 이미지는 캐싱하여 재사용함.
         /// </summary>
         private async UniTask<Sprite> LoadSpriteAsync(string fileName, CancellationToken cancellationToken)
@@ -460,46 +469,72 @@ namespace Wonjeong.UI
                 return cachedSprite;
             }
 
-            if (File.Exists(path))
+            try
             {
-                try
+                byte[] fileData = await ReadSpriteBytesAsync(path, cancellationToken);
+                if (fileData == null) return null;
+
+                Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+
+                if (texture.LoadImage(fileData))
                 {
-                    byte[] fileData = await File.ReadAllBytesAsync(path, cancellationToken);
+                    texture.Apply(false, true);
+                    Sprite newSprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                        new Vector2(0.5f, 0.5f));
 
-                    await UniTask.SwitchToMainThread(cancellationToken);
-
-                    Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-
-                    if (texture.LoadImage(fileData))
-                    {
-                        texture.Apply(false, true);
-                        Sprite newSprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
-                            new Vector2(0.5f, 0.5f));
-
-                        _cachedSprites[path] = newSprite;
-                        return newSprite;
-                    }
-                    else
-                    {
-                        Destroy(texture);
-                        if (_logger != null) _logger.ZLogError($"[UIManager] Failed to decode image data: {path}");
-                        return null;
-                    }
+                    _cachedSprites[path] = newSprite;
+                    return newSprite;
                 }
-                catch (OperationCanceledException)
+                else
                 {
-                    return null;
-                }
-                catch (Exception e)
-                {
-                    if (_logger != null)
-                        _logger.ZLogError($"[UIManager] Exception loading sprite: {path}, Error: {e.Message}");
+                    Destroy(texture);
+                    if (_logger != null) _logger.ZLogError($"[UIManager] Failed to decode image data: {path}");
                     return null;
                 }
             }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+            catch (Exception e)
+            {
+                if (_logger != null)
+                    _logger.ZLogError($"[UIManager] Exception loading sprite: {path}, Error: {e.Message}");
+                return null;
+            }
+        }
 
-            if (_logger != null) _logger.ZLogWarning($"[UIManager] Image not found: {path}");
-            return null;
+        /// <summary>
+        /// 경로 유형에 맞춰 이미지 바이트 데이터를 읽어옴.
+        /// URL 경로(WebGL, Android)는 UnityWebRequest, 로컬 경로는 파일 I/O를 사용함.
+        /// </summary>
+        private async UniTask<byte[]> ReadSpriteBytesAsync(string path, CancellationToken cancellationToken)
+        {
+            if (path.Contains("://"))
+            {
+                using (UnityWebRequest request = UnityWebRequest.Get(path))
+                {
+                    await request.SendWebRequest().WithCancellation(cancellationToken);
+
+                    if (request.result != UnityWebRequest.Result.Success)
+                    {
+                        if (_logger != null) _logger.ZLogWarning($"[UIManager] Image not found: {path} / {request.error}");
+                        return null;
+                    }
+
+                    return request.downloadHandler.data;
+                }
+            }
+
+            if (!File.Exists(path))
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] Image not found: {path}");
+                return null;
+            }
+
+            byte[] fileData = await File.ReadAllBytesAsync(path, cancellationToken);
+            await UniTask.SwitchToMainThread(cancellationToken);
+            return fileData;
         }
 
         #endregion

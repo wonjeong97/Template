@@ -1,6 +1,23 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.7.6] - 2026-07-06
+### Added
+- **WebGL 플랫폼 지원:** 목표 플랫폼(Windows)의 기존 동작은 유지하면서, 기획 검수용 WebGL 빌드(Play.unity.com 업로드)가 가능하도록 템플릿 전체를 Windows/WebGL 동시 호환 구조로 전환.
+- **`ArduinoManager` WebGL 스텁 구현:** WebGL에서 빌드 자체가 불가능한 `System.IO.Ports`(SerialPort)와 `Thread` 사용 코드를 전처리기로 분리하고, 동일한 공개 API를 제공하는 스텁 클래스를 추가. 호출부 코드 수정 없이 컴파일되며, 연결 시도 시 경고 로그만 출력함.
+
+### Changed
+- **`JsonLoader` 플랫폼 분기 로드:** StreamingAssets 경로가 URL인 플랫폼(WebGL, Android)에서는 `UnityWebRequest`, 로컬 경로에서는 기존 `File` I/O로 JSON을 로드하도록 분기 처리. 동기 `Load`는 WebGL에서 원리상 불가능하므로 에러 로그 후 기본값을 반환하며, `SaveAsync`는 StreamingAssets가 읽기 전용인 플랫폼에서 저장 불가 가드 추가.
+- **`UIManager` / `SoundManager` 비동기 설정 로드 전환:** 동기 `JsonLoader.Load` 호출을 `LoadAsync` 기반으로 전환. `UIManager`는 설정 로드 완료 시점에 폰트 프리로드를 시작하도록 변경.
+- **`UIManager` 이미지 로드 WebGL 대응:** Sprite 로드 시 URL 경로면 `UnityWebRequest`, 로컬 경로면 `File` I/O를 사용하도록 `ReadSpriteBytesAsync`로 분리.
+- **`RootLifetimeScope` 로깅 분기:** ZLogger 파일 로깅(`AddZLoggerFile`)을 WebGL에서 제외하고 Unity 콘솔 로그만 사용하도록 변경 (브라우저 개발자 도구에서 확인 가능).
+- **`LogSaver` WebGL 비활성화:** 로컬 파일 저장 및 SMTP 메일 발송(소켓/스레드 기반)이 WebGL에서 불가능하므로 해당 기능을 전처리기로 비활성화.
+- **`GameCloser` WebGL 종료 처리:** 브라우저에서 `Application.Quit()`이 동작하지 않으므로 WebGL 분기에서는 안내 로그만 출력.
+
+### Fixed
+- **`SoundManager` 오디오 URI 생성 오류 수정:** 오디오 로드 시 무조건 `file://` 접두어를 붙여 WebGL(이미 `https://` URL)에서 경로가 깨지던 문제를 로컬 경로일 때만 접두어를 붙이도록 수정.
+- **`LogSaver` WebGL 메모리 누적 방지:** WebGL에서는 로그를 저장하거나 발송할 수 없어 버퍼가 소비될 곳이 없음에도 `HandleLog`가 계속 등록되어 `_logBuffer`가 세션 내내 무제한으로 쌓이던 문제를, 로그 수집 구독 자체를 건너뛰도록 수정.
+
 ## [26.6.2] - 2026-06-02
 ### Changed
 - **`ArduinoManager` DTR 활성화:** `dtrEnable`을 `true`로 변경하여 시리얼 연결 시 DTR 신호를 활성화.

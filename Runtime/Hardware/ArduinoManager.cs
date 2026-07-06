@@ -1,3 +1,74 @@
+#if UNITY_WEBGL
+using Cysharp.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using R3;
+using UnityEngine;
+using VContainer;
+using ZLogger;
+
+namespace Wonjeong.Hardware
+{
+    /// <summary>
+    /// WebGL 스텁 구현.
+    /// 브라우저 환경에서는 시리얼 통신(System.IO.Ports)과 스레드를 사용할 수 없으므로
+    /// 호출부가 수정 없이 컴파일되도록 동일한 공개 API를 제공하며, 모든 동작은 무시됨.
+    /// </summary>
+    public class ArduinoManager : MonoBehaviour
+    {
+        private ILogger<ArduinoManager> _logger;
+
+        private readonly Subject<string> _messageSubject = new Subject<string>();
+
+        /// <summary>
+        /// 외부에서 구독할 수 있는 아두이노 수신 데이터 스트림.
+        /// WebGL에서는 데이터가 발행되지 않음.
+        /// </summary>
+        public Observable<string> OnDataReceived => _messageSubject.ObserveOnMainThread();
+
+        public bool IsConnected => false;
+
+        /// <summary>
+        /// VContainer 의존성 주입.
+        /// ZLogger 할당.
+        /// </summary>
+        [Inject]
+        public void Construct(ILogger<ArduinoManager> logger)
+        {
+            _logger = logger;
+        }
+
+        /// <summary>
+        /// WebGL에서는 시리얼 통신이 지원되지 않으므로 경고만 출력함.
+        /// </summary>
+        public UniTask ConnectAsync(int baudRate, string expectedHandshake)
+        {
+            if (_logger != null) _logger.ZLogWarning($"[ArduinoManager] Serial communication is not supported on WebGL.");
+            return UniTask.CompletedTask;
+        }
+
+        /// <summary>
+        /// WebGL에서는 시리얼 통신이 지원되지 않으므로 경고만 출력함.
+        /// </summary>
+        public UniTask RebootDeviceAsync()
+        {
+            if (_logger != null) _logger.ZLogWarning($"[ArduinoManager] Serial communication is not supported on WebGL.");
+            return UniTask.CompletedTask;
+        }
+
+        public void Disconnect() { }
+
+        public void Send(string msg) { }
+
+        /// <summary>
+        /// R3 리소스를 안전하게 해제함.
+        /// </summary>
+        private void OnDestroy()
+        {
+            _messageSubject?.Dispose();
+        }
+    }
+}
+#else
 using System;
 using System.IO.Ports;
 using System.Threading;
@@ -349,3 +420,4 @@ namespace Wonjeong.Hardware
         }
     }
 }
+#endif
