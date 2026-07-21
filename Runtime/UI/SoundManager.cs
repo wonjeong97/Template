@@ -9,7 +9,6 @@ using UnityEngine;
 using UnityEngine.Networking;
 using VContainer;
 using Wonjeong.Data;
-using Wonjeong.Utils;
 using ZLogger;
 
 namespace Wonjeong.UI
@@ -28,19 +27,21 @@ namespace Wonjeong.UI
             new Dictionary<string, UniTask<AudioClip>>();
 
         private ILogger<SoundManager> _logger;
+        private AppSettingsProvider _settingsProvider;
 
         /// <summary>
         /// VContainer 의존성 주입.
-        /// ZLogger 할당.
+        /// ZLogger 및 설정 제공자 할당.
         /// </summary>
         [Inject]
-        public void Construct(ILogger<SoundManager> logger)
+        public void Construct(ILogger<SoundManager> logger, AppSettingsProvider settingsProvider)
         {
             _logger = logger;
+            _settingsProvider = settingsProvider;
         }
 
         /// <summary>
-        /// 씬 전환 시 사운드 끊김을 방지하고 초기 설정을 로드함.
+        /// 씬 전환 시 사운드 끊김을 방지하고 오디오 소스를 구성함.
         /// </summary>
         private void Awake()
         {
@@ -49,6 +50,13 @@ namespace Wonjeong.UI
                 DontDestroyOnLoad(gameObject);
             }
             InitSources();
+        }
+
+        /// <summary>
+        /// 설정을 로드함. 의존성 주입은 Awake 이후에 완료되므로 Start에서 호출함.
+        /// </summary>
+        private void Start()
+        {
             LoadSoundSettingsAsync(this.GetCancellationTokenOnDestroy()).Forget();
         }
 
@@ -72,10 +80,12 @@ namespace Wonjeong.UI
         /// </summary>
         private async UniTask LoadSoundSettingsAsync(CancellationToken cancellationToken)
         {
-            Settings settings = await JsonLoader.LoadAsync<Settings>("Settings.json", cancellationToken);
-
-            if (settings != null && settings.sounds != null)
+            try
             {
+                Settings settings = await _settingsProvider.GetAsync(cancellationToken);
+
+                if (settings?.sounds == null) return;
+
                 foreach (SoundSetting s in settings.sounds)
                 {
                     if (!_soundSettings.ContainsKey(s.key))
@@ -83,6 +93,10 @@ namespace Wonjeong.UI
                         _soundSettings.Add(s.key, s);
                     }
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                // 오브젝트 파괴로 인한 정상적인 취소
             }
         }
 
@@ -150,6 +164,7 @@ namespace Wonjeong.UI
         /// 재생 중인 AudioClip을 임의로 파괴하면 소리가 끊기는 더 심각한 문제가 발생하기 때문임.
         /// (AudioSource.clip이 참조 중인 클립을 Destroy하면 재생이 중단됨)
         /// 따라서 해제 시점은 씬 전환 등 안전한 지점에서 호출자가 명시적으로 결정해야 함.
+        /// UIManager.ClearSpriteCache()도 동일한 이유로 같은 방식을 따름.
         /// </para>
         /// </summary>
         public void ClearCache()
@@ -314,7 +329,6 @@ namespace Wonjeong.UI
                 }
             }
         }
-
 
         /// <summary>
         /// 오디오 클립을 오디오 소스에 할당하고 재생함.
