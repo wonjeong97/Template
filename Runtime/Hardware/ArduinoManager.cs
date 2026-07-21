@@ -87,6 +87,10 @@ namespace Wonjeong.Hardware
         private Thread _readThread;
         private volatile bool _isRunning;
 
+        // Disconnect()는 메인 스레드(OnDestroy/OnApplicationQuit)와 읽기 스레드(읽기 오류) 양쪽에서
+        // 호출될 수 있으므로 상태 전이를 직렬화함.
+        private readonly object _connectionLock = new object();
+
         private ILogger<ArduinoManager> _logger;
 
         private readonly Subject<string> _messageSubject = new Subject<string>();
@@ -213,10 +217,13 @@ namespace Wonjeong.Hardware
         /// </summary>
         private SerialPort TryConnectPort(string port, int baudRate, string expectedHandshake)
         {
+            SerialPort testPort = null;
+            bool ownershipTransferred = false;
+
             try
             {
-                SerialPort testPort = new SerialPort(port, baudRate);
-        
+                testPort = new SerialPort(port, baudRate);
+
                 testPort.DtrEnable = true;
                 testPort.ReadTimeout = 500;
                 testPort.WriteTimeout = 500;
@@ -227,15 +234,30 @@ namespace Wonjeong.Hardware
                 if (received.Contains(expectedHandshake))
                 {
                     // 성공 시 포트를 닫지 않고 그대로 반환하여 메인 스레드에 소유권을 넘김
+                    ownershipTransferred = true;
                     return testPort;
                 }
-
-                testPort.Close();
-                testPort.Dispose();
             }
             catch (Exception)
             {
                 // 다음 포트 연결 테스트를 진행하기 위해 현재 예외를 무시함.
+            }
+            finally
+            {
+                // 아두이노가 아닌 장치는 Open()은 성공하고 ReadLine()에서 타임아웃이 발생함.
+                // 이때 포트를 닫지 않으면 OS 점유가 유지되어, 다음 재시도에서 같은 포트를 열 수 없게 되고
+                // 정작 그 포트에 장치가 있어도 영영 찾지 못함. 따라서 모든 실패 경로에서 반드시 해제함.
+                if (!ownershipTransferred && testPort != null)
+                {
+                    try
+                    {
+                        testPort.Dispose();
+                    }
+                    catch (Exception)
+                    {
+                        // 장치가 물리적으로 분리된 경우 Dispose에서도 예외가 날 수 있으므로 무시함.
+                    }
+                }
             }
 
             return null;
@@ -247,14 +269,17 @@ namespace Wonjeong.Hardware
         /// </summary>
         private void EstablishConnection(SerialPort validPort, string portName)
         {
-            _serialPort = validPort;
-            _isRunning = true;
-    
-            _readThread = new Thread(ReadSerialLoop)
+            lock (_connectionLock)
             {
-                Priority = System.Threading.ThreadPriority.BelowNormal
-            };
-            _readThread.Start();
+                _serialPort = validPort;
+                _isRunning = true;
+
+                _readThread = new Thread(ReadSerialLoop)
+                {
+                    Priority = System.Threading.ThreadPriority.BelowNormal
+                };
+                _readThread.Start();
+            }
 
             if(_logger != null) _logger.ZLogInformation($"[ArduinoManager] Connection success: {portName}");
         }
@@ -273,7 +298,16 @@ namespace Wonjeong.Hardware
 
             try
             {
-                _isRunning = false; 
+                // 기존 읽기 스레드를 확실히 종료시킨 뒤 재기동함.
+                // 조인하지 않으면 이전 스레드가 살아 있는 채로 새 스레드가 붙어
+                // 같은 포트를 두 스레드가 읽는 상태가 될 수 있음.
+                _isRunning = false;
+
+                Thread previousThread = _readThread;
+                if (previousThread != null && previousThread.IsAlive && previousThread != Thread.CurrentThread)
+                {
+                    previousThread.Join(600);
+                }
 
                 _serialPort.DtrEnable = true;
                 await UniTask.Delay(100, cancellationToken: this.GetCancellationTokenOnDestroy());
@@ -282,12 +316,15 @@ namespace Wonjeong.Hardware
                 // 부트로더 대기
                 await UniTask.Delay(2000, cancellationToken: this.GetCancellationTokenOnDestroy());
 
-                _isRunning = true;
-                _readThread = new Thread(ReadSerialLoop)
+                lock (_connectionLock)
                 {
-                    Priority = System.Threading.ThreadPriority.BelowNormal
-                };
-                _readThread.Start();
+                    _isRunning = true;
+                    _readThread = new Thread(ReadSerialLoop)
+                    {
+                        Priority = System.Threading.ThreadPriority.BelowNormal
+                    };
+                    _readThread.Start();
+                }
 
                 if(_logger != null) _logger.ZLogInformation($"[ArduinoManager] Device reboot complete. Clean state restored.");
             }
@@ -305,23 +342,46 @@ namespace Wonjeong.Hardware
 
         /// <summary>
         /// 현재 열려있는 시리얼 포트를 닫고 통신 스레드를 종료함.
+        /// 메인 스레드와 읽기 스레드 양쪽에서 호출되어도 안전함.
         /// </summary>
         public void Disconnect()
         {
-            _isRunning = false;
+            Thread threadToJoin;
+            SerialPort portToDispose;
 
-            if (_readThread != null && _readThread.IsAlive)
+            lock (_connectionLock)
             {
-                _readThread.Join(600);
+                if (_serialPort == null && _readThread == null) return; // 이미 정리됨
+
+                _isRunning = false;
+
+                threadToJoin = _readThread;
+                portToDispose = _serialPort;
+
+                _readThread = null;
+                _serialPort = null;
             }
 
-            if (_serialPort != null && _serialPort.IsOpen)
+            // 읽기 오류 발생 시 읽기 스레드가 스스로 이 메서드를 호출함.
+            // 그 경우 자기 자신을 Join하면 타임아웃만큼 무의미하게 정지하므로 건너뜀.
+            // (_isRunning이 이미 false이므로 루프는 다음 검사에서 정상 종료됨)
+            if (threadToJoin != null && threadToJoin.IsAlive && threadToJoin != Thread.CurrentThread)
             {
-                _serialPort.Close();
-                _serialPort.Dispose();
+                threadToJoin.Join(600);
             }
 
-            _serialPort = null;
+            if (portToDispose != null)
+            {
+                try
+                {
+                    portToDispose.Dispose();
+                }
+                catch (Exception)
+                {
+                    // 장치가 물리적으로 분리된 상태에서는 Dispose에서도 예외가 날 수 있으므로 무시함.
+                }
+            }
+
             if(_logger != null) _logger.ZLogInformation($"[ArduinoManager] Disconnected");
         }
 
@@ -347,29 +407,33 @@ namespace Wonjeong.Hardware
         /// </summary>
         private void ReadSerialLoop()
         {
-            while (IsSerialPortReady())
+            // Disconnect()가 다른 스레드에서 _serialPort를 null로 만들 수 있으므로
+            // 루프가 사용할 참조는 시작 시점에 지역 변수로 고정함.
+            SerialPort port = _serialPort;
+
+            while (IsSerialPortReady(port))
             {
-                ProcessNextSerialMessage();
-                Thread.Sleep(1); 
+                ProcessNextSerialMessage(port);
+                Thread.Sleep(1);
             }
         }
 
         /// <summary>
         /// 시리얼 포트가 읽기 가능한 상태인지 검증함.
         /// </summary>
-        private bool IsSerialPortReady()
+        private bool IsSerialPortReady(SerialPort port)
         {
-            return _isRunning && _serialPort != null && _serialPort.IsOpen;
+            return _isRunning && port != null && port.IsOpen;
         }
 
         /// <summary>
         /// 단일 메시지 수신 및 R3 스트림 발행 처리.
         /// </summary>
-        private void ProcessNextSerialMessage()
+        private void ProcessNextSerialMessage(SerialPort port)
         {
             try
             {
-                string data = _serialPort.ReadLine();
+                string data = port.ReadLine();
         
                 if (!string.IsNullOrEmpty(data))
                 {
