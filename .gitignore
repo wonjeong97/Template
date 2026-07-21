@@ -30,6 +30,8 @@
 /[Aa]ssets/Plugins/Editor/JetBrains*
 # Jetbrains Rider personal-layer settings
 *.DotSettings.user
+# Jetbrains Rider / IntelliJ 프로젝트 설정 (workspace.xml 등 개인 상태 포함)
+.idea/
 
 # Visual Studio cache directory
 .vs/
