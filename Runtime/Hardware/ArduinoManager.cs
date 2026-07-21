@@ -15,6 +15,12 @@ namespace Wonjeong.Hardware
     /// </summary>
     public class ArduinoManager : MonoBehaviour
     {
+        /// <summary>전체 포트 스캔을 반복할 기본 최대 횟수. (WebGL에서는 사용되지 않음)</summary>
+        public const int DefaultMaxRetries = 10;
+
+        /// <summary>재시도 사이의 기본 대기 시간(ms). (WebGL에서는 사용되지 않음)</summary>
+        public const int DefaultRetryDelayMs = 1000;
+
         private ILogger<ArduinoManager> _logger;
 
         private readonly Subject<string> _messageSubject = new Subject<string>();
@@ -40,7 +46,8 @@ namespace Wonjeong.Hardware
         /// <summary>
         /// WebGL에서는 시리얼 통신이 지원되지 않으므로 경고만 출력함.
         /// </summary>
-        public UniTask ConnectAsync(int baudRate, string expectedHandshake)
+        public UniTask ConnectAsync(int baudRate, string expectedHandshake,
+            int maxRetries = DefaultMaxRetries, int retryDelayMs = DefaultRetryDelayMs)
         {
             if (_logger != null) _logger.ZLogWarning($"[ArduinoManager] Serial communication is not supported on WebGL.");
             return UniTask.CompletedTask;
@@ -83,6 +90,12 @@ namespace Wonjeong.Hardware
 {
     public class ArduinoManager : MonoBehaviour
     {
+        /// <summary>전체 포트 스캔을 반복할 기본 최대 횟수.</summary>
+        public const int DefaultMaxRetries = 10;
+
+        /// <summary>재시도 사이의 기본 대기 시간(ms).</summary>
+        public const int DefaultRetryDelayMs = 1000;
+
         private SerialPort _serialPort;
         private Thread _readThread;
         private volatile bool _isRunning;
@@ -117,14 +130,23 @@ namespace Wonjeong.Hardware
         /// <summary>
         /// 아두이노 장치와 시리얼 통신 연결을 비동기로 시도함.
         /// </summary>
-        public async UniTask ConnectAsync(int baudRate, string expectedHandshake)
+        /// <param name="baudRate">시리얼 통신 속도.</param>
+        /// <param name="expectedHandshake">장치 식별에 사용할 기대 응답 문자열.</param>
+        /// <param name="maxRetries">
+        /// 전체 포트 스캔을 반복할 최대 횟수. 기본값 10.
+        /// 부팅 직후 장치 인식이 늦는 환경에서는 늘리고, 빠른 실패가 필요하면 줄임.
+        /// </param>
+        /// <param name="retryDelayMs">재시도 사이의 대기 시간(ms). 기본값 1000.</param>
+        public async UniTask ConnectAsync(int baudRate, string expectedHandshake,
+            int maxRetries = DefaultMaxRetries, int retryDelayMs = DefaultRetryDelayMs)
         {
             if (IsConnected) return;
 
-            int maxRetries = 10;
-            
+            if (maxRetries < 1) maxRetries = 1;
+            if (retryDelayMs < 0) retryDelayMs = 0;
+
             // 재시도 루프 처리를 전담하는 별도 메서드 호출 (복잡도 분리)
-            bool isSuccess = await ExecuteConnectionRetriesAsync(baudRate, expectedHandshake, maxRetries, 1000);
+            bool isSuccess = await ExecuteConnectionRetriesAsync(baudRate, expectedHandshake, maxRetries, retryDelayMs);
 
             if (!isSuccess && _logger != null)
             {

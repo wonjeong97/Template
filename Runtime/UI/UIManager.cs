@@ -75,6 +75,21 @@ namespace Wonjeong.UI
         /// </summary>
         private void Start()
         {
+            // 주입 없이 컴포넌트만 붙인 경우 원인을 알기 어려운 NullReferenceException이 발생하므로
+            // 무엇을 빠뜨렸는지 알려주고 중단함.
+            if (_settingsProvider == null)
+            {
+                if (_logger != null)
+                {
+                    _logger.ZLogError($"[UIManager] AppSettingsProvider가 주입되지 않았습니다. LifetimeScope에 RegisterComponentInHierarchy<UIManager>()를 등록했는지 확인하세요.");
+                }
+                else
+                {
+                    Debug.LogError("[UIManager] 의존성이 주입되지 않았습니다. LifetimeScope에 RegisterComponentInHierarchy<UIManager>()를 등록했는지 확인하세요.");
+                }
+                return;
+            }
+
             LoadSettingsAsync(this.GetCancellationTokenOnDestroy()).Forget();
         }
 
