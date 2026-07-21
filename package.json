@@ -1,11 +1,31 @@
 {
   "name": "com.wonjeong.template",
-  "version": "26.7.6",
+  "version": "26.7.21",
   "displayName": "Wonjeong Template",
-  "description": "기본 템플릿 패키지",
+  "description": "전시/키오스크형 Unity 앱을 위한 기본 템플릿 패키지. VContainer(DI), UniTask(async), ZLogger(zero-GC 로깅), R3(reactive) 기반이며 Settings.json으로 UI·사운드·종료 조건을 런타임에 제어함. Windows/WebGL 동시 호환.",
   "unity": "2022.3",
+  "license": "MIT",
   "author": {
     "name": "Wonjeong",
     "email": "wonjeong@huliac.com"
+  },
+  "keywords": [
+    "template",
+    "kiosk",
+    "vcontainer",
+    "unitask",
+    "zlogger"
+  ],
+  "dependencies": {
+    "com.unity.addressables": "1.29.0",
+    "com.unity.inputsystem": "1.19.0",
+    "com.unity.ugui": "1.0.0",
+    "com.unity.modules.audio": "1.0.0",
+    "com.unity.modules.imageconversion": "1.0.0",
+    "com.unity.modules.imgui": "1.0.0",
+    "com.unity.modules.jsonserialize": "1.0.0",
+    "com.unity.modules.unitywebrequest": "1.0.0",
+    "com.unity.modules.unitywebrequestaudio": "1.0.0",
+    "com.unity.modules.video": "1.0.0"
   }
 }

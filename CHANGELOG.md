@@ -1,6 +1,51 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.7.21] - 2026-07-21
+
+> **⚠️ Breaking:** `Settings.json`의 `fontMap` 스키마가 `fonts` 배열로 변경되었습니다. 기존 프로젝트는 아래 "마이그레이션" 항목을 참고하여 JSON을 수정해야 폰트가 적용됩니다.
+
+### Added
+- **패키지 메타데이터 정비:** `package.json`에 `dependencies`(`com.unity.addressables`, `com.unity.inputsystem`), `license`, `keywords`, 상세 `description`을 추가. 기존에는 의존성 선언이 전혀 없어 새 프로젝트에 설치 시 컴파일 에러가 발생했음.
+- **`README.md` 추가:** 설치 절차(OpenUPM 스코프 레지스트리 → 서드파티 5종 → 본 패키지), 구조 개요, `Settings.json` 스키마 예시, WebGL 제약 표를 문서화. VContainer/UniTask/ZLogger/R3/MessagePipe는 스코프 레지스트리 없이는 해석에 실패하므로 `dependencies`에 넣지 않고 수동 설치 절차로 분리함.
+- **`LICENSE.md` 추가:** MIT 라이선스 및 내장 서드파티(RuntimeInspector, Reporter) 고지.
+- **`AppSettingsProvider` 추가:** `Settings.json` 로드를 일원화하는 싱글톤 제공자. `RootLifetimeScope`에 등록되며 `UniTask.Preserve()`로 결과를 공유하고, 호출자별 취소 토큰은 `AttachExternalCancellation`으로 격리하여 한 소비자의 취소가 다른 소비자에게 전파되지 않도록 함.
+- **`UIManager.ClearSpriteCache()` 공개 API 추가:** 스프라이트 캐시를 명시적으로 해제하는 수단. 자동 축출(LRU)은 의도적으로 적용하지 않음 — 화면에 표시 중인 `Image`가 참조하는 스프라이트를 임의 파괴하면 해당 UI가 렌더링되지 않는 더 심각한 문제가 발생하기 때문임.
+
+### Changed
+- **`Settings.json` 4중 로드 제거:** `GameManagerBase`, `UIManager`, `SoundManager`, `GameCloser`가 각각 독립적으로 동일 파일을 읽던 구조를 `AppSettingsProvider` 주입으로 통합. WebGL에서 HTTP 요청 4회가 1회로 줄고, 로드 완료 시점이 달라 발생하던 초기화 순서 비결정성이 해소됨.
+- **설정 로드 시점을 `Awake` → `Start`로 이전:** VContainer의 의존성 주입은 `Awake` 이후에 완료되므로, 주입받은 `AppSettingsProvider`를 `Awake`에서 사용하면 널 참조가 발생함. `UIManager`/`SoundManager`의 로드 호출을 `Start`로 옮기고, 이 과정에서 `UIManager`의 `_fontsLoadedStarted` 이중 가드가 불필요해져 제거됨.
+- **`FontMaps` → `FontSetting[]` 스키마 전환:** `font1`~`font9` 고정 필드 9개 + 9-way switch 구조를 배열 기반으로 변경. 폰트 추가 시 3곳(데이터 클래스·로드 호출·키 검증)을 수정해야 하던 것이 JSON 수정만으로 가능해짐. 키 이름도 `font1` 같은 고정값이 아닌 자유 명명(`title`, `body` 등)이 가능함. 기존 `SoundSetting[]`과 패턴이 통일됨.
+- **`Reporter`(LogViewer) 위치 이동:** `Runtime/LogViewer/` → `Runtime/ThirdParty/LogViewer/`. RuntimeInspector와 벤더 코드 배치를 통일함. `.meta`를 함께 이동하여 GUID가 유지되므로 프리팹/씬 참조는 영향 없음.
+
+### Fixed
+- **`GameManagerBase`의 정적 플래그 미복구 수정:** `_isInstantiated`가 `OnDestroy`에서 해제되지 않아, Enter Play Mode Options에서 Domain Reload를 비활성화한 경우 재생 2회차부터 `GameManager`가 자기 자신을 파괴하던 문제. `SystemCanvas`에 이미 적용되어 있던 `_isOriginal` 패턴을 동일하게 이식함.
+- **`JsonLoader`의 널 폴백이 실제로 동작하지 않던 문제 수정:** `where T : new()` 제약과 "Null 발생 방지" 주석에도 불구하고 `JsonUtility.FromJson<T>`의 반환값이 그대로 전달되어, JSON 내용이 비어 있거나 `"null"`일 때 널이 반환될 수 있었음. 두 로드 경로 모두에 `?? new T()` 폴백을 적용함.
+- **`GameCloser`의 `_logger?.` 잔재 수정:** 26.5.17에서 ZLogger의 보간 문자열 핸들러(`ref struct`)와 널 조건부 연산자 충돌 때문에 명시적 널 체크로 일괄 변경했으나 1곳이 누락되어 있었음.
+- **`SoundManager`의 재생 중 오디오 파괴 문제 수정:** 캐시가 `MAX_CACHE_COUNT`(20)를 넘으면 `Destroy(oldClip)`을 호출했는데, 해당 클립이 `AudioSource.clip`으로 재생 중인지 확인하지 않아 **BGM이 재생 도중 무음으로 끊길 수 있었음**(에러 로그 없이 발생). BGM은 보통 가장 먼저 캐시에 등록되어 축출 1순위가 되므로 실제로 걸리기 쉬운 구조였음. 또한 `Dictionary.Keys.First()`는 열거 순서를 보장하지 않아(`Remove` 후 빈 슬롯 재사용) "가장 오래된 항목 삭제"라는 주석과 달리 사실상 임의 항목을 축출하고 있었음.
+  - `_clipCache`에 담기는 키는 `Settings.json`의 `sounds[]` 목록으로 이미 상한이 정해져 있어 무한 증가하지 않으므로, 자동 축출 로직(`ManageCacheCapacity`, `MAX_CACHE_COUNT`)을 제거하고 기존 `ClearCache()` 공개 API로 해제 시점을 호출자가 결정하도록 변경. `UIManager.ClearSpriteCache()`와 동일한 방침.
+
+### Migration
+`StreamingAssets/Settings.json`의 폰트 설정을 아래와 같이 변경해야 합니다.
+
+```jsonc
+// 변경 전
+"fontMap": { "font1": "Fonts/Bold", "font2": "Fonts/Regular" }
+
+// 변경 후 — key는 자유롭게 명명 가능
+"fonts": [
+  { "key": "font1", "address": "Fonts/Bold" },
+  { "key": "font2", "address": "Fonts/Regular" }
+]
+```
+`TextSetting.fontName`이 참조하는 값은 `fonts[].key`입니다. 기존 키 이름(`font1` 등)을 그대로 두면 씬/JSON의 다른 부분은 수정할 필요가 없습니다.
+
+### Removed
+- **`LogSaver` 제거:** 더 이상 사용하지 않는 기능이므로 삭제. 로그 파일 저장은 `RootLifetimeScope`의 ZLogger 파일 출력(`AddZLoggerFile`)이 대체하며, SMTP 메일 발송 기능은 폐기됨. 자격증명(`senderEmail`/`senderPassword`)을 `[SerializeField]`로 보관하던 구조가 함께 제거되어 씬/프리팹 직렬화 및 빌드 산출물에 평문 노출되던 위험도 해소됨.
+- **`CoroutineData` 제거:** 26.5.17의 UniTask 전면 마이그레이션으로 코루틴이 사라지면서 `WaitForSeconds` 캐시가 불필요해짐. 참조처 없음.
+- **`TimestampLogHandler` 제거:** ZLogger의 `SetPrefixFormatter` 기반 타임스탬프 출력과 역할이 중복되며 `Attach()` 호출처가 없어 삭제.
+- **`JsonLoader.Load<T>` (동기 버전) 제거:** WebGL에서 원리상 동작 불가하여 에러 로그만 반환하던 데드 코드. 모든 호출부가 이미 `LoadAsync`를 사용 중이므로 API 표면에서 제외.
+
 ## [26.7.6] - 2026-07-06
 ### Added
 - **WebGL 플랫폼 지원:** 목표 플랫폼(Windows)의 기존 동작은 유지하면서, 기획 검수용 WebGL 빌드(Play.unity.com 업로드)가 가능하도록 템플릿 전체를 Windows/WebGL 동시 호환 구조로 전환.
