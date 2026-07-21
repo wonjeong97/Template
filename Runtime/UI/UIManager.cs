@@ -20,6 +20,10 @@ namespace Wonjeong.UI
     {
         private readonly Dictionary<string, string> _fontAddresses = new Dictionary<string, string>();
 
+        // 설정 로드 완료 여부. 로드 전에는 폰트 키의 유효성을 판단할 수 없으므로
+        // 이 플래그가 false인 동안에는 검증 없이 대기열에 등록함.
+        private bool _isSettingsLoaded;
+
         private readonly Dictionary<string, Font> _loadedFonts = new Dictionary<string, Font>();
         private readonly List<AsyncOperationHandle> _fontHandles = new List<AsyncOperationHandle>();
 
@@ -82,6 +86,9 @@ namespace Wonjeong.UI
                 }
 
                 CacheFontAddresses(settings.fonts);
+                _isSettingsLoaded = true;
+                DiscardUnknownPendingFonts();
+
                 if (_logger != null) _logger.ZLogInformation($"[UIManager] Settings loaded successfully.");
 
                 await PreloadFontsAsync(cancellationToken);
@@ -107,6 +114,36 @@ namespace Wonjeong.UI
                 }
 
                 _fontAddresses[font.key] = font.address;
+            }
+        }
+
+        /// <summary>
+        /// 설정 로드 전에 검증 없이 대기열에 등록됐던 항목 중,
+        /// 실제 설정에 존재하지 않는 폰트 키를 정리하고 경고를 남김.
+        /// 로드 시점에는 유효성을 판단할 수 없으므로 판정을 이 시점으로 미룬 것임.
+        /// </summary>
+        private void DiscardUnknownPendingFonts()
+        {
+            if (_pendingLabels.Count == 0) return;
+
+            List<string> unknownKeys = null;
+
+            foreach (KeyValuePair<string, HashSet<Text>> pair in _pendingLabels)
+            {
+                if (_fontAddresses.ContainsKey(pair.Key)) continue;
+
+                if (unknownKeys == null) unknownKeys = new List<string>();
+                unknownKeys.Add(pair.Key);
+            }
+
+            if (unknownKeys == null) return;
+
+            foreach (string key in unknownKeys)
+            {
+                _pendingLabels.Remove(key);
+
+                if (_logger != null)
+                    _logger.ZLogWarning($"[UIManager] Unknown font key in settings: {key}. Pending labels discarded.");
             }
         }
 
@@ -413,10 +450,14 @@ namespace Wonjeong.UI
         /// </summary>
         private void QueuePendingFont(Text txt, string fontName)
         {
-            if (!_fontAddresses.ContainsKey(fontName))
+            // 설정 로드가 끝나기 전에는 키의 유효성을 판단할 수 없음.
+            // 여기서 걸러내면 이후 폰트가 로드되어도 ApplyPendingFonts가 이 텍스트를 찾지 못해
+            // 폰트가 영구히 적용되지 않으므로, 로드 전에는 무조건 대기열에 등록하고
+            // 유효성 판정은 DiscardUnknownPendingFonts로 미룸.
+            if (_isSettingsLoaded && !_fontAddresses.ContainsKey(fontName))
             {
                 if (_logger != null)
-                    _logger.ZLogWarning($"[UIManager] Unknown font key or settings not loaded yet: {fontName}");
+                    _logger.ZLogWarning($"[UIManager] Unknown font key: {fontName}");
                 return;
             }
 
