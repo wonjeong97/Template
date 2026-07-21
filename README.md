@@ -85,6 +85,49 @@ Package Manager → **Add package from git URL** 로 이 저장소 주소를 입
 "com.wonjeong.template": "file:C:/Projects/Template"
 ```
 
+### 5. VContainer 소스 제너레이터 (선택, 권장)
+
+**하지 않아도 정상 동작합니다.** 다만 DI 주입이 런타임 리플렉션으로 처리됩니다.
+
+VContainer는 주입 코드를 찾을 때 소스 제너레이터가 만든 클래스를 먼저 보고, 없으면 리플렉션으로 폴백합니다.
+
+```csharp
+// VContainer/Runtime/Internal/InjectorCache.cs
+var generatedType = key.Assembly.GetType($"{key.FullName}GeneratedInjector", false);
+if (generatedType != null) return (IInjector)Activator.CreateInstance(generatedType);
+...
+return ReflectionInjector.Build(key);   // 제너레이터가 없으면 여기로
+```
+
+UPM 패키지에는 제너레이터가 포함되어 있지 않으므로, 기본 상태에서는 이 템플릿의 `[Inject]` 지점 전부가 리플렉션 경로를 탑니다.
+
+**설치**
+
+1. [VContainer 릴리즈 페이지](https://github.com/hadashiA/VContainer/releases)에서 **설치된 UPM 패키지와 같은 버전 태그**의 `VContainer.SourceGenerator.dll`을 받습니다.
+   - Unity 2022.3은 Roslyn 4.x이므로 `VContainer.SourceGenerator.dll`을 받습니다 (`...Roslyn3.dll`은 구버전 Unity용).
+2. `Assets/` 아래 아무 곳에나 둡니다. 예: `Assets/Plugins/VContainerSourceGenerator/`
+3. Project 창에서 DLL을 선택 → 인스펙터 하단 **라벨(태그) 아이콘** 클릭 → `RoslynAnalyzer` 입력
+4. 인스펙터의 **Select platforms for plugin**에서 `Any Platform` 해제 → **Include Platforms**에서 Editor/Standalone 해제
+
+> **버전을 반드시 맞추세요.** 생성되는 코드가 런타임의 `IInjector` 인터페이스와 맞물리므로, UPM 패키지와 제너레이터 버전이 어긋나면 컴파일 에러나 주입 실패가 발생할 수 있습니다.
+
+**적용 범위**
+
+`Assets/` 아래에 두면 `Assembly-CSharp`뿐 아니라 **이 패키지 어셈블리(`Wonjeong.Template`)에도 적용**됩니다. 패키지 안에 DLL을 넣을 필요는 없습니다.
+
+**확인 방법**
+
+리플렉션 폴백이 남아 있는지 코드로 확인할 수 있습니다.
+
+```csharp
+var injector = VContainer.Internal.InjectorCache.GetOrBuild(typeof(Wonjeong.UI.UIManager));
+Debug.Log(injector.GetType().Name);
+// 생성됨    -> UIManagerGeneratedInjector
+// 폴백 중   -> ReflectionInjector
+```
+
+검증 환경(Unity 2022.3.62f3 / VContainer 1.19.0)에서 템플릿의 `[Inject]` 지점 8개 전부 생성분으로 확인했습니다.
+
 ---
 
 ## 구조
@@ -107,6 +150,14 @@ Runtime/
 - **코루틴 대신 UniTask** — 파일 I/O와 연출 로직 전부 async. 프레임 드랍과 GC 할당을 줄입니다.
 - **`Settings.json` 단일 로드** — `AppSettingsProvider`가 로드를 일원화하여 공유합니다. 매니저가 개별 로드하지 않습니다.
 - **로깅은 ZLogger** — `Debug.Log` 대신 주입받은 `ILogger<T>`를 사용합니다.
+- **리플렉션 최소화** — 런타임 코드에 `System.Reflection` 직접 사용이 없습니다. DI 주입도 소스 제너레이터로 대체할 수 있습니다([설치 5단계](#5-vcontainer-소스-제너레이터-선택-권장)). 인스펙터 `UnityEvent` 바인딩 대신 코드로 직접 연결하는 것(`GameCloser`)도 같은 맥락입니다.
+
+> **예외:** `ThirdParty/Plugins/RuntimeInspector`는 런타임 필드 조사가 존재 이유이므로 리플렉션을 사용합니다.
+> 디버그 전용이라 릴리즈 빌드에서 제외하면 해당 비용도 사라집니다.
+
+> **참고:** `JsonUtility`는 Unity의 네이티브 직렬화 백엔드를 쓰므로 관리 코드 리플렉션이 아닙니다.
+> 다만 런타임 타입 주도 방식이라 IL2CPP 코드 스트리핑에 취약합니다. 빌드에서 설정이 비어 나온다면
+> `link.xml`이나 `[Preserve]`로 `Wonjeong.Data` 타입을 보존하세요.
 
 > **ZLogger 사용 시 주의:** 보간 문자열 핸들러가 `ref struct`라 널 조건부 연산자(`?.`)와 충돌합니다.
 > `_logger?.ZLogInformation(...)`이 아니라 `if (_logger != null) _logger.ZLogInformation(...)` 형태로 작성하세요.
