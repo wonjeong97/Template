@@ -33,40 +33,6 @@ namespace Wonjeong.Utils
         }
 
         /// <summary>
-        /// 로컬 스토리지에서 JSON 파일을 동기적으로 읽어옴.
-        /// WebGL 등 URL 기반 플랫폼에서는 동기 로드가 불가능하므로 LoadAsync를 사용해야 함.
-        /// </summary>
-        public static T Load<T>(string fileName) where T : new()
-        {
-            string path = GetPath(fileName);
-
-            if (IsRemotePath(path))
-            {
-                Debug.LogError(ZString.Concat("[JsonLoader] Synchronous load is not supported on this platform. Use LoadAsync instead: ", path));
-                return new T();
-            }
-
-            if (File.Exists(path))
-            {
-                try
-                {
-                    string json = File.ReadAllText(path);
-                    return JsonUtility.FromJson<T>(json);
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError(ZString.Concat("[JsonLoader] Failed to parse JSON: ", path, ". Error: ", e.Message));
-                }
-            }
-            else
-            {
-                Debug.LogWarning(ZString.Concat("[JsonLoader] JSON file not found: ", path));
-            }
-
-            return new T(); // Null 발생 방지를 위한 Fallback 로직 규칙 준수
-        }
-
-        /// <summary>
         /// StreamingAssets에서 JSON 파일을 비동기적으로 읽어옴.
         /// URL 기반 플랫폼(WebGL, Android)에서는 UnityWebRequest, 그 외에는 파일 I/O를 사용함.
         /// </summary>
