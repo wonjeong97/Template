@@ -130,6 +130,70 @@ Debug.Log(injector.GetType().Name);
 
 ---
 
+## 검증 프로젝트 구성
+
+이 패키지를 **개발·수정할 때** 쓰는 별도 Unity 프로젝트를 만드는 방법입니다. 패키지 자체는 UPM 패키지라 Unity로 직접 열 수 없으므로, 이를 `file:` 참조로 물린 프로젝트가 필요합니다.
+
+위 설치 1~5단계를 마친 뒤 아래를 추가합니다.
+
+### 테스트 노출
+
+Test Runner는 기본적으로 `Assets/` 안의 테스트만 스캔합니다. 패키지 테스트를 보려면 프로젝트의 `Packages/manifest.json`에 다음을 추가해야 합니다.
+
+```json
+"testables": [ "com.wonjeong.template" ]
+```
+
+> 이걸 빠뜨리면 `AppSettingsProviderTests`가 Test Runner 창에 **아예 나타나지 않습니다.** 테스트가 없는 것처럼 보여 원인을 찾기 어려우니 주의하세요.
+
+### 씬 구성
+
+```
+SampleScene
+├─ GameManager        : GameManagerBase<T>를 상속한 프로젝트 고유 클래스
+├─ TestLifetimeScope  : RootLifetimeScope를 상속한 씬 스코프
+├─ SystemCanvas       : SystemCanvas
+│   └─ (하위) GameCloser  : Button + Image + GameCloser
+├─ Reporter           : Reporter + ReporterMessageReceiver
+├─ Managers           : UIManager + SoundManager + VideoManager
+└─ EventSystem        : InputSystemUIInputModule
+```
+
+```csharp
+public class TestLifetimeScope : RootLifetimeScope
+{
+    protected override void Configure(IContainerBuilder builder)
+    {
+        base.Configure(builder);   // 로깅 / MessagePipe / AppSettingsProvider
+
+        builder.RegisterComponentInHierarchy<GameManager>();
+        builder.RegisterComponentInHierarchy<SystemCanvas>();
+        builder.RegisterComponentInHierarchy<GameCloser>();
+
+        // UIManager는 VideoManager를 주입받으므로 VideoManager도 반드시 함께 등록해야 함
+        builder.RegisterComponentInHierarchy<VideoManager>();
+        builder.RegisterComponentInHierarchy<SoundManager>();
+        builder.RegisterComponentInHierarchy<UIManager>();
+    }
+}
+```
+
+> **소비자를 전부 올려두는 것이 중요합니다.** `Settings.json`을 요청하는 컴포넌트가 여럿이어야 같은 프레임에 동시 요청이 발생하고, 그 경합에서만 드러나는 결함을 잡을 수 있습니다. 실제로 `AppSettingsProvider`의 동시 요청 예외가 이 구성 덕분에 발견되었습니다. 소비자를 하나만 올리면 해당 유형의 문제는 재현되지 않습니다.
+
+### 실제 로드 경로까지 검증하려면
+
+폰트·오디오·비디오는 대응 에셋이 있어야 로드 경로가 실행됩니다. 없으면 설정 로드까지만 확인됩니다.
+
+| 대상 | 준비물 | `Settings.json` 항목 |
+|---|---|---|
+| 폰트 | `.ttf`를 Addressable로 등록하고 주소 지정 | `fonts[].address` |
+| 오디오 | `StreamingAssets/`에 `.wav`/`.mp3`/`.ogg` | `sounds[].clipPath` |
+| 비디오 | `StreamingAssets/`에 `.mp4` | `VideoSetting.fileName` |
+
+> Addressables는 Play Mode Script를 **Use Asset Database (fastest)** 로 두면 콘텐츠 빌드 없이 동작합니다.
+
+---
+
 ## 구조
 
 ```
