@@ -63,10 +63,17 @@ namespace Wonjeong.Utils
             if (!TryGetComponent(out Canvas canvas))
             {
                 canvas = gameObject.AddComponent<Canvas>();
-                
+
+                // 이 메서드는 Awake에서 호출되는데, VContainer 주입 시점과의 순서가 보장되지 않아
+                // _logger가 아직 null일 수 있음. 그 경우 경고가 통째로 사라져 원인 파악이 어려우므로
+                // Debug로 대체 출력함.
                 if (_logger != null)
                 {
                     _logger.ZLogWarning($"[SystemCanvas] Canvas component missing. Added default at runtime.");
+                }
+                else
+                {
+                    Debug.LogWarning("[SystemCanvas] Canvas component missing. Added default at runtime.");
                 }
             }
     
