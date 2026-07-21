@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Wonjeong.Utils;
 
@@ -17,30 +18,35 @@ namespace Wonjeong.Data
 
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
 
-        private UniTask<Settings> _loadTask;
+        // 공유 소스로 UniTask 대신 Task를 사용함.
+        // UniTask는 Preserve()를 써도 완료 전에 여러 소비자가 동시에 await하면
+        // continuation이 중복 등록되어 InvalidOperationException이 발생함
+        // ("Already continuation registered"). Task는 다중 awaiter를 기본 지원함.
+        private Task<Settings> _loadTask;
         private bool _isLoadStarted;
 
         /// <summary>
         /// 설정을 비동기로 반환함. 최초 호출 시에만 실제 로드가 발생하고
-        /// 이후 호출은 동일한 결과를 공유함.
+        /// 이후 호출은 동일한 결과를 공유함. 여러 소비자가 같은 프레임에 동시 호출해도 안전함.
         /// </summary>
         /// <param name="cancellationToken">
         /// 호출자 고유의 취소 토큰. 이 토큰은 '대기(await)'만 취소하며,
         /// 공유 중인 로드 작업 자체는 취소하지 않으므로 다른 소비자에게 영향을 주지 않음.
         /// </param>
-        public UniTask<Settings> GetAsync(CancellationToken cancellationToken = default)
+        public async UniTask<Settings> GetAsync(CancellationToken cancellationToken = default)
         {
             if (!_isLoadStarted)
             {
                 _isLoadStarted = true;
-
-                // UniTask는 기본적으로 1회만 await 가능하므로, 다중 소비자 공유를 위해 Preserve() 처리함.
-                _loadTask = JsonLoader.LoadAsync<Settings>(SettingsFileName, _cts.Token).Preserve();
+                _loadTask = JsonLoader.LoadAsync<Settings>(SettingsFileName, _cts.Token).AsTask();
             }
 
-            return cancellationToken.CanBeCanceled
-                ? _loadTask.AttachExternalCancellation(cancellationToken)
-                : _loadTask;
+            Settings settings = await _loadTask.AsUniTask().AttachExternalCancellation(cancellationToken);
+
+            // 메인 스레드 컨텍스트를 보장하여 호출자가 곧바로 Unity API를 사용할 수 있게 함.
+            await UniTask.SwitchToMainThread(cancellationToken);
+
+            return settings;
         }
 
         /// <summary>

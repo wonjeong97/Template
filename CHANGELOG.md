@@ -9,7 +9,7 @@
 - **패키지 메타데이터 정비:** `package.json`에 `dependencies`(`com.unity.addressables`, `com.unity.inputsystem`), `license`, `keywords`, 상세 `description`을 추가. 기존에는 의존성 선언이 전혀 없어 새 프로젝트에 설치 시 컴파일 에러가 발생했음.
 - **`README.md` 추가:** 설치 절차(OpenUPM 스코프 레지스트리 → 서드파티 5종 → 본 패키지), 구조 개요, `Settings.json` 스키마 예시, WebGL 제약 표를 문서화. VContainer/UniTask/ZLogger/R3/MessagePipe는 스코프 레지스트리 없이는 해석에 실패하므로 `dependencies`에 넣지 않고 수동 설치 절차로 분리함.
 - **`LICENSE.md` 추가:** MIT 라이선스 및 내장 서드파티(RuntimeInspector, Reporter) 고지.
-- **`AppSettingsProvider` 추가:** `Settings.json` 로드를 일원화하는 싱글톤 제공자. `RootLifetimeScope`에 등록되며 `UniTask.Preserve()`로 결과를 공유하고, 호출자별 취소 토큰은 `AttachExternalCancellation`으로 격리하여 한 소비자의 취소가 다른 소비자에게 전파되지 않도록 함.
+- **`AppSettingsProvider` 추가:** `Settings.json` 로드를 일원화하는 싱글톤 제공자. `RootLifetimeScope`에 등록되며, 공유 소스로 `Task<Settings>`를 사용해 여러 소비자가 같은 프레임에 동시 요청해도 안전하게 결과를 공유함. 호출자별 취소 토큰은 `AttachExternalCancellation`으로 격리하여 한 소비자의 취소가 다른 소비자에게 전파되지 않음.
 - **`UIManager.ClearSpriteCache()` 공개 API 추가:** 스프라이트 캐시를 명시적으로 해제하는 수단. 자동 축출(LRU)은 의도적으로 적용하지 않음 — 화면에 표시 중인 `Image`가 참조하는 스프라이트를 임의 파괴하면 해당 UI가 렌더링되지 않는 더 심각한 문제가 발생하기 때문임.
 
 ### Changed
