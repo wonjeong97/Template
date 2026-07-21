@@ -86,8 +86,17 @@ namespace Wonjeong.UI
         /// </summary>
         public async UniTask FadeOutAsync(float duration, CancellationToken cancellationToken = default)
         {
-            if (_isTransitioning) return;
-            
+            // 진행 중이면 요청을 무시함. 호출자는 await가 끝나면 페이드가 완료된 줄 알기 때문에,
+            // 무음으로 넘기면 "화면이 검은 채로 멈췄다" 같은 증상의 원인을 추적할 수 없음.
+            if (_isTransitioning)
+            {
+                if (_logger != null)
+                {
+                    _logger.ZLogWarning($"[FadeManager] 이미 페이드가 진행 중이어서 FadeOut 요청을 무시했습니다.");
+                }
+                return;
+            }
+
             if (duration <= 0f)
             {
                 if (_logger != null) _logger.ZLogWarning($"[FadeManager] FadeOut duration must be positive. Using default 0.5f.");
@@ -105,8 +114,17 @@ namespace Wonjeong.UI
         /// </summary>
         public async UniTask FadeInAsync(float duration, CancellationToken cancellationToken = default)
         {
-            if (_isTransitioning) return;
-            
+            // FadeOut과 동일한 이유로 무시 사유를 남김.
+            // 특히 FadeIn이 무시되면 화면이 검은 상태로 남아 증상이 심각함.
+            if (_isTransitioning)
+            {
+                if (_logger != null)
+                {
+                    _logger.ZLogWarning($"[FadeManager] 이미 페이드가 진행 중이어서 FadeIn 요청을 무시했습니다. 화면이 어두운 상태로 남을 수 있습니다.");
+                }
+                return;
+            }
+
             if (duration <= 0f)
             {
                 if (_logger != null) _logger.ZLogWarning($"[FadeManager] FadeIn duration must be positive. Using default 0.5f.");
