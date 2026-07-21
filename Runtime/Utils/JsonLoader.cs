@@ -52,7 +52,9 @@ namespace Wonjeong.Utils
                     string json = await File.ReadAllTextAsync(path, cancellationToken);
 
                     await UniTask.SwitchToMainThread(cancellationToken);
-                    return JsonUtility.FromJson<T>(json);
+
+                    // 내용이 "null"이거나 비어 있으면 FromJson이 null을 반환하므로 폴백 처리함.
+                    return JsonUtility.FromJson<T>(json) ?? new T();
                 }
 
                 Debug.LogWarning(ZString.Concat("[JsonLoader] JSON file not found: ", path));
@@ -83,7 +85,8 @@ namespace Wonjeong.Utils
                     return new T();
                 }
 
-                return JsonUtility.FromJson<T>(request.downloadHandler.text);
+                // 내용이 "null"이거나 비어 있으면 FromJson이 null을 반환하므로 폴백 처리함.
+                return JsonUtility.FromJson<T>(request.downloadHandler.text) ?? new T();
             }
         }
 

@@ -109,7 +109,10 @@ namespace Wonjeong.Utils
                         img.color = c;
                     }
 
-                    _logger?.ZLogInformation($"[GameCloser] Settings applied from JSON: Pos({settings.closeSetting.position}), Alpha({settings.closeSetting.imageAlpha}), Target({targetClickCount}), Window({clickTimeWindow}s)");
+                    if (_logger != null)
+                    {
+                        _logger.ZLogInformation($"[GameCloser] Settings applied from JSON: Pos({settings.closeSetting.position}), Alpha({settings.closeSetting.imageAlpha}), Target({targetClickCount}), Window({clickTimeWindow}s)");
+                    }
                 }
             }
             catch (OperationCanceledException)

@@ -25,6 +25,9 @@ namespace Wonjeong.Core
         private TemplateInputActions _inputActions;
         
         private static bool _isInstantiated;
+
+        // 중복 생성되어 파괴되는 객체가 정적 플래그를 건드리는 것을 막기 위한 인스턴스 확인 변수
+        private bool _isOriginal;
         
         /// <summary>
         /// 의존성 주입 및 Input Action 초기화.
@@ -57,6 +60,7 @@ namespace Wonjeong.Core
             if (!_isInstantiated)
             {
                 _isInstantiated = true;
+                _isOriginal = true; // 내가 최초의 원본임을 기억함
                 
                 if (transform.parent == null)
                 {
@@ -82,8 +86,17 @@ namespace Wonjeong.Core
             SceneManager.sceneLoaded -= OnSceneLoaded;
         }
         
+        /// <summary>
+        /// 원본 객체가 파괴될 때만 정적 플래그를 해제하여 다음 번 생성이 가능하게 함.
+        /// (Domain Reload 비활성화 시 정적 필드가 유지되어 재생 2회차부터 자기 자신을 파괴하는 문제 방지)
+        /// </summary>
         protected virtual void OnDestroy()
         {
+            if (_isOriginal)
+            {
+                _isInstantiated = false;
+            }
+
             if (_inputActions != null)
             {
                 _inputActions.Dispose();
