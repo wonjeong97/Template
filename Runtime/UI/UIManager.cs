@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
@@ -33,6 +34,13 @@ namespace Wonjeong.UI
             new Dictionary<string, UnityEngine.Events.UnityAction>();
 
         private readonly Dictionary<string, Sprite> _cachedSprites = new Dictionary<string, Sprite>();
+
+        // 진행 중인 스프라이트 로드를 공유하여 중복 디코드와 텍스처 누수를 방지함.
+        // 같은 이미지를 같은 프레임에 두 번 요청하면 둘 다 캐시를 놓쳐 Texture2D를 각각 생성하고,
+        // _cachedSprites에는 나중 것만 남아 먼저 만들어진 텍스처가 회수 대상에서 빠짐.
+        // 공유 소스로 Task를 쓰는 이유는 UniTask가 완료 전 다중 await를 지원하지 않기 때문임.
+        private readonly Dictionary<string, Task<Sprite>> _activeSpriteLoads =
+            new Dictionary<string, Task<Sprite>>();
 
         private ILogger<UIManager> _logger;
         private VideoManager _videoManager;
@@ -498,6 +506,31 @@ namespace Wonjeong.UI
                 return cachedSprite;
             }
 
+            // 동일 이미지의 로드가 이미 진행 중이면 새 I/O를 발생시키지 않고 그 결과를 함께 기다림.
+            if (_activeSpriteLoads.TryGetValue(path, out Task<Sprite> ongoingLoad))
+            {
+                return await ongoingLoad;
+            }
+
+            Task<Sprite> loadTask = DecodeSpriteAsync(path, cancellationToken).AsTask();
+            _activeSpriteLoads[path] = loadTask;
+
+            try
+            {
+                return await loadTask;
+            }
+            finally
+            {
+                // 예외나 취소로 끝나도 반드시 제거함. 남겨두면 실패한 태스크가 계속 재사용됨.
+                _activeSpriteLoads.Remove(path);
+            }
+        }
+
+        /// <summary>
+        /// 실제 바이트 읽기와 스프라이트 생성을 수행함. 캐시/중복 방지는 호출자가 담당함.
+        /// </summary>
+        private async UniTask<Sprite> DecodeSpriteAsync(string path, CancellationToken cancellationToken)
+        {
             try
             {
                 byte[] fileData = await ReadSpriteBytesAsync(path, cancellationToken);
@@ -609,6 +642,7 @@ namespace Wonjeong.UI
             _loadedFonts.Clear();
             _pendingLabels.Clear();
             _fontAddresses.Clear();
+            _activeSpriteLoads.Clear();
 
             ClearSpriteCache();
         }

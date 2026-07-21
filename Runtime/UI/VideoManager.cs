@@ -190,6 +190,54 @@ namespace Wonjeong.UI
         }
 
         /// <summary>
+        /// 더 이상 참조되지 않는 렌더 텍스처를 해제함.
+        /// <para>
+        /// VideoPlayer가 파괴되어도 그 targetTexture는 이 매니저의 목록에 남으므로,
+        /// 비디오 오브젝트를 동적으로 만들고 파괴하는 화면에서는 VRAM이 계속 누적됨.
+        /// 씬 전환 등 안전한 시점에 호출하여 고아가 된 텍스처를 회수함.
+        /// </para>
+        /// </summary>
+        /// <returns>해제한 렌더 텍스처 개수.</returns>
+        public int ReleaseOrphanedRenderTextures()
+        {
+            int released = 0;
+
+            for (int i = _activeRenderTextures.Count - 1; i >= 0; i--)
+            {
+                RenderTexture rt = _activeRenderTextures[i];
+
+                // 이미 파괴됐거나, 이 텍스처를 targetTexture로 쓰는 VideoPlayer가 없으면 고아로 판정함.
+                if (rt && IsReferencedByActiveVideoPlayer(rt)) continue;
+
+                if (rt)
+                {
+                    rt.Release();
+                    Destroy(rt);
+                    released++;
+                }
+
+                _activeRenderTextures.RemoveAt(i);
+            }
+
+            return released;
+        }
+
+        /// <summary>
+        /// 살아 있는 VideoPlayer 중 해당 렌더 텍스처를 사용하는 것이 있는지 검사함.
+        /// </summary>
+        private static bool IsReferencedByActiveVideoPlayer(RenderTexture rt)
+        {
+            VideoPlayer[] players = FindObjectsOfType<VideoPlayer>();
+
+            foreach (VideoPlayer player in players)
+            {
+                if (player && player.targetTexture == rt) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// 생성된 모든 렌더 텍스처 메모리를 완전 해제함.
         /// VRAM 누수 방지 목적.
         /// </summary>

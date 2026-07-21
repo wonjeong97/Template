@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using Cysharp.Text;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -23,8 +24,12 @@ namespace Wonjeong.UI
         private readonly Dictionary<string, SoundSetting> _soundSettings = new Dictionary<string, SoundSetting>();
         private readonly Dictionary<string, AudioClip> _clipCache = new Dictionary<string, AudioClip>();
 
-        private readonly Dictionary<string, UniTask<AudioClip>> _activeDownloads =
-            new Dictionary<string, UniTask<AudioClip>>();
+        // 진행 중인 로드를 공유하는 소스로 UniTask 대신 Task를 사용함.
+        // UniTask는 완료 전에 여러 소비자가 await하면 continuation이 중복 등록되어
+        // InvalidOperationException("Already continuation registered")이 발생함.
+        // Task는 다중 awaiter를 기본 지원함. (AppSettingsProvider와 동일한 이유)
+        private readonly Dictionary<string, Task<AudioClip>> _activeDownloads =
+            new Dictionary<string, Task<AudioClip>>();
 
         private ILogger<SoundManager> _logger;
         private AppSettingsProvider _settingsProvider;
@@ -270,21 +275,25 @@ namespace Wonjeong.UI
             CancellationToken cancellationToken)
         {
             // 이미 동일한 파일의 다운로드가 진행 중이라면, 새로운 I/O를 발생시키지 않고 기존 작업의 완료를 함께 대기함.
-            if (_activeDownloads.TryGetValue(setting.key, out UniTask<AudioClip> ongoingTask))
+            if (_activeDownloads.TryGetValue(setting.key, out Task<AudioClip> ongoingTask))
             {
                 return await ongoingTask;
             }
 
             // 새로운 다운로드 태스크를 생성하여 추적 딕셔너리에 등록함.
-            UniTask<AudioClip> downloadTask = ExecuteDownloadAsync(setting, cancellationToken);
+            Task<AudioClip> downloadTask = ExecuteDownloadAsync(setting, cancellationToken).AsTask();
             _activeDownloads[setting.key] = downloadTask;
 
-            AudioClip resultClip = await downloadTask;
-
-            // 로딩이 완료되면 추적 딕셔너리에서 제거함.
-            _activeDownloads.Remove(setting.key);
-
-            return resultClip;
+            try
+            {
+                return await downloadTask;
+            }
+            finally
+            {
+                // 예외나 취소로 끝나도 반드시 제거해야 함.
+                // 남겨두면 이후 요청이 실패한 태스크를 계속 재사용하게 됨.
+                _activeDownloads.Remove(setting.key);
+            }
         }
 
         /// <summary>
