@@ -210,7 +210,10 @@ namespace Wonjeong.UI
             {
                 while (timer < duration)
                 {
-                    timer += Time.deltaTime;
+                    // Time.timeScale이 0이면 deltaTime도 0이라 페이드가 끝나지 않고
+                    // BGM이 줄어들다 만 상태로 멈춤. 사운드 연출은 게임 시간과 무관해야 하므로
+                    // unscaledDeltaTime을 사용함.
+                    timer += Time.unscaledDeltaTime;
                     _bgmSource.volume = Mathf.Lerp(startVolume, 0f, timer / duration);
                     await UniTask.Yield(PlayerLoopTiming.Update, cts.Token);
                 }
