@@ -136,9 +136,13 @@ namespace Wonjeong.UI
             {
                 while (elapsed < duration)
                 {
-                    elapsed += Time.deltaTime;
+                    // Time.deltaTime을 쓰면 Time.timeScale이 0일 때 경과 시간이 누적되지 않아
+                    // 페이드가 영원히 끝나지 않음. _isTransitioning이 true로 굳고 raycastTarget이
+                    // 켜진 채 남아 화면 전체 입력이 차단되는 소프트락이 발생함.
+                    // 연출은 게임 시간과 무관해야 하므로 unscaledDeltaTime을 사용함.
+                    elapsed += Time.unscaledDeltaTime;
                     _canvasGroup.alpha = Mathf.Lerp(startAlpha, endAlpha, elapsed / duration);
-                    
+
                     // 프레임 대기 (GC 할당 없는 코루틴 대체재)
                     await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
                 }

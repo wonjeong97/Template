@@ -167,7 +167,9 @@ namespace Wonjeong.UI
             {
                 while (!vp.isPrepared && elapsedTime < timeoutSeconds && !hasError)
                 {
-                    elapsedTime += Time.deltaTime;
+                    // Time.timeScale이 0이면 deltaTime도 0이라 타임아웃이 영원히 성립하지 않음.
+                    // 준비 실패 시에도 빠져나오지 못하고 무한 대기하므로 unscaledDeltaTime을 사용함.
+                    elapsedTime += Time.unscaledDeltaTime;
                     await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
                 }
             }
