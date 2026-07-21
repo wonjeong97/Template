@@ -1,3 +1,4 @@
+using System;
 using Cysharp.Threading.Tasks;
 using MessagePipe;
 using Microsoft.Extensions.Logging;
@@ -6,7 +7,6 @@ using UnityEngine.SceneManagement;
 using VContainer;
 using Wonjeong.App;
 using Wonjeong.Data;
-using Wonjeong.Utils;
 using ZLogger;
 
 namespace Wonjeong.Core
@@ -21,20 +21,26 @@ namespace Wonjeong.Core
         
         private IPublisher<InspectorEvent> _publisher;
         private ILogger<GameManagerBase<T>> _logger;
+        private AppSettingsProvider _settingsProvider;
 
         private TemplateInputActions _inputActions;
         
         private static bool _isInstantiated;
-        
+
+        // 중복 생성되어 파괴되는 객체가 정적 플래그를 건드리는 것을 막기 위한 인스턴스 확인 변수
+        private bool _isOriginal;
+
         /// <summary>
         /// 의존성 주입 및 Input Action 초기화.
         /// </summary>
         [Inject]
-        public void Construct(IPublisher<InspectorEvent> publisher, ILogger<GameManagerBase<T>> logger)
+        public void Construct(IPublisher<InspectorEvent> publisher, ILogger<GameManagerBase<T>> logger,
+            AppSettingsProvider settingsProvider)
         {
             _publisher = publisher;
             _logger = logger;
-            
+            _settingsProvider = settingsProvider;
+
             // 입력 클래스 생성 및 콜백 연결
             _inputActions = new TemplateInputActions();
             
@@ -57,7 +63,8 @@ namespace Wonjeong.Core
             if (!_isInstantiated)
             {
                 _isInstantiated = true;
-                
+                _isOriginal = true; // 내가 최초의 원본임을 기억함
+
                 if (transform.parent == null)
                 {
                     DontDestroyOnLoad(gameObject);
@@ -82,8 +89,17 @@ namespace Wonjeong.Core
             SceneManager.sceneLoaded -= OnSceneLoaded;
         }
         
+        /// <summary>
+        /// 원본 객체가 파괴될 때만 정적 플래그를 해제하여 다음 번 생성이 가능하게 함.
+        /// (Domain Reload 비활성화 시 정적 필드가 유지되어 재생 2회차부터 자기 자신을 파괴하는 문제 방지)
+        /// </summary>
         protected virtual void OnDestroy()
         {
+            if (_isOriginal)
+            {
+                _isInstantiated = false;
+            }
+
             if (_inputActions != null)
             {
                 _inputActions.Dispose();
@@ -127,11 +143,18 @@ namespace Wonjeong.Core
         /// </summary>
         protected virtual async UniTaskVoid LoadSettingsAsync()
         {
-            settings = await JsonLoader.LoadAsync<Settings>("Settings.json", this.GetCancellationTokenOnDestroy());
-            
-            if (settings == null)
+            try
             {
-                if (_logger != null) _logger.ZLogError($"[GameManagerBase] Settings file not found.");
+                settings = await _settingsProvider.GetAsync(this.GetCancellationTokenOnDestroy());
+
+                if (settings == null)
+                {
+                    if (_logger != null) _logger.ZLogError($"[GameManagerBase] Settings file not found.");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 오브젝트 파괴로 인한 정상적인 취소
             }
         }
 

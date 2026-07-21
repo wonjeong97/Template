@@ -69,18 +69,15 @@ namespace Wonjeong.Data
     
     // --------------------------------------------------------------------
 
+    /// <summary>
+    /// 폰트 키와 Addressables 주소의 매핑.
+    /// key는 TextSetting.fontName에서 참조하는 이름이며 자유롭게 명명할 수 있음.
+    /// </summary>
     [Serializable]
-    public class FontMaps
+    public class FontSetting
     {
-        public string font1;
-        public string font2;
-        public string font3;
-        public string font4;
-        public string font5;
-        public string font6;
-        public string font7;
-        public string font8;
-        public string font9;
+        public string key;
+        public string address;
     }
 
     [Serializable]
@@ -98,7 +95,7 @@ namespace Wonjeong.Data
         public float resetTime;
         public float fadeTime;
         public CloseSetting closeSetting;
-        public FontMaps fontMap;
+        public FontSetting[] fonts;
         public SoundSetting[] sounds;
     }
 }

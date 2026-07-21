@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
+using Wonjeong.Data;
 using ZLogger;
 using ZLogger.Unity;
 
@@ -22,6 +23,16 @@ namespace Wonjeong.App
         {
             ConfigureLogging(builder);
             ConfigureMessagePipe(builder);
+            ConfigureSettings(builder);
+        }
+
+        /// <summary>
+        /// Settings.json 로드를 일원화하는 제공자를 등록함.
+        /// 각 매니저가 개별 로드하던 구조를 대체하여 중복 I/O와 초기화 순서 비결정성을 제거함.
+        /// </summary>
+        protected virtual void ConfigureSettings(IContainerBuilder builder)
+        {
+            builder.Register<AppSettingsProvider>(Lifetime.Singleton);
         }
         
         /// <summary>

@@ -32,16 +32,18 @@ namespace Wonjeong.Utils
         private float _firstClickTime;
 
         private ILogger<GameCloser> _logger;
+        private AppSettingsProvider _settingsProvider;
         private Button _hiddenButton;
 
         /// <summary>
         /// VContainer 의존성 주입.
-        /// ZLogger 할당.
+        /// ZLogger 및 설정 제공자 할당.
         /// </summary>
         [Inject]
-        public void Construct(ILogger<GameCloser> logger)
+        public void Construct(ILogger<GameCloser> logger, AppSettingsProvider settingsProvider)
         {
             _logger = logger;
+            _settingsProvider = settingsProvider;
         }
 
         /// <summary>
@@ -79,8 +81,8 @@ namespace Wonjeong.Utils
         {
             try
             {
-                Settings settings = await JsonLoader.LoadAsync<Settings>("Settings.json", cancellationToken);
-                
+                Settings settings = await _settingsProvider.GetAsync(cancellationToken);
+
                 if (settings != null && settings.closeSetting != null) 
                 {
                     // 1. 작동 로직 동기화
@@ -109,7 +111,10 @@ namespace Wonjeong.Utils
                         img.color = c;
                     }
 
-                    _logger?.ZLogInformation($"[GameCloser] Settings applied from JSON: Pos({settings.closeSetting.position}), Alpha({settings.closeSetting.imageAlpha}), Target({targetClickCount}), Window({clickTimeWindow}s)");
+                    if (_logger != null)
+                    {
+                        _logger.ZLogInformation($"[GameCloser] Settings applied from JSON: Pos({settings.closeSetting.position}), Alpha({settings.closeSetting.imageAlpha}), Target({targetClickCount}), Window({clickTimeWindow}s)");
+                    }
                 }
             }
             catch (OperationCanceledException)

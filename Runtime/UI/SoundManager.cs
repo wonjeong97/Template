@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using Cysharp.Text;
 using Cysharp.Threading.Tasks;
@@ -10,7 +9,6 @@ using UnityEngine;
 using UnityEngine.Networking;
 using VContainer;
 using Wonjeong.Data;
-using Wonjeong.Utils;
 using ZLogger;
 
 namespace Wonjeong.UI
@@ -28,22 +26,22 @@ namespace Wonjeong.UI
         private readonly Dictionary<string, UniTask<AudioClip>> _activeDownloads =
             new Dictionary<string, UniTask<AudioClip>>();
 
-        private const int MAX_CACHE_COUNT = 20;
-
         private ILogger<SoundManager> _logger;
+        private AppSettingsProvider _settingsProvider;
 
         /// <summary>
         /// VContainer 의존성 주입.
-        /// ZLogger 할당.
+        /// ZLogger 및 설정 제공자 할당.
         /// </summary>
         [Inject]
-        public void Construct(ILogger<SoundManager> logger)
+        public void Construct(ILogger<SoundManager> logger, AppSettingsProvider settingsProvider)
         {
             _logger = logger;
+            _settingsProvider = settingsProvider;
         }
 
         /// <summary>
-        /// 씬 전환 시 사운드 끊김을 방지하고 초기 설정을 로드함.
+        /// 씬 전환 시 사운드 끊김을 방지하고 오디오 소스를 구성함.
         /// </summary>
         private void Awake()
         {
@@ -52,6 +50,13 @@ namespace Wonjeong.UI
                 DontDestroyOnLoad(gameObject);
             }
             InitSources();
+        }
+
+        /// <summary>
+        /// 설정을 로드함. 의존성 주입은 Awake 이후에 완료되므로 Start에서 호출함.
+        /// </summary>
+        private void Start()
+        {
             LoadSoundSettingsAsync(this.GetCancellationTokenOnDestroy()).Forget();
         }
 
@@ -75,10 +80,12 @@ namespace Wonjeong.UI
         /// </summary>
         private async UniTask LoadSoundSettingsAsync(CancellationToken cancellationToken)
         {
-            Settings settings = await JsonLoader.LoadAsync<Settings>("Settings.json", cancellationToken);
-
-            if (settings != null && settings.sounds != null)
+            try
             {
+                Settings settings = await _settingsProvider.GetAsync(cancellationToken);
+
+                if (settings?.sounds == null) return;
+
                 foreach (SoundSetting s in settings.sounds)
                 {
                     if (!_soundSettings.ContainsKey(s.key))
@@ -86,6 +93,10 @@ namespace Wonjeong.UI
                         _soundSettings.Add(s.key, s);
                     }
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                // 오브젝트 파괴로 인한 정상적인 취소
             }
         }
 
@@ -147,6 +158,14 @@ namespace Wonjeong.UI
 
         /// <summary>
         /// 캐시된 모든 오디오 클립의 메모리를 강제 해제함.
+        /// <para>
+        /// 주의: 용량 초과 시 자동 축출(LRU)을 적용하지 않음. 캐시에 담기는 키는
+        /// Settings.json의 sounds[] 목록으로 이미 상한이 정해져 있어 무한히 증가하지 않으며,
+        /// 재생 중인 AudioClip을 임의로 파괴하면 소리가 끊기는 더 심각한 문제가 발생하기 때문임.
+        /// (AudioSource.clip이 참조 중인 클립을 Destroy하면 재생이 중단됨)
+        /// 따라서 해제 시점은 씬 전환 등 안전한 지점에서 호출자가 명시적으로 결정해야 함.
+        /// UIManager.ClearSpriteCache()도 동일한 이유로 같은 방식을 따름.
+        /// </para>
         /// </summary>
         public void ClearCache()
         {
@@ -247,8 +266,6 @@ namespace Wonjeong.UI
         private async UniTask<AudioClip> DownloadAndCacheClipAsync(SoundSetting setting,
             CancellationToken cancellationToken)
         {
-            ManageCacheCapacity();
-
             // 이미 동일한 파일의 다운로드가 진행 중이라면, 새로운 I/O를 발생시키지 않고 기존 작업의 완료를 함께 대기함.
             if (_activeDownloads.TryGetValue(setting.key, out UniTask<AudioClip> ongoingTask))
             {
@@ -310,27 +327,6 @@ namespace Wonjeong.UI
                 {
                     return null;
                 }
-            }
-        }
-
-        /// <summary>
-        /// 지정된 캐시 용량을 초과할 경우 가장 오래된 캐시 데이터를 VRAM에서 삭제함.
-        /// 메모리 누수 방지 목적.
-        /// </summary>
-        private void ManageCacheCapacity()
-        {
-            if (_clipCache.Count < MAX_CACHE_COUNT)
-            {
-                return;
-            }
-
-            string firstKey = _clipCache.Keys.First();
-            AudioClip oldClip = _clipCache[firstKey];
-            _clipCache.Remove(firstKey);
-
-            if (oldClip)
-            {
-                Destroy(oldClip);
             }
         }
 

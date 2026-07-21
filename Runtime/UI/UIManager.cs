@@ -12,15 +12,17 @@ using UnityEngine.UI;
 using UnityEngine.Video;
 using VContainer;
 using Wonjeong.Data;
-using Wonjeong.Utils;
 using ZLogger;
 
 namespace Wonjeong.UI
 {
     public class UIManager : MonoBehaviour
     {
-        private FontMaps _fontMaps;
-        private bool _fontsLoadedStarted;
+        private readonly Dictionary<string, string> _fontAddresses = new Dictionary<string, string>();
+
+        // 설정 로드 완료 여부. 로드 전에는 폰트 키의 유효성을 판단할 수 없으므로
+        // 이 플래그가 false인 동안에는 검증 없이 대기열에 등록함.
+        private bool _isSettingsLoaded;
 
         private readonly Dictionary<string, Font> _loadedFonts = new Dictionary<string, Font>();
         private readonly List<AsyncOperationHandle> _fontHandles = new List<AsyncOperationHandle>();
@@ -34,20 +36,22 @@ namespace Wonjeong.UI
 
         private ILogger<UIManager> _logger;
         private VideoManager _videoManager;
+        private AppSettingsProvider _settingsProvider;
 
         /// <summary>
         /// VContainer 의존성 주입.
-        /// 로거 및 비디오 매니저 할당.
+        /// 로거, 비디오 매니저 및 설정 제공자 할당.
         /// </summary>
         [Inject]
-        public void Construct(ILogger<UIManager> logger, VideoManager videoManager)
+        public void Construct(ILogger<UIManager> logger, VideoManager videoManager, AppSettingsProvider settingsProvider)
         {
             _logger = logger;
             _videoManager = videoManager;
+            _settingsProvider = settingsProvider;
         }
 
         /// <summary>
-        /// 씬 전환 시 UI 매니저 파괴를 방지하고 설정을 로드함.
+        /// 씬 전환 시 UI 매니저 파괴를 방지함.
         /// </summary>
         private void Awake()
         {
@@ -55,42 +59,91 @@ namespace Wonjeong.UI
             {
                 DontDestroyOnLoad(gameObject);
             }
+        }
+
+        /// <summary>
+        /// 설정 로드 및 폰트 프리로드를 시작함.
+        /// 의존성 주입은 Awake 이후에 완료되므로 Start에서 호출함.
+        /// </summary>
+        private void Start()
+        {
             LoadSettingsAsync(this.GetCancellationTokenOnDestroy()).Forget();
         }
 
         /// <summary>
-        /// 런타임 시작 시 폰트 비동기 로드를 백그라운드에서 실행함.
+        /// 환경 설정을 비동기 로드하여 폰트 주소를 캐싱하고 프리로드를 시작함.
         /// </summary>
-        private void Start()
+        private async UniTaskVoid LoadSettingsAsync(CancellationToken cancellationToken)
         {
-            if (_fontMaps != null && !_fontsLoadedStarted)
+            try
             {
-                _fontsLoadedStarted = true;
-                PreloadFontsAsync(this.GetCancellationTokenOnDestroy()).Forget();
+                Settings settings = await _settingsProvider.GetAsync(cancellationToken);
+
+                if (settings == null)
+                {
+                    if (_logger != null) _logger.ZLogWarning($"[UIManager] Failed to load settings.json");
+                    return;
+                }
+
+                CacheFontAddresses(settings.fonts);
+                _isSettingsLoaded = true;
+                DiscardUnknownPendingFonts();
+
+                if (_logger != null) _logger.ZLogInformation($"[UIManager] Settings loaded successfully.");
+
+                await PreloadFontsAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // 오브젝트 파괴로 인한 정상적인 취소
             }
         }
 
         /// <summary>
-        /// 환경 설정을 비동기 로드하여 폰트맵 데이터를 캐싱함.
-        /// WebGL 등 URL 기반 플랫폼 지원을 위해 비동기로 동작함.
+        /// 설정의 폰트 목록을 키-주소 딕셔너리로 변환하여 캐싱함.
         /// </summary>
-        private async UniTask LoadSettingsAsync(CancellationToken cancellationToken)
+        private void CacheFontAddresses(FontSetting[] fonts)
         {
-            Settings settings = await JsonLoader.LoadAsync<Settings>("Settings.json", cancellationToken);
-            if (settings != null)
+            if (fonts == null) return;
+
+            foreach (FontSetting font in fonts)
             {
-                _fontMaps = settings.fontMap;
-                if (_logger != null) _logger.ZLogInformation($"[UIManager] Settings loaded successfully.");
+                if (font == null || string.IsNullOrEmpty(font.key) || string.IsNullOrEmpty(font.address))
+                {
+                    continue;
+                }
+
+                _fontAddresses[font.key] = font.address;
             }
-            else
+        }
+
+        /// <summary>
+        /// 설정 로드 전에 검증 없이 대기열에 등록됐던 항목 중,
+        /// 실제 설정에 존재하지 않는 폰트 키를 정리하고 경고를 남김.
+        /// 로드 시점에는 유효성을 판단할 수 없으므로 판정을 이 시점으로 미룬 것임.
+        /// </summary>
+        private void DiscardUnknownPendingFonts()
+        {
+            if (_pendingLabels.Count == 0) return;
+
+            List<string> unknownKeys = null;
+
+            foreach (KeyValuePair<string, HashSet<Text>> pair in _pendingLabels)
             {
-                if (_logger != null) _logger.ZLogWarning($"[UIManager] Failed to load settings.json");
+                if (_fontAddresses.ContainsKey(pair.Key)) continue;
+
+                if (unknownKeys == null) unknownKeys = new List<string>();
+                unknownKeys.Add(pair.Key);
             }
 
-            if (_fontMaps != null && !_fontsLoadedStarted)
+            if (unknownKeys == null) return;
+
+            foreach (string key in unknownKeys)
             {
-                _fontsLoadedStarted = true;
-                PreloadFontsAsync(cancellationToken).Forget();
+                _pendingLabels.Remove(key);
+
+                if (_logger != null)
+                    _logger.ZLogWarning($"[UIManager] Unknown font key in settings: {key}. Pending labels discarded.");
             }
         }
 
@@ -100,20 +153,14 @@ namespace Wonjeong.UI
         /// </summary>
         private async UniTask PreloadFontsAsync(CancellationToken cancellationToken)
         {
-            if (_fontMaps == null) return;
+            if (_fontAddresses.Count == 0) return;
 
-            List<UniTask> tasks = new List<UniTask>
+            List<UniTask> tasks = new List<UniTask>(_fontAddresses.Count);
+
+            foreach (KeyValuePair<string, string> pair in _fontAddresses)
             {
-                LoadSingleFontAsync("font1", _fontMaps.font1, cancellationToken),
-                LoadSingleFontAsync("font2", _fontMaps.font2, cancellationToken),
-                LoadSingleFontAsync("font3", _fontMaps.font3, cancellationToken),
-                LoadSingleFontAsync("font4", _fontMaps.font4, cancellationToken),
-                LoadSingleFontAsync("font5", _fontMaps.font5, cancellationToken),
-                LoadSingleFontAsync("font6", _fontMaps.font6, cancellationToken),
-                LoadSingleFontAsync("font7", _fontMaps.font7, cancellationToken),
-                LoadSingleFontAsync("font8", _fontMaps.font8, cancellationToken),
-                LoadSingleFontAsync("font9", _fontMaps.font9, cancellationToken)
-            };
+                tasks.Add(LoadSingleFontAsync(pair.Key, pair.Value, cancellationToken));
+            }
 
             // 모든 폰트가 동시에 로드되도록 병렬 대기
             await UniTask.WhenAll(tasks);
@@ -403,10 +450,14 @@ namespace Wonjeong.UI
         /// </summary>
         private void QueuePendingFont(Text txt, string fontName)
         {
-            if (_fontMaps == null || !IsFontKeyValid(fontName))
+            // 설정 로드가 끝나기 전에는 키의 유효성을 판단할 수 없음.
+            // 여기서 걸러내면 이후 폰트가 로드되어도 ApplyPendingFonts가 이 텍스트를 찾지 못해
+            // 폰트가 영구히 적용되지 않으므로, 로드 전에는 무조건 대기열에 등록하고
+            // 유효성 판정은 DiscardUnknownPendingFonts로 미룸.
+            if (_isSettingsLoaded && !_fontAddresses.ContainsKey(fontName))
             {
                 if (_logger != null)
-                    _logger.ZLogWarning($"[UIManager] Invalid font name or uninitialized font maps: {fontName}");
+                    _logger.ZLogWarning($"[UIManager] Unknown font key: {fontName}");
                 return;
             }
 
@@ -416,28 +467,6 @@ namespace Wonjeong.UI
             }
 
             _pendingLabels[fontName].Add(txt);
-        }
-
-        /// <summary>
-        /// 요청된 폰트 키가 유효하고 JSON에 매핑된 주소가 존재하는지 검사함.
-        /// </summary>
-        private bool IsFontKeyValid(string fontName)
-        {
-            string fontAddress = fontName switch
-            {
-                "font1" => _fontMaps.font1,
-                "font2" => _fontMaps.font2,
-                "font3" => _fontMaps.font3,
-                "font4" => _fontMaps.font4,
-                "font5" => _fontMaps.font5,
-                "font6" => _fontMaps.font6,
-                "font7" => _fontMaps.font7,
-                "font8" => _fontMaps.font8,
-                "font9" => _fontMaps.font9,
-                _ => null
-            };
-
-            return !string.IsNullOrEmpty(fontAddress);
         }
 
         /// <summary>
@@ -540,6 +569,30 @@ namespace Wonjeong.UI
         #endregion
 
         /// <summary>
+        /// 캐시된 모든 스프라이트와 텍스처를 VRAM에서 해제함.
+        /// <para>
+        /// 주의: SoundManager의 오디오 캐시와 달리 용량 초과 시 자동 축출(LRU)을 적용하지 않음.
+        /// 스프라이트는 화면에 표시 중인 Image가 직접 참조하고 있으므로, 사용 중인 항목을
+        /// 임의로 파괴하면 해당 UI가 렌더링되지 않는 더 심각한 문제가 발생하기 때문임.
+        /// 따라서 캐시 해제 시점은 씬 전환 등 안전한 지점에서 호출자가 명시적으로 결정해야 함.
+        /// </para>
+        /// </summary>
+        public void ClearSpriteCache()
+        {
+            // 동적으로 생성한 텍스처와 스프라이트를 VRAM에서 완전 삭제하여 누수 방지
+            foreach (Sprite sprite in _cachedSprites.Values)
+            {
+                if (sprite)
+                {
+                    if (sprite.texture) Destroy(sprite.texture);
+                    Destroy(sprite);
+                }
+            }
+
+            _cachedSprites.Clear();
+        }
+
+        /// <summary>
         /// 유니티 생명주기 종료 시 Addressables 및 동적 텍스처 메모리를 해제함.
         /// </summary>
         private void OnDestroy()
@@ -555,18 +608,9 @@ namespace Wonjeong.UI
             _fontHandles.Clear();
             _loadedFonts.Clear();
             _pendingLabels.Clear();
+            _fontAddresses.Clear();
 
-            // 동적으로 생성한 텍스처와 스프라이트를 VRAM에서 완전 삭제하여 누수 방지
-            foreach (Sprite sprite in _cachedSprites.Values)
-            {
-                if (sprite)
-                {
-                    if (sprite.texture) Destroy(sprite.texture);
-                    Destroy(sprite);
-                }
-            }
-
-            _cachedSprites.Clear();
+            ClearSpriteCache();
         }
     }
 }
