@@ -236,6 +236,16 @@ namespace Wonjeong.UI
                     .SetUpdate(true)
                     .ToUniTask(TweenCancelBehaviour.KillAndCancelAwait, cts.Token);
 
+                // 이 페이드가 여전히 '현재 요청'일 때만 정지함. 현재 구현에서는 트윈 완료
+                // continuation이 동기 실행되어 이 사이에 PlayBGM이 끼어들 수 없지만,
+                // 그 안전성은 UniTask/DOTween 내부 스케줄링에 대한 암묵적 가정임.
+                // 라이브러리 변경으로 continuation이 지연 실행되면 완료된 이전 페이드가
+                // 새로 시작된 BGM을 정지시킬 수 있으므로, 불변식을 코드로 명시함.
+                if (_bgmFadeCts != cts || cts.IsCancellationRequested)
+                {
+                    return;
+                }
+
                 _bgmSource.Stop();
             }
             catch (OperationCanceledException)
