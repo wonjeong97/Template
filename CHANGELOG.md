@@ -1,6 +1,13 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.7.23] - 2026-07-22
+
+### Added
+- **`RootLifetimeScope` 공통 씬 컴포넌트 등록 일원화:** 모든 프로젝트에 공통으로 포함되는 `SystemCanvas`, `GameCloser`를 루트 스코프의 `ConfigureCoreComponents`(virtual)에서 등록. 프로젝트별 파생 스코프마다 반복하던 등록 코드를 제거함. 예외적으로 이 컴포넌트들을 쓰지 않는 프로젝트는 해당 메서드를 override하여 제외 가능.
+- **선택 매니저 씬 존재 기반 자동 등록:** `FadeManager`/`UIManager`/`SoundManager`/`VideoManager`/`ArduinoManager`는 프로젝트에 따라 쓰거나 안 쓰므로, 스코프가 속한 씬에 존재할 때만 자동 등록하는 `RegisterIfPresentInScene<T>`를 도입(`ConfigureOptionalComponents`). "씬에 배치하는 행위 = 사용 선언"이 되어, 파생 스코프에서 등록을 누락해 발생하던 미주입 NRE와 씬에 없는 컴포넌트를 등록해 컨테이너 빌드가 실패하는 문제를 모두 방지함. 존재 검사는 전역 검색(`FindAnyObjectByType`)이 아닌 스코프 씬의 루트만 대상으로 하여 `RegisterComponentInHierarchy`의 탐색 범위와 일치시킴.
+  - **주의:** `UIManager`는 `VideoManager`를 필수 주입받으므로, `UIManager`를 배치하는 씬에는 `VideoManager`도 함께 배치해야 함.
+
 ## [26.7.22] - 2026-07-22
 
 > **⚠️ 설치 요구사항 추가:** 본 버전부터 **DOTween**(에셋스토어)이 필수 의존성입니다. DOTween은 UPM/Git 배포가 없어 `package.json`의 `dependencies`로 선언할 수 없으므로, 소비 프로젝트에서 아래 절차를 수동으로 수행해야 합니다.
