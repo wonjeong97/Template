@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Text;
 using Cysharp.Threading.Tasks;
+using DG.Tweening;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -216,29 +217,25 @@ namespace Wonjeong.UI
         }
 
         /// <summary>
-        /// 프레임 단위 보간을 통해 볼륨을 줄이는 페이드아웃 핵심 로직.
-        /// 코루틴 대신 UniTask를 사용하여 GC 할당 없이 실행됨.
+        /// DOTween 트윈으로 볼륨을 줄이는 페이드아웃 핵심 로직.
         /// </summary>
         private async UniTaskVoid FadeOutAsync(float duration, CancellationTokenSource cts)
         {
-            float startVolume = _bgmSource.volume;
-            float timer = 0f;
-
             if (duration <= 0f) duration = 0.01f;
 
             try
             {
-                while (timer < duration)
-                {
-                    // Time.timeScale이 0이면 deltaTime도 0이라 페이드가 끝나지 않고
-                    // BGM이 줄어들다 만 상태로 멈춤. 사운드 연출은 게임 시간과 무관해야 하므로
-                    // unscaledDeltaTime을 사용함.
-                    timer += Time.unscaledDeltaTime;
-                    _bgmSource.volume = Mathf.Lerp(startVolume, 0f, timer / duration);
-                    await UniTask.Yield(PlayerLoopTiming.Update, cts.Token);
-                }
+                // SetUpdate(true): Time.timeScale이 0이면 deltaTime 기반 루프는 페이드가
+                // 끝나지 않고 BGM이 줄어들다 만 상태로 멈춤. 사운드 연출은 게임 시간과
+                // 무관해야 하므로 독립 업데이트로 실행함.
+                //
+                // KillAndCancelAwait: 취소 시 트윈을 즉시 제거하고 OperationCanceledException을
+                // 던져, 기존 수동 루프와 동일한 취소 처리 흐름(catch 블록)을 유지함.
+                await _bgmSource.DOFade(0f, duration)
+                    .SetEase(Ease.Linear)
+                    .SetUpdate(true)
+                    .ToUniTask(TweenCancelBehaviour.KillAndCancelAwait, cts.Token);
 
-                _bgmSource.volume = 0f;
                 _bgmSource.Stop();
             }
             catch (OperationCanceledException)

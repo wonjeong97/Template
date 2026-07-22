@@ -1,6 +1,21 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.7.22] - 2026-07-22
+
+> **⚠️ 설치 요구사항 추가:** 본 버전부터 **DOTween**(에셋스토어)이 필수 의존성입니다. DOTween은 UPM/Git 배포가 없어 `package.json`의 `dependencies`로 선언할 수 없으므로, 소비 프로젝트에서 아래 절차를 수동으로 수행해야 합니다.
+> 1. 에셋스토어에서 DOTween 임포트 후 셋업 (`Tools > Demigiant > DOTween Utility Panel`)
+> 2. 동일 패널에서 **Create ASMDEF** 실행 (`DOTween.Modules` 어셈블리 생성)
+> 3. `Player Settings > Scripting Define Symbols`에 `UNITASK_DOTWEEN_SUPPORT` 추가
+
+### Added
+- **DOTween 도입:** 연출(트윈) 라이브러리로 DOTween을 채택. `Wonjeong.Template.asmdef`에 `DOTween.Modules`, `UniTask.DOTween` 참조를 추가하여 패키지 코드에서 트윈과 UniTask 연동(`ToUniTask`, `CancellationToken` 전파)을 사용할 수 있게 함. 이후 신규 연출은 `DOxxx(...).SetUpdate(true).ToUniTask(cancellationToken: ct)` 패턴을 표준으로 함.
+
+### Changed
+- **`FadeManager` 페이드 로직을 DOTween 트윈으로 전환:** `unscaledDeltaTime` 수동 누적 + `Mathf.Lerp` 루프를 `CanvasGroup.DOFade(...)`로 대체. timeScale=0 소프트락 방지는 `SetUpdate(true)`(독립 업데이트)가 담당하며, `TweenCancelBehaviour.KillAndCancelAwait`로 취소 시 `OperationCanceledException`을 던지게 하여 기존 취소 처리 흐름(페이드아웃 취소 시 입력 차단 해제 등)을 그대로 유지함. 이징은 기존 동작과 동일한 `Ease.Linear`. 기존 회귀 테스트(`FadeManagerTests` — timeScale=0 완료 보장 3건) 통과 확인.
+- **`SoundManager` BGM 페이드아웃을 DOTween 트윈으로 전환:** 동일한 방식으로 `AudioSource.DOFade(0f, duration).SetUpdate(true)` 적용. CTS 생성/파기 및 취소 처리 구조는 변경 없음.
+- **`FadeManager`의 불필요한 `CanvasScaler` 제거:** 페이드 캔버스에 기준 해상도 1920x1080의 `CanvasScaler`를 붙이고 있었으나, 페이드 이미지는 풀스트레치 앵커(0~1)로 캔버스 전체를 따라가므로 스케일러 유무와 무관하게 모든 해상도에서 화면 전체를 덮음. "특정 해상도 전용"이라는 오해를 부르는 무의미한 설정이므로 제거하고 의도를 주석으로 명시함.
+
 ## [26.7.21] - 2026-07-21
 
 > **⚠️ Breaking:** `Settings.json`의 `fontMap` 스키마가 `fonts` 배열로 변경되었습니다. 기존 프로젝트는 아래 "마이그레이션" 항목을 참고하여 JSON을 수정해야 폰트가 적용됩니다.

@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using DG.Tweening;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
 using UnityEngine.UI;
@@ -51,13 +52,12 @@ namespace Wonjeong.UI
             
             _fadeCanvas = canvasObj.AddComponent<Canvas>();
             _fadeCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            _fadeCanvas.sortingOrder = -1; 
+            _fadeCanvas.sortingOrder = -1;
 
-            CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.matchWidthOrHeight = 0.5f;
-
+            // CanvasScaler를 의도적으로 붙이지 않음. ScreenSpaceOverlay 캔버스는 항상 화면
+            // 크기와 일치하고, 페이드 이미지는 풀스트레치 앵커(0~1)로 캔버스 전체를 따라가므로
+            // 어떤 해상도·비율에서도 화면 전체를 덮음. 특정 기준 해상도(1920x1080 등)를
+            // 설정하면 "해당 해상도 전용"이라는 오해만 부르고 실익이 없음.
             canvasObj.AddComponent<GraphicRaycaster>();
 
             GameObject imageObj = new GameObject("FadeImage");
@@ -144,28 +144,25 @@ namespace Wonjeong.UI
         private async UniTask FadeAsync(float startAlpha, float endAlpha, float duration, bool isFadeOut, CancellationToken cancellationToken)
         {
             _isTransitioning = true;
-            
+
             _fadeCanvas.sortingOrder = 999;
             _fadeImage.raycastTarget = true;
 
-            float elapsed = 0f;
-
             try
             {
-                while (elapsed < duration)
-                {
-                    // Time.deltaTime을 쓰면 Time.timeScale이 0일 때 경과 시간이 누적되지 않아
-                    // 페이드가 영원히 끝나지 않음. _isTransitioning이 true로 굳고 raycastTarget이
-                    // 켜진 채 남아 화면 전체 입력이 차단되는 소프트락이 발생함.
-                    // 연출은 게임 시간과 무관해야 하므로 unscaledDeltaTime을 사용함.
-                    elapsed += Time.unscaledDeltaTime;
-                    _canvasGroup.alpha = Mathf.Lerp(startAlpha, endAlpha, elapsed / duration);
+                _canvasGroup.alpha = startAlpha;
 
-                    // 프레임 대기 (GC 할당 없는 코루틴 대체재)
-                    await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
-                }
-
-                _canvasGroup.alpha = endAlpha;
+                // SetUpdate(true): Time.timeScale과 무관한 독립 업데이트로 실행함.
+                // deltaTime 기반 수동 루프는 timeScale=0일 때 페이드가 영원히 끝나지 않아
+                // _isTransitioning이 true로 굳고 raycastTarget이 켜진 채 남아
+                // 화면 전체 입력이 차단되는 소프트락이 발생했음. 연출은 게임 시간과 무관해야 함.
+                //
+                // KillAndCancelAwait: 취소 시 트윈을 즉시 제거하고 OperationCanceledException을
+                // 던져, 기존 수동 루프와 동일한 취소 처리 흐름(catch 블록)을 유지함.
+                await _canvasGroup.DOFade(endAlpha, duration)
+                    .SetEase(Ease.Linear)
+                    .SetUpdate(true)
+                    .ToUniTask(TweenCancelBehaviour.KillAndCancelAwait, cancellationToken);
             }
             catch (OperationCanceledException)
             {
