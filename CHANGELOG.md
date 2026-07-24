@@ -1,6 +1,14 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.7.24] - 2026-07-24
+
+### Added
+- **로그 타입별 스택 트레이스 정책(`LogStackTraceConfig`) 전역 적용:** 부팅 시(`RuntimeInitializeOnLoadMethod`) `Application.SetStackTraceLogType`을 로그 타입별로 설정하여, 일반 로그(Info/`LogType.Log`)는 스택 트레이스를 제거(메시지 자체는 콘솔·player.log·파일 로그에 그대로 유지)하고 Warning/Error/Exception/Assert는 스택 트레이스(`ScriptOnly`)를 유지함. 정보성 로그(플레이 기록 등)에 붙던 노이즈 스택을 없애고, 로그마다 발생하던 스택 캡처 비용(CPU 스택 워크 + GC 할당)을 일반 로그에서 제거해 로그가 잦거나 WebGL/모바일 타깃일 때의 프레임 히칭 요인을 줄임. 모든 프로젝트에서 수동 호출 없이 자동 적용되며, 특정 프로젝트가 다른 정책이 필요하면 이후 `SetStackTraceLogType`을 다시 호출해 덮어쓸 수 있음.
+
+### Changed
+- **ZLogger Unity 콘솔 출력의 수동 스택(`PrettyStacktrace`) 비활성화:** ZLogger의 Unity 콘솔 프로바이더는 스택을 자체적으로 캡처해 메시지에 붙이며, 그 여부를 `RuntimeInitializeLoadType.SubsystemRegistration`(가장 이른 RuntimeInitialize 단계) 시점에 한 번 캐싱해 결정함. 이 때문에 `LogStackTraceConfig`의 실행 시점을 아무리 앞당겨도 ZLogger의 캐싱을 앞지를 수 없어, ZLog* 일반 로그에는 스택 제거가 반영되지 않았음. `RootLifetimeScope.ConfigureLogging`에서 `ZLoggerUnityDebugOptions.PrettyStacktrace = false`로 ZLogger의 수동 스택을 끄고 스택 정책을 Unity 네이티브 `SetStackTraceLogType`에 위임하여 해결함(Unity는 이 값을 런타임에 매 로그마다 읽으므로 캐싱 타이밍과 무관). 결과적으로 `ZLogInformation`은 스택 없이 메시지만, `ZLogWarning`/`ZLogError`는 실제 호출부까지의 스택을 출력함. Warning/Error의 스택은 ZLogger의 정리된 형식 대신 Unity 네이티브 형식으로 표시되며 상단에 ZLogger 프레임이 일부 포함되지만, 실제 호출 라인은 그대로 추적·하이퍼링크됨.
+
 ## [26.7.23] - 2026-07-22
 
 ### Added
