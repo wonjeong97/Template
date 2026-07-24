@@ -107,9 +107,23 @@ namespace Wonjeong.App
 
                     logging.AddZLoggerUnityDebug(options =>
                     {
-                        options.UsePlainTextFormatter(formatter => 
+                        // ZLogger의 Unity 콘솔 프로바이더는 기본적으로 로그마다 스택을 직접 캡처해(new StackTrace)
+                        // 메시지 문자열에 붙임(PrettyStacktrace). 문제는 이 "붙일지 여부"를 매 호출이 아니라
+                        // RuntimeInitializeLoadType.SubsystemRegistration 시점에 GetStackTraceLogType 값을 한 번
+                        // 캐싱해 결정한다는 점. SubsystemRegistration은 RuntimeInitialize 단계 중 가장 이르므로,
+                        // LogStackTraceConfig(우리 정책)가 어떤 단계에서 실행돼도 그 캐싱을 앞지를 수 없어
+                        // 일반 로그(Log→None) 설정이 ZLog* 콘솔 출력에는 반영되지 않는다.
+                        // 그래서 ZLogger의 수동 스택을 아예 끄고, 스택 정책을 전적으로 Unity 네이티브
+                        // Application.SetStackTraceLogType(LogStackTraceConfig에서 설정)에 위임한다.
+                        // Unity는 이 값을 런타임에 매 로그마다 읽으므로 Info=None/Warning·Error=ScriptOnly가
+                        // ZLogger가 내부적으로 호출하는 Debug.Log/LogWarning/LogError에도 그대로 적용된다.
+                        // (ZLogger의 Post는 호출 스레드에서 동기 실행되고 [HideInCallstack]이 붙어 있어,
+                        //  네이티브 ScriptOnly 스택도 ZLogger 내부 프레임을 숨긴 실제 호출부를 가리킨다.)
+                        options.PrettyStacktrace = false;
+
+                        options.UsePlainTextFormatter(formatter =>
                         {
-                            formatter.SetPrefixFormatter($"{0:yyyy-MM-dd HH:mm:ss} | ", (in MessageTemplate template, in LogInfo info) => 
+                            formatter.SetPrefixFormatter($"{0:yyyy-MM-dd HH:mm:ss} | ", (in MessageTemplate template, in LogInfo info) =>
                             {
                                 template.Format(DateTime.Now);
                             });
