@@ -166,11 +166,32 @@ namespace Wonjeong.Core
                 {
                     if (_logger != null) _logger.ZLogError($"[GameManagerBase] Settings file not found.");
                 }
+                else
+                {
+                    ApplyFrameRateSettings();
+                }
             }
             catch (OperationCanceledException)
             {
                 // 오브젝트 파괴로 인한 정상적인 취소
             }
+        }
+
+        /// <summary>
+        /// Settings.json의 targetFrameRate를 적용함. 0 이하(미설정)면 아무것도 바꾸지 않아
+        /// 프로젝트의 QualitySettings 기본값을 그대로 따름.
+        /// vSyncCount가 켜져 있으면 Application.targetFrameRate가 무시되고 디스플레이 주사율에
+        /// 종속되므로, 값이 설정된 경우에만 vSyncCount를 0으로 끄고 targetFrameRate를 적용함.
+        /// 프로젝트별로 다른 정책이 필요하면 override하여 재정의 가능.
+        /// </summary>
+        protected virtual void ApplyFrameRateSettings()
+        {
+            if (settings.targetFrameRate <= 0) return;
+
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = settings.targetFrameRate;
+
+            if (_logger != null) _logger.ZLogInformation($"[GameManagerBase] targetFrameRate applied: {settings.targetFrameRate}");
         }
 
         /// <summary>

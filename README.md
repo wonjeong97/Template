@@ -264,6 +264,7 @@ public class GameManager : GameManagerBase<GameManager>
   "warningTime": 60,
   "resetTime": 90,
   "fadeTime": 0.5,
+  "targetFrameRate": 60,
   "closeSetting": {
     "position": { "x": 0, "y": 1 },
     "numToClose": 10,
@@ -281,6 +282,7 @@ public class GameManager : GameManagerBase<GameManager>
 }
 ```
 
+- `targetFrameRate`는 0 이하(또는 생략)면 적용되지 않고 QualitySettings 기본값을 그대로 따릅니다. 값을 지정하면 `vSyncCount`를 0으로 끄고 해당 FPS로 캡을 겁니다. 장시간 구동되는 키오스크 환경에서 발열·전력 소모를 줄이려면 30~60 사이 값을 권장합니다.
 - `closeSetting.position`은 **정규화 좌표(0~1)** 입니다. `(0,0)`이 좌하단, `(1,1)`이 우상단.
 - `fonts[].address`는 **Addressables 주소**이고, `sounds[].clipPath`는 **StreamingAssets 기준 상대 경로**입니다.
 - `fonts[].key`는 자유롭게 명명할 수 있으며 `TextSetting.fontName`에서 이 키로 참조합니다.

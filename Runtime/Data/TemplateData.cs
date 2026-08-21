@@ -94,6 +94,15 @@ namespace Wonjeong.Data
         public float warningTime;
         public float resetTime;
         public float fadeTime;
+
+        /// <summary>
+        /// 목표 프레임 레이트(FPS). 0 이하(미설정)면 아무것도 변경하지 않고 QualitySettings의
+        /// 기본값(vSyncCount 등)을 그대로 따름. 전시/키오스크처럼 장시간 구동되는 환경에서는
+        /// 디스플레이 주사율을 넘는 프레임을 그려 낭비되는 GPU 자원·발열·전력 소모를 줄이기 위해
+        /// 30~60 사이 값으로 명시적으로 캡을 거는 것을 권장함.
+        /// </summary>
+        public int targetFrameRate;
+
         public CloseSetting closeSetting;
         public FontSetting[] fonts;
         public SoundSetting[] sounds;

@@ -1,6 +1,11 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.8.21] - 2026-08-21
+
+### Added
+- **`Settings.json`을 통한 목표 프레임 레이트(`targetFrameRate`) 설정 추가:** `Settings` 클래스에 `targetFrameRate` 필드를 추가하고, `GameManagerBase.LoadSettingsAsync`에서 설정 로드가 완료된 시점에 `ApplyFrameRateSettings`(virtual)를 호출해 적용함. 값이 0 이하(미설정)면 아무것도 바꾸지 않아 기존 `QualitySettings` 기본값(품질 레벨별 `vSyncCount`)을 그대로 따르므로 기존 프로젝트에는 동작 변화가 없음. 값을 지정하면 `QualitySettings.vSyncCount = 0`으로 끈 뒤 `Application.targetFrameRate`를 적용함(`vSyncCount`가 켜진 상태로는 `targetFrameRate`가 무시되고 디스플레이 주사율에 종속되기 때문). 전시/키오스크처럼 장시간 구동되는 환경에서 디스플레이 주사율을 넘는 프레임을 그리며 낭비되는 GPU 자원·발열·전력 소모를 줄이는 것이 목적이며, 프로젝트별로 다른 정책이 필요하면 `ApplyFrameRateSettings`를 override하여 재정의할 수 있음.
+
 ## [26.7.24] - 2026-07-24
 
 ### Added
