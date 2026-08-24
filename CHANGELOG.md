@@ -9,6 +9,9 @@
 ### Changed
 - **런타임 로그 메시지를 전부 영어로 통일:** `ApiManagerBase`, `GameManagerBase`, `GameCloser`, `UIManager`, `SoundManager`, `FadeManager`의 `ZLog*`/`Debug.Log*` 출력 문자열을 영어로 변경함. 템플릿은 여러 콘텐츠/클라이언트가 소비하므로 콘솔·파일 로그가 국제적으로 읽힐 수 있어야 하기 때문. 코드 주석(XML 문서 포함)은 기존과 동일하게 한국어를 유지함.
 
+### Fixed
+- **`ApiManagerBase` 코드 리뷰 반영:** (1) 재시도 대기(`UniTask.Delay`)가 `Time.timeScale`에 종속돼 있어 일시정지 중 재시도 루프가 무한정 멈추던 문제를 `DelayType.UnscaledDeltaTime`으로 수정(FadeManager에서 겪었던 동일한 종류의 소프트락). (2) `FadeManager`/`SoundManager`/`UIManager`/`VideoManager`와 달리 파괴 방지 로직이 없어 씬 리로드마다 시작 로그가 실제로 중복 전송되던 문제를 `Awake()`의 `DontDestroyOnLoad`로 수정. (3) `AppSettingsProvider` 미주입 시 예외가 완전히 무음으로 삼켜지던 문제를 다른 매니저와 동일한 null 체크·폴백 로그 패턴으로 수정. (4) `#pragma warning disable/restore CS1998`이 메서드 전체를 감싸 향후 다른 실수까지 가려질 수 있던 범위를 에디터/디벨롭 빌드 컴파일 변형에만 한정. (5) 재사용 가능한 재시도 로직(`SendGetRequestWithRetryAsync`)을 시작 로그 기능과 분리해 `Runtime/Network/ApiRetryUtil.cs`(정적 유틸리티)로 추출 — 시작 로그를 원치 않는 소비자도 `ApiManagerBase`를 상속하지 않고 바로 호출 가능. (6) `GameManagerBase<T>`와의 일관성을 위해 `ApiManagerBase`를 `abstract`로 변경(프로젝트별 파생 클래스를 씬에 배치하는 것이 정식 사용법). 이에 따라 `Template_Dev`에도 `GameManager`와 동일한 패턴으로 빈 파생 클래스 `ApiManager : ApiManagerBase`를 추가하고, 씬에서 구체 클래스가 없는 `ApiManagerBase`를 직접 참조하던 컴포넌트를 새 클래스로 교체함.
+
 ## [26.8.21] - 2026-08-21
 
 ### Added

@@ -3,7 +3,6 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
-using UnityEngine.Networking;
 using VContainer;
 using Wonjeong.Data;
 using ZLogger;
@@ -12,29 +11,24 @@ namespace Wonjeong.Network
 {
     /// <summary>
     /// 프로그램 시작 시 서버에 시작 로그를 1회 전송하는 매니저의 기반 클래스.
-    /// 콘텐츠마다 호출해야 하는 API가 다를 수 있으므로, 이 클래스를 상속해 Start()를
-    /// override하고 <see cref="SendGetRequestWithRetryAsync"/>를 재사용하면 시작 로그 외의
-    /// 다른 API 호출에도 동일한 재시도/네트워크 확인/에디터·디벨롭 빌드 스킵 정책을 그대로
-    /// 적용할 수 있음.
+    /// 콘텐츠마다 호출해야 하는 API가 다를 수 있으므로, 프로젝트별 클래스가 이 클래스를
+    /// 상속해 Start()를 override하고 <see cref="ApiRetryUtil.SendGetRequestWithRetryAsync"/>를
+    /// 재사용하면 시작 로그 외의 다른 API 호출에도 동일한 재시도/네트워크 확인/에디터·디벨롭
+    /// 빌드 스킵 정책을 그대로 적용할 수 있음(GameManagerBase&lt;T&gt;와 동일하게, abstract이므로
+    /// 씬에는 이 클래스를 상속한 프로젝트 전용 클래스를 배치할 것).
     /// <para>
     /// Settings.json의 apiUrl은 idx_content_device, uid 등 콘텐츠별 쿼리 파라미터가
     /// 이미 포함된 형태(message= 까지)로 서버에서 발급되므로, 시작 로그는 여기에 상태
     /// 메시지 값만 이어붙여 GET 요청을 보냄.
     /// </para>
     /// </summary>
-    public class ApiManagerBase : MonoBehaviour
+    public abstract class ApiManagerBase : MonoBehaviour
     {
         /// <summary>
         /// 오늘 시작 로그를 이미 성공적으로 전송했는지 판별하기 위해 마지막 전송 날짜를
         /// 기기에 저장해두는 PlayerPrefs 키. 같은 날 재실행되면 "재시작"으로 구분함.
         /// </summary>
         private const string LastStartupLogDateKey = "ApiManagerBase_LastStartupLogDate";
-
-        /// <summary>네트워크 실패 시 최대 재시도 횟수(최초 시도 포함).</summary>
-        private const int MaxAttemptCount = 10;
-
-        /// <summary>재시도 사이의 대기 시간(초).</summary>
-        private const float RetryDelaySeconds = 3f;
 
         protected ILogger<ApiManagerBase> Logger { get; private set; }
         protected AppSettingsProvider SettingsProvider { get; private set; }
@@ -47,6 +41,18 @@ namespace Wonjeong.Network
         }
 
         /// <summary>
+        /// 다른 선택 매니저(FadeManager/SoundManager/UIManager/VideoManager)와 동일하게,
+        /// 씬 전환으로 재생성되어 시작 로그가 중복 전송되지 않도록 파괴를 방지함.
+        /// </summary>
+        protected virtual void Awake()
+        {
+            if (transform.parent == null)
+            {
+                DontDestroyOnLoad(gameObject);
+            }
+        }
+
+        /// <summary>
         /// 파생 클래스에서 다른 API 호출을 추가하려면 override 후 base.Start()를 호출할 것.
         /// </summary>
         protected virtual void Start()
@@ -56,6 +62,21 @@ namespace Wonjeong.Network
 
         protected virtual async UniTaskVoid SendStartupLogAsync(CancellationToken cancellationToken)
         {
+            // 주입 없이 컴포넌트만 붙인 경우 원인을 알기 어려운 NullReferenceException이 발생하므로
+            // 무엇을 빠뜨렸는지 알려주고 중단함.
+            if (SettingsProvider == null)
+            {
+                if (Logger != null)
+                {
+                    Logger.ZLogError($"[ApiManagerBase] AppSettingsProvider was not injected. Check that RegisterComponentInHierarchy<ApiManagerBase>() is registered on the LifetimeScope.");
+                }
+                else
+                {
+                    Debug.LogError("[ApiManagerBase] Dependencies were not injected. Check that RegisterComponentInHierarchy<ApiManagerBase>() is registered on the LifetimeScope.");
+                }
+                return;
+            }
+
             try
             {
                 Settings settings = await SettingsProvider.GetAsync(cancellationToken);
@@ -71,7 +92,7 @@ namespace Wonjeong.Network
                 string message = alreadyLoggedToday ? "Program restarted" : "Program started";
                 string url = settings.apiUrl + Uri.EscapeDataString(message);
 
-                bool success = await SendGetRequestWithRetryAsync(url, $"startup log ({message})", cancellationToken);
+                bool success = await ApiRetryUtil.SendGetRequestWithRetryAsync(url, $"startup log ({message})", Logger, cancellationToken);
 
                 if (success)
                 {
@@ -89,64 +110,5 @@ namespace Wonjeong.Network
                 if (Logger != null) Logger.ZLogError($"[ApiManagerBase] Exception while sending startup log: {e.Message}");
             }
         }
-
-        /// <summary>
-        /// GET 요청을 다음 공통 정책과 함께 전송함: 에디터/디벨롭 빌드에서는 실제 전송 없이
-        /// 무엇을 보냈을지만 로그로 남기고, 네트워크 자체가 연결되어 있지 않으면 즉시 포기하며,
-        /// 그 외 실패는 <see cref="RetryDelaySeconds"/>초 간격으로 최대 <see cref="MaxAttemptCount"/>회
-        /// 재시도함. 콘텐츠별로 추가 API를 호출해야 하는 파생 클래스에서 재사용할 수 있도록
-        /// protected로 공개함.
-        /// </summary>
-        /// <param name="url">요청 URL.</param>
-        /// <param name="logLabel">로그에 표시할 요청 식별용 라벨(예: "시작 로그").</param>
-        /// <returns>실제로 전송을 시도해 성공하면 true. 에디터/디벨롭 빌드·네트워크 미연결로
-        /// 전송을 생략했거나 재시도를 모두 소진해 실패했으면 false.</returns>
-        // 에디터/디벨롭 빌드 분기는 await 없이 즉시 반환하므로, 두 플랫폼 분기가 동일한
-        // async UniTask<bool> 시그니처를 공유하는 데서 오는 CS1998을 의도적으로 억제함.
-#pragma warning disable CS1998
-        protected async UniTask<bool> SendGetRequestWithRetryAsync(string url, string logLabel, CancellationToken cancellationToken)
-        {
-// 에디터/디벨롭 빌드에서 매 플레이·테스트마다 서버로 로그가 나가면 실제 운영 로그가
-// 오염되므로, 이 두 환경에서는 전송을 생략하고 무엇을 보냈을지만 콘솔에 남김.
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (Logger != null) Logger.ZLogInformation($"[ApiManagerBase] Editor/development build; skipping send: {logLabel}");
-            return false;
-#else
-            // 네트워크 자체가 연결되어 있지 않으면 시도해도 무조건 실패하므로, 재시도 루프를
-            // 돌리며 최대 대기 시간을 허비하지 않도록 먼저 걸러냄.
-            if (Application.internetReachability == NetworkReachability.NotReachable)
-            {
-                if (Logger != null) Logger.ZLogWarning($"[ApiManagerBase] Network is not reachable; skipping send: {logLabel}");
-                return false;
-            }
-
-            for (int attempt = 1; attempt <= MaxAttemptCount; attempt++)
-            {
-                using UnityWebRequest request = UnityWebRequest.Get(url);
-                await request.SendWebRequest().WithCancellation(cancellationToken);
-
-                if (request.result == UnityWebRequest.Result.Success)
-                {
-                    if (Logger != null) Logger.ZLogInformation($"[ApiManagerBase] Send succeeded ({attempt}/{MaxAttemptCount}): {logLabel}");
-                    return true;
-                }
-
-                bool isLastAttempt = attempt == MaxAttemptCount;
-
-                if (isLastAttempt)
-                {
-                    if (Logger != null) Logger.ZLogError($"[ApiManagerBase] Send failed ({attempt}/{MaxAttemptCount}, giving up): {logLabel}, {request.error}");
-                }
-                else
-                {
-                    if (Logger != null) Logger.ZLogWarning($"[ApiManagerBase] Send failed ({attempt}/{MaxAttemptCount}), retrying in {RetryDelaySeconds}s: {logLabel}, {request.error}");
-                    await UniTask.Delay(TimeSpan.FromSeconds(RetryDelaySeconds), cancellationToken: cancellationToken);
-                }
-            }
-
-            return false;
-#endif
-        }
-#pragma warning restore CS1998
     }
 }
