@@ -71,6 +71,43 @@ namespace Wonjeong.Utils
         }
 
         /// <summary>
+        /// StreamingAssets에서 JSON 파일을 동기적으로 읽어옴.
+        /// WebGL/Android처럼 직접 파일 접근이 불가능한 URL 기반 플랫폼에서는 동기 I/O 자체가
+        /// 불가능하므로 지원하지 않으며, 호출 시 에러를 로그로 남기고 기본값을 반환함.
+        /// 메인 스레드를 블로킹하므로 비동기 컨텍스트를 쓸 수 없는 초기화 극초반이나
+        /// 에디터 전용 툴링 코드에서만 사용하고, 런타임 로직은 <see cref="LoadAsync{T}"/>를 쓸 것.
+        /// </summary>
+        public static T Load<T>(string fileName) where T : new()
+        {
+            string path = GetPath(fileName);
+
+            if (IsRemotePath(path))
+            {
+                Debug.LogError(ZString.Concat("[JsonLoader] Synchronous load is not supported for remote paths (WebGL/Android): ", path));
+                return new T();
+            }
+
+            try
+            {
+                if (File.Exists(path))
+                {
+                    string json = File.ReadAllText(path);
+
+                    // 내용이 "null"이거나 비어 있으면 FromJson이 null을 반환하므로 폴백 처리함.
+                    return JsonUtility.FromJson<T>(json) ?? new T();
+                }
+
+                Debug.LogWarning(ZString.Concat("[JsonLoader] JSON file not found: ", path));
+            }
+            catch (Exception e)
+            {
+                Debug.LogError(ZString.Concat("[JsonLoader] Failed to parse JSON: ", path, ". Error: ", e.Message));
+            }
+
+            return new T();
+        }
+
+        /// <summary>
         /// UnityWebRequest로 URL 경로의 JSON을 비동기 로드함.
         /// </summary>
         private static async UniTask<T> LoadViaWebRequestAsync<T>(string path, CancellationToken cancellationToken) where T : new()
@@ -112,6 +149,33 @@ namespace Wonjeong.Utils
             catch (Exception e)
             {
                 Debug.LogError(ZString.Concat("[JsonLoader] Failed to save JSON async: ", path, ". Error: ", e.Message));
+            }
+        }
+
+        /// <summary>
+        /// 데이터를 JSON 형식으로 동기적으로 저장함.
+        /// StreamingAssets가 읽기 전용인 플랫폼(WebGL, Android)에서는 저장이 불가능함.
+        /// 메인 스레드를 블로킹하므로 <see cref="SaveAsync{T}"/>를 쓸 수 없는 제한적인
+        /// 상황(에디터 전용 툴링 등)에서만 사용할 것.
+        /// </summary>
+        public static void Save<T>(string fileName, T data)
+        {
+            string path = Path.Combine(Application.streamingAssetsPath, fileName).Replace("\\", "/");
+
+            if (IsRemotePath(path))
+            {
+                Debug.LogError(ZString.Concat("[JsonLoader] Saving to StreamingAssets is not supported on this platform: ", path));
+                return;
+            }
+
+            try
+            {
+                string json = JsonUtility.ToJson(data, true);
+                File.WriteAllText(path, json);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError(ZString.Concat("[JsonLoader] Failed to save JSON: ", path, ". Error: ", e.Message));
             }
         }
     }
