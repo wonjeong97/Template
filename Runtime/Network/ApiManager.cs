@@ -69,6 +69,14 @@ namespace Wonjeong.Network
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 if (_logger != null) _logger.ZLogInformation($"[ApiManager] 에디터/디벨롭 빌드이므로 시작 로그를 전송하지 않음: {message}");
 #else
+                // 네트워크 자체가 연결되어 있지 않으면 시도해도 무조건 실패하므로, 재시도 루프를
+                // 돌리며 30초(3초 x 10회)를 허비하지 않도록 먼저 걸러냄.
+                if (Application.internetReachability == NetworkReachability.NotReachable)
+                {
+                    if (_logger != null) _logger.ZLogWarning($"[ApiManager] 네트워크가 연결되어 있지 않아 시작 로그를 전송하지 않음: {message}");
+                    return;
+                }
+
                 string url = settings.apiUrl + Uri.EscapeDataString(message);
 
                 for (int attempt = 1; attempt <= MaxAttemptCount; attempt++)
