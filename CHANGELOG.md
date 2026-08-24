@@ -4,7 +4,7 @@
 ## [26.8.24] - 2026-08-24
 
 ### Added
-- **프로그램 시작 시 서버 시작 로그 전송(`ApiManager`) 추가:** `Runtime/Network/ApiManager.cs`를 신설하고 `RootLifetimeScope.ConfigureOptionalComponents`에 씬 존재 기반으로 자동 등록함(기존 선택 매니저와 동일한 `RegisterIfPresentInScene` 패턴). `Settings.json`에 `apiUrl` 필드를 추가했으며, 이 값은 `idx_content_device`/`uid` 등 콘텐츠별 쿼리 파라미터가 서버에서 이미 발급되어 `message=` 까지 포함된 URL 형태이므로, 클라이언트는 상태 메시지("프로그램 시작 됨"/"프로그램 재시작 됨")만 이어붙여 GET 요청을 보냄. 날짜·시간은 서버가 수신 시점에 자동 기록하므로 클라이언트에서는 보내지 않음. 같은 날 재실행 시 "재시작"으로 구분하기 위해 마지막 전송 성공 날짜를 `PlayerPrefs`에 저장(전송 실패 시에는 갱신하지 않아, 다음 재실행에도 여전히 "시작"으로 기록됨). `apiUrl`이 비어 있으면 아무 동작도 하지 않으며, 전송 실패는 로그만 남기고 재시도 없이 진행하여 전시/키오스크 환경에서 네트워크 장애로 앱 실행이 막히는 일이 없도록 함.
+- **프로그램 시작 시 서버 시작 로그 전송(`ApiManager`) 추가:** `Runtime/Network/ApiManager.cs`를 신설하고 `RootLifetimeScope.ConfigureOptionalComponents`에 씬 존재 기반으로 자동 등록함(기존 선택 매니저와 동일한 `RegisterIfPresentInScene` 패턴). `Settings.json`에 `apiUrl` 필드를 추가했으며, 이 값은 `idx_content_device`/`uid` 등 콘텐츠별 쿼리 파라미터가 서버에서 이미 발급되어 `message=` 까지 포함된 URL 형태이므로, 클라이언트는 상태 메시지("프로그램 시작 됨"/"프로그램 재시작 됨")만 이어붙여 GET 요청을 보냄. 날짜·시간은 서버가 수신 시점에 자동 기록하므로 클라이언트에서는 보내지 않음. 같은 날 재실행 시 "재시작"으로 구분하기 위해 마지막 전송 성공 날짜를 `PlayerPrefs`에 저장(전송 실패 시에는 갱신하지 않아, 다음 재실행에도 여전히 "시작"으로 기록됨). `apiUrl`이 비어 있으면 아무 동작도 하지 않으며, 전송 실패는 로그만 남기고 재시도 없이 진행하여 전시/키오스크 환경에서 네트워크 장애로 앱 실행이 막히는 일이 없도록 함. 에디터/디벨롭 빌드에서는 매 플레이·테스트마다 서버로 로그가 나가 실제 운영 로그를 오염시키지 않도록 `#if UNITY_EDITOR || DEVELOPMENT_BUILD`로 실제 전송을 생략하고, 대신 무엇을 보냈을지를 동일한 ZLogger 패턴으로 콘솔에 남김.
 
 ## [26.8.21] - 2026-08-21
 

@@ -56,6 +56,12 @@ namespace Wonjeong.Network
                 string today = DateTime.Now.ToString("yyyy-MM-dd");
                 bool alreadyLoggedToday = PlayerPrefs.GetString(LastStartupLogDateKey, string.Empty) == today;
                 string message = alreadyLoggedToday ? "프로그램 재시작 됨" : "프로그램 시작 됨";
+
+// 에디터/디벨롭 빌드에서 매 플레이·테스트 빌드마다 서버로 로그가 나가면 실제 운영 로그가
+// 오염되므로, 이 두 환경에서는 전송을 생략하고 무엇을 보냈을지만 콘솔에 남김.
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                if (_logger != null) _logger.ZLogInformation($"[ApiManager] 에디터/디벨롭 빌드이므로 시작 로그를 전송하지 않음: {message}");
+#else
                 string url = settings.apiUrl + Uri.EscapeDataString(message);
 
                 using UnityWebRequest request = UnityWebRequest.Get(url);
@@ -63,7 +69,7 @@ namespace Wonjeong.Network
 
                 if (request.result == UnityWebRequest.Result.Success)
                 {
-                    if (_logger != null) _logger.ZLogInformation($"[ApiManager] 시작 로그 전송 성공: {url}");
+                    if (_logger != null) _logger.ZLogInformation($"[ApiManager] 시작 로그 전송 성공: {message}");
 
                     // 같은 날 재실행 시 "재시작"으로 구분되도록, 전송이 실제로 성공했을 때만 날짜를 갱신함.
                     PlayerPrefs.SetString(LastStartupLogDateKey, today);
@@ -71,8 +77,9 @@ namespace Wonjeong.Network
                 }
                 else
                 {
-                    if (_logger != null) _logger.ZLogError($"[ApiManager] 시작 로그 전송 실패: {url}, {request.error}");
+                    if (_logger != null) _logger.ZLogError($"[ApiManager] 시작 로그 전송 실패: {message}, {request.error}");
                 }
+#endif
             }
             catch (OperationCanceledException)
             {
