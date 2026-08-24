@@ -109,5 +109,13 @@ namespace Wonjeong.Data
         public CloseSetting closeSetting;
         public FontSetting[] fonts;
         public SoundSetting[] sounds;
+
+        /// <summary>
+        /// 프로그램 시작 로그를 전송할 서버 API URL.
+        /// idx_content_device, uid 등 쿼리 파라미터가 서버 측에서 콘텐츠별로 이미 발급되어
+        /// message= 까지 포함된 형태로 전달되므로, 여기에는 그 URL 전체를 그대로 저장하고
+        /// ApiManager가 message 값만 이어붙여 GET 요청을 보냄. 비어 있으면 전송하지 않음.
+        /// </summary>
+        public string apiUrl;
     }
 }

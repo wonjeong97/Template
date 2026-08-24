@@ -1,6 +1,17 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.8.24] - 2026-08-24
+
+### Added
+- **프로그램 시작 시 서버 시작 로그 전송(`ApiManagerBase`) 추가:** `Runtime/Network/ApiManagerBase.cs`를 신설하고 `RootLifetimeScope.ConfigureOptionalComponents`에 씬 존재 기반으로 자동 등록함(기존 선택 매니저와 동일한 `RegisterIfPresentInScene` 패턴, 파생 클래스도 다형적으로 탐지됨). `Settings.json`에 `apiUrl` 필드를 추가했으며, 이 값은 `idx_content_device`/`uid` 등 콘텐츠별 쿼리 파라미터가 서버에서 이미 발급되어 `message=` 까지 포함된 URL 형태이므로, 클라이언트는 상태 메시지("Program started"/"Program restarted")만 이어붙여 GET 요청을 보냄. 날짜·시간은 서버가 수신 시점에 자동 기록하므로 클라이언트에서는 보내지 않음. 같은 날 재실행 시 "재시작"으로 구분하기 위해 마지막 전송 성공 날짜를 `PlayerPrefs`에 저장(전송 실패 시에는 갱신하지 않아, 다음 재실행에도 여전히 "시작"으로 기록됨). `apiUrl`이 비어 있으면 아무 동작도 하지 않으며, `Application.internetReachability`로 네트워크 자체가 연결되어 있지 않은 경우(전시장에 인터넷이 아예 없는 콘텐츠) 요청을 시도하지 않고 즉시 포기해 30초(3초 x 10회)를 허비하지 않도록 함. 네트워크는 연결돼 있으나 전송이 실패하는 경우에는 3초 간격으로 최대 10회까지 재시도하고 그래도 실패하면 로그만 남기고 포기하여 전시/키오스크 환경에서 네트워크 장애로 앱 실행이 막히는 일이 없도록 함. 에디터/디벨롭 빌드에서는 매 플레이·테스트마다 서버로 로그가 나가 실제 운영 로그를 오염시키지 않도록 `#if UNITY_EDITOR || DEVELOPMENT_BUILD`로 실제 전송을 생략하고, 대신 무엇을 보냈을지를 동일한 ZLogger 패턴으로 콘솔에 남김. 콘텐츠마다 시작 로그 외에 서로 다른 API를 추가로 호출해야 하는 경우가 있어, 네트워크 확인·재시도·에디터 스킵 정책을 `protected UniTask<bool> SendGetRequestWithRetryAsync(url, logLabel, ct)`로 분리해 `ApiManagerBase`를 상속한 프로젝트별 클래스에서 재사용할 수 있게 함(`Start()`도 virtual이라 override 후 `base.Start()`로 시작 로그를 유지한 채 추가 호출을 덧붙일 수 있음).
+
+### Changed
+- **런타임 로그 메시지를 전부 영어로 통일:** `ApiManagerBase`, `GameManagerBase`, `GameCloser`, `UIManager`, `SoundManager`, `FadeManager`의 `ZLog*`/`Debug.Log*` 출력 문자열을 영어로 변경함. 템플릿은 여러 콘텐츠/클라이언트가 소비하므로 콘솔·파일 로그가 국제적으로 읽힐 수 있어야 하기 때문. 코드 주석(XML 문서 포함)은 기존과 동일하게 한국어를 유지함.
+
+### Fixed
+- **`ApiManagerBase` 코드 리뷰 반영:** (1) 재시도 대기(`UniTask.Delay`)가 `Time.timeScale`에 종속돼 있어 일시정지 중 재시도 루프가 무한정 멈추던 문제를 `DelayType.UnscaledDeltaTime`으로 수정(FadeManager에서 겪었던 동일한 종류의 소프트락). (2) `FadeManager`/`SoundManager`/`UIManager`/`VideoManager`와 달리 파괴 방지 로직이 없어 씬 리로드마다 시작 로그가 실제로 중복 전송되던 문제를 `Awake()`의 `DontDestroyOnLoad`로 수정. (3) `AppSettingsProvider` 미주입 시 예외가 완전히 무음으로 삼켜지던 문제를 다른 매니저와 동일한 null 체크·폴백 로그 패턴으로 수정. (4) `#pragma warning disable/restore CS1998`이 메서드 전체를 감싸 향후 다른 실수까지 가려질 수 있던 범위를 에디터/디벨롭 빌드 컴파일 변형에만 한정. (5) 재사용 가능한 재시도 로직(`SendGetRequestWithRetryAsync`)을 시작 로그 기능과 분리해 `Runtime/Network/ApiRetryUtil.cs`(정적 유틸리티)로 추출 — 시작 로그를 원치 않는 소비자도 `ApiManagerBase`를 상속하지 않고 바로 호출 가능. (6) `GameManagerBase<T>`와의 일관성을 위해 `ApiManagerBase`를 `abstract`로 변경(프로젝트별 파생 클래스를 씬에 배치하는 것이 정식 사용법). 이에 따라 `Template_Dev`에도 `GameManager`와 동일한 패턴으로 빈 파생 클래스 `ApiManager : ApiManagerBase`를 추가하고, 씬에서 구체 클래스가 없는 `ApiManagerBase`를 직접 참조하던 컴포넌트를 새 클래스로 교체함.
+
 ## [26.8.21] - 2026-08-21
 
 ### Added

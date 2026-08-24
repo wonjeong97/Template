@@ -81,11 +81,11 @@ namespace Wonjeong.UI
             {
                 if (_logger != null)
                 {
-                    _logger.ZLogError($"[UIManager] AppSettingsProvider가 주입되지 않았습니다. LifetimeScope에 RegisterComponentInHierarchy<UIManager>()를 등록했는지 확인하세요.");
+                    _logger.ZLogError($"[UIManager] AppSettingsProvider was not injected. Check that RegisterComponentInHierarchy<UIManager>() is registered on the LifetimeScope.");
                 }
                 else
                 {
-                    Debug.LogError("[UIManager] 의존성이 주입되지 않았습니다. LifetimeScope에 RegisterComponentInHierarchy<UIManager>()를 등록했는지 확인하세요.");
+                    Debug.LogError("[UIManager] Dependencies were not injected. Check that RegisterComponentInHierarchy<UIManager>() is registered on the LifetimeScope.");
                 }
                 return;
             }
