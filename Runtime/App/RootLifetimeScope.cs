@@ -61,7 +61,7 @@ namespace Wonjeong.App
             RegisterIfPresentInScene<SoundManager>(builder);
             RegisterIfPresentInScene<VideoManager>(builder);
             RegisterIfPresentInScene<ArduinoManager>(builder);
-            RegisterIfPresentInScene<ApiManager>(builder);
+            RegisterIfPresentInScene<ApiManagerBase>(builder);
         }
 
         /// <summary>
