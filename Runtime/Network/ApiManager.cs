@@ -15,8 +15,9 @@ namespace Wonjeong.Network
     /// 수신 시점에 자동으로 기록되므로 클라이언트는 상태 메시지만 전송함.
     /// Settings.json의 apiUrl은 idx_content_device, uid 등 콘텐츠별 쿼리 파라미터가
     /// 이미 포함된 형태(message= 까지)로 서버에서 발급되므로, 여기서는 message 값만
-    /// 이어붙여 GET 요청을 보냄. 전시/키오스크 환경에서 네트워크 장애로 앱 실행이
-    /// 막히면 안 되므로 실패해도 로그만 남기고 재시도 없이 진행함.
+    /// 이어붙여 GET 요청을 보냄. 실패 시 3초 간격으로 최대 10회까지 재시도하며,
+    /// 그래도 실패하면 로그만 남기고 포기함(전시/키오스크 환경에서 네트워크 장애로
+    /// 앱 실행 자체가 막히면 안 되므로).
     /// </summary>
     public class ApiManager : MonoBehaviour
     {
@@ -25,6 +26,12 @@ namespace Wonjeong.Network
         /// 기기에 저장해두는 PlayerPrefs 키. 같은 날 재실행되면 "재시작"으로 구분함.
         /// </summary>
         private const string LastStartupLogDateKey = "ApiManager_LastStartupLogDate";
+
+        /// <summary>네트워크 실패 시 최대 재시도 횟수(최초 시도 포함).</summary>
+        private const int MaxAttemptCount = 10;
+
+        /// <summary>재시도 사이의 대기 시간(초).</summary>
+        private const float RetryDelaySeconds = 3f;
 
         private ILogger<ApiManager> _logger;
         private AppSettingsProvider _settingsProvider;
@@ -64,20 +71,32 @@ namespace Wonjeong.Network
 #else
                 string url = settings.apiUrl + Uri.EscapeDataString(message);
 
-                using UnityWebRequest request = UnityWebRequest.Get(url);
-                await request.SendWebRequest().WithCancellation(cancellationToken);
-
-                if (request.result == UnityWebRequest.Result.Success)
+                for (int attempt = 1; attempt <= MaxAttemptCount; attempt++)
                 {
-                    if (_logger != null) _logger.ZLogInformation($"[ApiManager] 시작 로그 전송 성공: {message}");
+                    using UnityWebRequest request = UnityWebRequest.Get(url);
+                    await request.SendWebRequest().WithCancellation(cancellationToken);
 
-                    // 같은 날 재실행 시 "재시작"으로 구분되도록, 전송이 실제로 성공했을 때만 날짜를 갱신함.
-                    PlayerPrefs.SetString(LastStartupLogDateKey, today);
-                    PlayerPrefs.Save();
-                }
-                else
-                {
-                    if (_logger != null) _logger.ZLogError($"[ApiManager] 시작 로그 전송 실패: {message}, {request.error}");
+                    if (request.result == UnityWebRequest.Result.Success)
+                    {
+                        if (_logger != null) _logger.ZLogInformation($"[ApiManager] 시작 로그 전송 성공({attempt}/{MaxAttemptCount}): {message}");
+
+                        // 같은 날 재실행 시 "재시작"으로 구분되도록, 전송이 실제로 성공했을 때만 날짜를 갱신함.
+                        PlayerPrefs.SetString(LastStartupLogDateKey, today);
+                        PlayerPrefs.Save();
+                        break;
+                    }
+
+                    bool isLastAttempt = attempt == MaxAttemptCount;
+
+                    if (isLastAttempt)
+                    {
+                        if (_logger != null) _logger.ZLogError($"[ApiManager] 시작 로그 전송 실패({attempt}/{MaxAttemptCount}, 재시도 중단): {message}, {request.error}");
+                    }
+                    else
+                    {
+                        if (_logger != null) _logger.ZLogWarning($"[ApiManager] 시작 로그 전송 실패({attempt}/{MaxAttemptCount}), {RetryDelaySeconds}초 후 재시도: {message}, {request.error}");
+                        await UniTask.Delay(TimeSpan.FromSeconds(RetryDelaySeconds), cancellationToken: cancellationToken);
+                    }
                 }
 #endif
             }
