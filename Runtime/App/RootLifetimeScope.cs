@@ -7,6 +7,7 @@ using VContainer;
 using VContainer.Unity;
 using Wonjeong.Data;
 using Wonjeong.Hardware;
+using Wonjeong.Network;
 using Wonjeong.UI;
 using Wonjeong.Utils;
 using ZLogger;
@@ -60,6 +61,7 @@ namespace Wonjeong.App
             RegisterIfPresentInScene<SoundManager>(builder);
             RegisterIfPresentInScene<VideoManager>(builder);
             RegisterIfPresentInScene<ArduinoManager>(builder);
+            RegisterIfPresentInScene<ApiManager>(builder);
         }
 
         /// <summary>
