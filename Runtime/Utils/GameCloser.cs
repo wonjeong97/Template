@@ -76,11 +76,11 @@ namespace Wonjeong.Utils
             {
                 if (_logger != null)
                 {
-                    _logger.ZLogError($"[GameCloser] AppSettingsProvider가 주입되지 않았습니다. LifetimeScope에 RegisterComponentInHierarchy<GameCloser>()를 등록했는지 확인하세요.");
+                    _logger.ZLogError($"[GameCloser] AppSettingsProvider was not injected. Check that RegisterComponentInHierarchy<GameCloser>() is registered on the LifetimeScope.");
                 }
                 else
                 {
-                    Debug.LogError("[GameCloser] 의존성이 주입되지 않았습니다. LifetimeScope에 RegisterComponentInHierarchy<GameCloser>()를 등록했는지 확인하세요.");
+                    Debug.LogError("[GameCloser] Dependencies were not injected. Check that RegisterComponentInHierarchy<GameCloser>() is registered on the LifetimeScope.");
                 }
                 return;
             }

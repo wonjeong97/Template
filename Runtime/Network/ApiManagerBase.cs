@@ -62,16 +62,16 @@ namespace Wonjeong.Network
 
                 if (settings == null || string.IsNullOrEmpty(settings.apiUrl))
                 {
-                    if (Logger != null) Logger.ZLogInformation($"[ApiManagerBase] apiUrl이 설정되지 않아 시작 로그를 전송하지 않음.");
+                    if (Logger != null) Logger.ZLogInformation($"[ApiManagerBase] apiUrl is not set; skipping startup log.");
                     return;
                 }
 
                 string today = DateTime.Now.ToString("yyyy-MM-dd");
                 bool alreadyLoggedToday = PlayerPrefs.GetString(LastStartupLogDateKey, string.Empty) == today;
-                string message = alreadyLoggedToday ? "프로그램 재시작 됨" : "프로그램 시작 됨";
+                string message = alreadyLoggedToday ? "Program restarted" : "Program started";
                 string url = settings.apiUrl + Uri.EscapeDataString(message);
 
-                bool success = await SendGetRequestWithRetryAsync(url, $"시작 로그({message})", cancellationToken);
+                bool success = await SendGetRequestWithRetryAsync(url, $"startup log ({message})", cancellationToken);
 
                 if (success)
                 {
@@ -86,7 +86,7 @@ namespace Wonjeong.Network
             }
             catch (Exception e)
             {
-                if (Logger != null) Logger.ZLogError($"[ApiManagerBase] 시작 로그 전송 중 예외 발생: {e.Message}");
+                if (Logger != null) Logger.ZLogError($"[ApiManagerBase] Exception while sending startup log: {e.Message}");
             }
         }
 
@@ -109,14 +109,14 @@ namespace Wonjeong.Network
 // 에디터/디벨롭 빌드에서 매 플레이·테스트마다 서버로 로그가 나가면 실제 운영 로그가
 // 오염되므로, 이 두 환경에서는 전송을 생략하고 무엇을 보냈을지만 콘솔에 남김.
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (Logger != null) Logger.ZLogInformation($"[ApiManagerBase] 에디터/디벨롭 빌드이므로 전송하지 않음: {logLabel}");
+            if (Logger != null) Logger.ZLogInformation($"[ApiManagerBase] Editor/development build; skipping send: {logLabel}");
             return false;
 #else
             // 네트워크 자체가 연결되어 있지 않으면 시도해도 무조건 실패하므로, 재시도 루프를
             // 돌리며 최대 대기 시간을 허비하지 않도록 먼저 걸러냄.
             if (Application.internetReachability == NetworkReachability.NotReachable)
             {
-                if (Logger != null) Logger.ZLogWarning($"[ApiManagerBase] 네트워크가 연결되어 있지 않아 전송하지 않음: {logLabel}");
+                if (Logger != null) Logger.ZLogWarning($"[ApiManagerBase] Network is not reachable; skipping send: {logLabel}");
                 return false;
             }
 
@@ -127,7 +127,7 @@ namespace Wonjeong.Network
 
                 if (request.result == UnityWebRequest.Result.Success)
                 {
-                    if (Logger != null) Logger.ZLogInformation($"[ApiManagerBase] 전송 성공({attempt}/{MaxAttemptCount}): {logLabel}");
+                    if (Logger != null) Logger.ZLogInformation($"[ApiManagerBase] Send succeeded ({attempt}/{MaxAttemptCount}): {logLabel}");
                     return true;
                 }
 
@@ -135,11 +135,11 @@ namespace Wonjeong.Network
 
                 if (isLastAttempt)
                 {
-                    if (Logger != null) Logger.ZLogError($"[ApiManagerBase] 전송 실패({attempt}/{MaxAttemptCount}, 재시도 중단): {logLabel}, {request.error}");
+                    if (Logger != null) Logger.ZLogError($"[ApiManagerBase] Send failed ({attempt}/{MaxAttemptCount}, giving up): {logLabel}, {request.error}");
                 }
                 else
                 {
-                    if (Logger != null) Logger.ZLogWarning($"[ApiManagerBase] 전송 실패({attempt}/{MaxAttemptCount}), {RetryDelaySeconds}초 후 재시도: {logLabel}, {request.error}");
+                    if (Logger != null) Logger.ZLogWarning($"[ApiManagerBase] Send failed ({attempt}/{MaxAttemptCount}), retrying in {RetryDelaySeconds}s: {logLabel}, {request.error}");
                     await UniTask.Delay(TimeSpan.FromSeconds(RetryDelaySeconds), cancellationToken: cancellationToken);
                 }
             }

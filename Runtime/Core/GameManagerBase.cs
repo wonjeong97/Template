@@ -149,11 +149,11 @@ namespace Wonjeong.Core
             {
                 if (_logger != null)
                 {
-                    _logger.ZLogError($"[GameManagerBase] AppSettingsProvider가 주입되지 않았습니다. LifetimeScope에 RegisterComponentInHierarchy를 등록했는지 확인하세요.");
+                    _logger.ZLogError($"[GameManagerBase] AppSettingsProvider was not injected. Check that RegisterComponentInHierarchy is registered on the LifetimeScope.");
                 }
                 else
                 {
-                    Debug.LogError("[GameManagerBase] 의존성이 주입되지 않았습니다. LifetimeScope에 RegisterComponentInHierarchy를 등록했는지 확인하세요.");
+                    Debug.LogError("[GameManagerBase] Dependencies were not injected. Check that RegisterComponentInHierarchy is registered on the LifetimeScope.");
                 }
                 return;
             }

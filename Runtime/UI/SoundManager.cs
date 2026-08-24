@@ -69,11 +69,11 @@ namespace Wonjeong.UI
             {
                 if (_logger != null)
                 {
-                    _logger.ZLogError($"[SoundManager] AppSettingsProvider가 주입되지 않았습니다. LifetimeScope에 RegisterComponentInHierarchy<SoundManager>()를 등록했는지 확인하세요.");
+                    _logger.ZLogError($"[SoundManager] AppSettingsProvider was not injected. Check that RegisterComponentInHierarchy<SoundManager>() is registered on the LifetimeScope.");
                 }
                 else
                 {
-                    Debug.LogError("[SoundManager] 의존성이 주입되지 않았습니다. LifetimeScope에 RegisterComponentInHierarchy<SoundManager>()를 등록했는지 확인하세요.");
+                    Debug.LogError("[SoundManager] Dependencies were not injected. Check that RegisterComponentInHierarchy<SoundManager>() is registered on the LifetimeScope.");
                 }
                 return;
             }

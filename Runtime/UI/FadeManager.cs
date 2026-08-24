@@ -92,7 +92,7 @@ namespace Wonjeong.UI
             {
                 if (_logger != null)
                 {
-                    _logger.ZLogWarning($"[FadeManager] 이미 페이드가 진행 중이어서 FadeOut 요청을 무시했습니다.");
+                    _logger.ZLogWarning($"[FadeManager] Ignored FadeOut request because a fade is already in progress.");
                 }
                 return;
             }
@@ -120,7 +120,7 @@ namespace Wonjeong.UI
             {
                 if (_logger != null)
                 {
-                    _logger.ZLogWarning($"[FadeManager] 이미 페이드가 진행 중이어서 FadeIn 요청을 무시했습니다. 화면이 어두운 상태로 남을 수 있습니다.");
+                    _logger.ZLogWarning($"[FadeManager] Ignored FadeIn request because a fade is already in progress. The screen may remain dark.");
                 }
                 return;
             }
