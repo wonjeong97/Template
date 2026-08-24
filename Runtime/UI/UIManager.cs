@@ -13,6 +13,7 @@ using UnityEngine.UI;
 using UnityEngine.Video;
 using VContainer;
 using Wonjeong.Data;
+using Wonjeong.Utils;
 using ZLogger;
 
 namespace Wonjeong.UI
@@ -45,17 +46,23 @@ namespace Wonjeong.UI
         private ILogger<UIManager> _logger;
         private VideoManager _videoManager;
         private AppSettingsProvider _settingsProvider;
+        private SoundManager _soundManager;
 
         /// <summary>
         /// VContainer 의존성 주입.
         /// 로거, 비디오 매니저 및 설정 제공자 할당.
+        /// SoundManager는 씬에 없을 수 있는 선택 매니저이므로 IObjectResolver를 통해
+        /// ResolveOrDefault로 조회함 — 등록되어 있지 않으면 예외 없이 null이 되고,
+        /// 버튼 클릭 시 사운드 재생만 건너뜀(<see cref="OnButtonClicked"/> 참고).
         /// </summary>
         [Inject]
-        public void Construct(ILogger<UIManager> logger, VideoManager videoManager, AppSettingsProvider settingsProvider)
+        public void Construct(ILogger<UIManager> logger, VideoManager videoManager, AppSettingsProvider settingsProvider,
+            IObjectResolver resolver)
         {
             _logger = logger;
             _videoManager = videoManager;
             _settingsProvider = settingsProvider;
+            _soundManager = resolver.ResolveOrDefault<SoundManager>();
         }
 
         /// <summary>
@@ -331,7 +338,7 @@ namespace Wonjeong.UI
 
             ApplyButtonBackground(target, setting.buttonBackgroundImage);
             ApplyButtonText(target, setting.buttonText);
-            ConfigureButtonListener(target, setting.name);
+            ConfigureButtonListener(target, setting.name, setting.buttonSound);
         }
 
         /// <summary>
@@ -369,7 +376,7 @@ namespace Wonjeong.UI
         /// <summary>
         /// 버튼의 클릭 이벤트 리스너를 초기화하고 재설정함.
         /// </summary>
-        private void ConfigureButtonListener(GameObject target, string buttonName)
+        private void ConfigureButtonListener(GameObject target, string buttonName, string buttonSound)
         {
             if (!target.TryGetComponent(out Button btn))
             {
@@ -380,7 +387,7 @@ namespace Wonjeong.UI
 
             if (!_buttonActions.TryGetValue(buttonName, out UnityEngine.Events.UnityAction action))
             {
-                action = () => OnButtonClicked(buttonName);
+                action = () => OnButtonClicked(buttonName, buttonSound);
                 _buttonActions.Add(buttonName, action);
             }
 
@@ -389,10 +396,17 @@ namespace Wonjeong.UI
 
         /// <summary>
         /// 버튼 클릭 시 호출되는 공통 콜백 로직.
+        /// buttonSound가 설정돼 있고 SoundManager가 씬에 존재하면 해당 키의 효과음을 재생함.
+        /// SoundManager는 선택 매니저라 씬에 없을 수 있으므로 null 방어함.
         /// </summary>
-        private void OnButtonClicked(string buttonName)
+        private void OnButtonClicked(string buttonName, string buttonSound)
         {
             if (_logger != null) _logger.ZLogInformation($"[UIManager] Button Clicked: {buttonName}");
+
+            if (!string.IsNullOrEmpty(buttonSound) && _soundManager)
+            {
+                _soundManager.PlaySFX(buttonSound);
+            }
         }
 
         /// <summary>
@@ -564,7 +578,7 @@ namespace Wonjeong.UI
                 }
                 else
                 {
-                    Destroy(texture);
+                    DestroyUtil.SafeDestroy(texture);
                     if (_logger != null) _logger.ZLogError($"[UIManager] Failed to decode image data: {path}");
                     return null;
                 }
@@ -632,8 +646,8 @@ namespace Wonjeong.UI
             {
                 if (sprite)
                 {
-                    if (sprite.texture) Destroy(sprite.texture);
-                    Destroy(sprite);
+                    DestroyUtil.SafeDestroy(sprite.texture);
+                    DestroyUtil.SafeDestroy(sprite);
                 }
             }
 

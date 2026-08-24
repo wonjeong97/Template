@@ -8,6 +8,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
 using VContainer;
+using Wonjeong.Utils;
 using ZLogger;
 
 namespace Wonjeong.UI
@@ -72,7 +73,7 @@ namespace Wonjeong.UI
             {
                 _activeRenderTextures.Remove(vp.targetTexture);
                 vp.targetTexture.Release();
-                Destroy(vp.targetTexture);
+                DestroyUtil.SafeDestroy(vp.targetTexture);
             }
             
             int rtW = Mathf.Max(2, size.x);
@@ -212,7 +213,7 @@ namespace Wonjeong.UI
                 if (rt)
                 {
                     rt.Release();
-                    Destroy(rt);
+                    DestroyUtil.SafeDestroy(rt);
                     released++;
                 }
 
@@ -248,7 +249,7 @@ namespace Wonjeong.UI
                 if (rt)
                 {
                     rt.Release();
-                    Destroy(rt);
+                    DestroyUtil.SafeDestroy(rt);
                 }
             }
 

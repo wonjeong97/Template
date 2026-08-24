@@ -5,14 +5,18 @@
         "Wonjeong.Template",
         "UniTask",
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "UnityEditor.TestRunner",
+        "ZLogger.Unity"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": true,
     "precompiledReferences": [
-        "nunit.framework.dll"
+        "nunit.framework.dll",
+        "Microsoft.Extensions.Logging.Abstractions.dll",
+        "Microsoft.Extensions.Logging.dll",
+        "ZLogger.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [

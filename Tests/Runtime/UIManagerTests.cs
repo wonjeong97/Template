@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Cysharp.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 using Wonjeong.Data;
 using Wonjeong.UI;
+using ZLogger.Unity;
 
 namespace Wonjeong.Tests
 {
@@ -150,7 +152,7 @@ namespace Wonjeong.Tests
         {
             // 이 테스트는 프레임을 넘기므로 Start()가 실행됨. 주입 없이 생성한 인스턴스이므로
             // 의존성 누락 안내 로그가 1회 출력되는 것이 정상 동작임.
-            LogAssert.Expect(LogType.Error, new Regex("의존성이 주입되지 않았습니다"));
+            LogAssert.Expect(LogType.Error, new Regex("Dependencies were not injected"));
 
             _uiManager.ClearSpriteCache();
             _uiManager.ClearSpriteCache();
@@ -173,6 +175,52 @@ namespace Wonjeong.Tests
             await UniTask.Yield();
             await UniTask.Yield();
         });
+
+        /// <summary>
+        /// SetButton으로 등록한 buttonSound가 클릭 시 SoundManager.PlaySFX로 실제 전달되는지 검증.
+        /// PlaySFX는 키를 찾으면 비동기 로드를 시작하는데, 존재하지 않는 clipPath를 넣어 로드가
+        /// 실패하도록 만들고 그 실패 로그(클립 경로 포함)를 관찰함으로써 클릭→SoundManager 연결을
+        /// 검증함. 로컬 파일 미존재는 UnityWebRequest가 프레임 진행 없이 동기적으로 실패를
+        /// 확정하므로 프레임을 넘기지 않아도 됨 — 일부러 프레임을 넘기지 않아 이 테스트가
+        /// _uiManager(DI 없이 생성됨)의 Start()를 건드리지 않도록 함(다른 로그와 순서 충돌 방지).
+        /// </summary>
+        [Test]
+        public void 버튼_클릭시_buttonSound가_SoundManager로_전달된다()
+        {
+            GameObject soundGo = new GameObject("SoundManagerForButtonTest");
+            _spawned.Add(soundGo);
+            SoundManager soundManager = soundGo.AddComponent<SoundManager>();
+
+            SetSoundManagerLogger(soundManager);
+            SetSoundManager(_uiManager, soundManager);
+            SetSoundSetting(soundManager, "click", "sounds/UIManagerTests_존재하지않는파일.wav");
+
+            GameObject buttonGo = new GameObject("SoundButton");
+            _spawned.Add(buttonGo);
+
+            ButtonSetting setting = new ButtonSetting { name = "SoundButton", buttonSound = "click" };
+            _uiManager.SetButton(buttonGo, setting);
+
+            LogAssert.Expect(LogType.Error, new Regex("Failed to load sound.*UIManagerTests_존재하지않는파일"));
+
+            buttonGo.GetComponent<Button>().onClick.Invoke();
+        }
+
+        /// <summary>
+        /// SoundManager가 씬에 없어(주입되지 않아) null인 상태로 buttonSound가 설정된 버튼을
+        /// 클릭해도 예외가 발생하면 안 됨.
+        /// </summary>
+        [Test]
+        public void SoundManager가_없어도_buttonSound_클릭시_예외가_발생하지_않는다()
+        {
+            GameObject buttonGo = new GameObject("SoundButtonNoManager");
+            _spawned.Add(buttonGo);
+
+            ButtonSetting setting = new ButtonSetting { name = "SoundButtonNoManager", buttonSound = "click" };
+            _uiManager.SetButton(buttonGo, setting);
+
+            Assert.DoesNotThrow(() => buttonGo.GetComponent<Button>().onClick.Invoke());
+        }
 
         // --- 헬퍼 ---
 
@@ -227,6 +275,34 @@ namespace Wonjeong.Tests
         private int GetPendingKeyCount()
         {
             return GetPendingKeys().Count;
+        }
+
+        private static void SetSoundManager(UIManager uiManager, SoundManager soundManager)
+        {
+            typeof(UIManager).GetField("_soundManager", Nonpublic).SetValue(uiManager, soundManager);
+        }
+
+        private static void SetSoundSetting(SoundManager soundManager, string key, string clipPath)
+        {
+            FieldInfo field = typeof(SoundManager).GetField("_soundSettings", Nonpublic);
+            var settings = (Dictionary<string, SoundSetting>)field.GetValue(soundManager);
+            settings[key] = new SoundSetting { key = key, clipPath = clipPath, volume = 1f };
+        }
+
+        /// <summary>
+        /// SoundManager의 실패 로그가 실제로 콘솔에 출력되도록, DI 없이 생성된 인스턴스에
+        /// ZLogger 기반 로거를 직접 주입함(RootLifetimeScope.ConfigureLogging의 최소 재현).
+        /// </summary>
+        private static void SetSoundManagerLogger(SoundManager soundManager)
+        {
+            ILoggerFactory factory = LoggerFactory.Create(builder =>
+            {
+                builder.SetMinimumLevel(LogLevel.Debug);
+                builder.AddZLoggerUnityDebug();
+            });
+
+            ILogger<SoundManager> logger = factory.CreateLogger<SoundManager>();
+            typeof(SoundManager).GetField("_logger", Nonpublic).SetValue(soundManager, logger);
         }
     }
 }

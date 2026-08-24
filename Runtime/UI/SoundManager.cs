@@ -11,6 +11,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using VContainer;
 using Wonjeong.Data;
+using Wonjeong.Utils;
 using ZLogger;
 
 namespace Wonjeong.UI
@@ -192,7 +193,7 @@ namespace Wonjeong.UI
         {
             foreach (AudioClip clip in _clipCache.Values)
             {
-                if (clip) Destroy(clip);
+                DestroyUtil.SafeDestroy(clip);
             }
 
             _clipCache.Clear();
@@ -331,14 +332,11 @@ namespace Wonjeong.UI
             {
                 try
                 {
+                    // ToUniTask는 www.result가 Success가 아니면 결과를 반환하는 대신
+                    // UnityWebRequestException을 던짐. 그 결과 아래의 www.result 체크는
+                    // 사실상 도달 불가능한 코드였으므로, 실패를 예외로 잡아 동일한 방식으로
+                    // 로그를 남기도록 함.
                     await www.SendWebRequest().ToUniTask(cancellationToken: cancellationToken);
-
-                    if (www.result != UnityWebRequest.Result.Success)
-                    {
-                        if (_logger != null)
-                            _logger.ZLogError($"[SoundManager] Failed to load sound: {path} / {www.error}");
-                        return null;
-                    }
 
                     AudioClip clip = DownloadHandlerAudioClip.GetContent(www);
 
@@ -359,6 +357,11 @@ namespace Wonjeong.UI
                 }
                 catch (OperationCanceledException)
                 {
+                    return null;
+                }
+                catch (UnityWebRequestException e)
+                {
+                    if (_logger != null) _logger.ZLogError($"[SoundManager] Failed to load sound: {path} / {e.Error}");
                     return null;
                 }
             }
