@@ -262,6 +262,9 @@ public sealed class MainForm : Form
         _overrideRemoveButton = new Button { Text = "선택한 날짜 삭제", AutoSize = true };
         _overrideRemoveButton.Click += (_, _) =>
         {
+            // 선택된 행이 없으면 지운 것이 없으므로 변경 표시(*)를 붙이지 않음.
+            if (_overridesGrid.SelectedRows.Count == 0) return;
+
             foreach (DataGridViewRow row in _overridesGrid.SelectedRows.Cast<DataGridViewRow>().ToList())
             {
                 _overridesGrid.Rows.Remove(row);

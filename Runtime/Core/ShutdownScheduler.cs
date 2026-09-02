@@ -10,6 +10,10 @@ using Wonjeong.Data;
 using Wonjeong.Utils;
 using ZLogger;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 namespace Wonjeong.Core
 {
     /// <summary>
@@ -21,7 +25,7 @@ namespace Wonjeong.Core
     /// 때만 로그가 중복 기록되는 문제를 피할 수 있기 때문.
     /// </para>
     /// <para>
-    /// 앱이 멈춰 이 매니저가 동작하지 못하는 경우를 대비한 백업은 Tools/ShutdownScheduleEditor로
+    /// 앱이 멈춰 이 매니저가 동작하지 못하는 경우를 대비한 백업은 Tools~/ShutdownScheduleEditor로
     /// 작업 스케줄러에 등록함(예정 시각 +N분).
     /// </para>
     /// </summary>
@@ -226,7 +230,21 @@ namespace Wonjeong.Core
 
             ExecuteShutdownCommand(arguments);
 
+            QuitApplication();
+        }
+
+        /// <summary>
+        /// 플랫폼 환경(에디터 및 빌드)에 맞춰 앱을 종료함.
+        /// 에디터에서는 Application.Quit()이 무시되어 플레이 모드가 멈추지 않고,
+        /// 그 결과 ApiManagerBase의 wantsToQuit 종료 로그 흐름까지 검증할 수 없으므로 분기함.
+        /// </summary>
+        private void QuitApplication()
+        {
+#if UNITY_EDITOR
+            EditorApplication.isPlaying = false;
+#else
             Application.Quit();
+#endif
         }
 
         /// <summary>

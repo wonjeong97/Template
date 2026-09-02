@@ -94,8 +94,13 @@ public static class TaskSchedulerIntegration
 
         # 유니티가 정상 종료했다면 이 시점에 PC는 이미 꺼져 있음. 아직 켜져 있다는 것은
         # 유니티가 종료하지 못했다는 뜻이므로 대신 종료함.
+        #
+        # 이 검사의 목적은 "예정 시각보다 한참 이른 실행"(수동 실행, 또는 스케줄을 더 늦은
+        # 시각으로 바꿨는데 옛 트리거가 남아 먼저 발동한 경우)을 걸러내는 것임. 작업 스케줄러가
+        # 타이머 오차나 프로세스 생성 지연으로 예정 시각보다 1초 미만 일찍 기동하는 경우까지
+        # 걸러내면 그날 백업을 통째로 놓치므로, 경계에 여유를 둠.
         $deadline = $now.Date.Add($scheduled.TimeOfDay).AddMinutes($DelayMinutes)
-        if ($now -lt $deadline) {
+        if ($now -lt $deadline.AddSeconds(-30)) {
             Write-BackupLog "아직 예정 시각($($deadline.ToString('HH:mm')))이 되지 않아 건너뜀"
             exit 0
         }

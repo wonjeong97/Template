@@ -56,7 +56,7 @@ namespace Wonjeong.Data
 
     /// <summary>
     /// 예약 종료 스케줄. Settings.json과 별개로 StreamingAssets의 ShutdownSettings.json에
-    /// 단독 루트 오브젝트로 저장되며, 전용 편집 도구(Tools/ShutdownScheduleEditor)로 편집함.
+    /// 단독 루트 오브젝트로 저장되며, 전용 편집 도구(Tools~/ShutdownScheduleEditor)로 편집함.
     /// dateOverrides에 등록된 날짜는 같은 날짜의 요일별 기본 스케줄보다 우선 적용됨.
     /// </summary>
     [Serializable]

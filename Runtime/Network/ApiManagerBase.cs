@@ -78,11 +78,19 @@ namespace Wonjeong.Network
             }
         }
 
+        /// <summary>
+        /// 종료 로그 전송을 위해 종료 요청을 가로챌 수 있도록 이벤트를 구독함.
+        /// 파생 클래스에서 override할 경우 반드시 base.OnEnable()을 호출할 것.
+        /// 빠뜨리면 구독이 누락되어 종료 로그가 전송되지 않음.
+        /// </summary>
         protected virtual void OnEnable()
         {
             Application.wantsToQuit += OnWantsToQuit;
         }
 
+        /// <summary>
+        /// 구독을 해제함. 파생 클래스에서 override할 경우 반드시 base.OnDisable()을 호출할 것.
+        /// </summary>
         protected virtual void OnDisable()
         {
             Application.wantsToQuit -= OnWantsToQuit;
