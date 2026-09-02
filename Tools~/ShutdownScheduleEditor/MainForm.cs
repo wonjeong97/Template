@@ -48,6 +48,7 @@ public sealed class MainForm : Form
     private TextBox _argumentsTextBox = null!;
     private Button _argumentsResetButton = null!;
     private Button _saveButton = null!;
+    private Button _updateBackupButton = null!;
     private ToolStripStatusLabel _statusLabel = null!;
 
     private JsonObject? _root;
@@ -384,7 +385,7 @@ public sealed class MainForm : Form
     }
 
     /// <summary>
-    /// 메뉴를 열지 않고도 바로 저장할 수 있도록 창 하단에 저장 버튼을 둠.
+    /// 메뉴를 열지 않고도 바로 저장하거나 작업 스케줄러를 갱신할 수 있도록 창 하단에 버튼을 둠.
     /// </summary>
     private void BuildSaveBar()
     {
@@ -404,7 +405,17 @@ public sealed class MainForm : Form
         };
         _saveButton.Click += (_, _) => OnSaveClicked();
 
+        _updateBackupButton = new Button
+        {
+            Text = "작업 스케줄러 갱신",
+            AutoSize = true,
+            Padding = new Padding(12, 4, 12, 4),
+            Margin = new Padding(0, 0, 8, 0)
+        };
+        _updateBackupButton.Click += (_, _) => OnUpdateTaskSchedulerClicked();
+
         saveBar.Controls.Add(_saveButton);
+        saveBar.Controls.Add(_updateBackupButton);
         Controls.Add(saveBar);
     }
 
@@ -430,6 +441,7 @@ public sealed class MainForm : Form
         _argumentsTextBox.Enabled = enabled;
         _argumentsResetButton.Enabled = enabled;
         _saveButton.Enabled = enabled;
+        _updateBackupButton.Enabled = enabled;
     }
 
     private void MarkDirty()
@@ -536,12 +548,82 @@ public sealed class MainForm : Form
                 MessageBoxIcon.Question);
             if (save != DialogResult.Yes) return;
 
-            TrySave(_currentPath);
+            TrySave(_currentPath, offerBackupRefresh: false);
             if (_isDirty) return;
         }
 
         using TaskSchedulerForm dialog = new(_currentPath, BuildBackupTriggers);
         dialog.ShowDialog(this);
+    }
+
+    /// <summary>
+    /// 창 하단의 [작업 스케줄러 갱신] 버튼 클릭 시, 현재 스케줄을 작업 스케줄러에 즉시 갱신함.
+    /// 저장되지 않은 변경이 있으면 먼저 저장하고, 아직 등록되지 않은 작업이면 등록 대화 상자를 열어줌.
+    /// </summary>
+    private void OnUpdateTaskSchedulerClicked()
+    {
+        if (_currentPath == null)
+        {
+            MessageBox.Show(this, "먼저 설정 파일을 열어주세요.", "파일 없음", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        if (_isDirty)
+        {
+            DialogResult save = MessageBox.Show(
+                this,
+                "저장하지 않은 변경이 있습니다. 백업 작업은 저장된 파일을 기준으로 동작하므로 먼저 저장해야 합니다.\n지금 저장하고 갱신할까요?",
+                "저장 필요",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+            if (save != DialogResult.Yes) return;
+
+            TrySave(_currentPath, offerBackupRefresh: false);
+            if (_isDirty) return;
+        }
+
+        if (!TaskSchedulerIntegration.IsRegistered())
+        {
+            DialogResult openDialog = MessageBox.Show(
+                this,
+                "작업 스케줄러에 백업 작업이 아직 등록되어 있지 않습니다.\n등록 대화 상자를 열어 새로 등록하시겠습니까?",
+                "작업 미등록",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Information);
+            if (openDialog == DialogResult.Yes)
+            {
+                using TaskSchedulerForm dialog = new(_currentPath, BuildBackupTriggers);
+                dialog.ShowDialog(this);
+            }
+            return;
+        }
+
+        if (!TaskSchedulerIntegration.TryGetRegisteredDelayMinutes(out int delayMinutes))
+        {
+            delayMinutes = DefaultBackupDelayMinutes;
+        }
+
+        (IReadOnlyList<TaskSchedulerIntegration.WeeklyTrigger> weekly,
+         IReadOnlyList<TaskSchedulerIntegration.OneTimeTrigger> oneTime,
+         string? error) = BuildBackupTriggers(delayMinutes);
+
+        if (error != null)
+        {
+            MessageBox.Show(this, error, "갱신할 수 없음", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        (bool success, string message) = TaskSchedulerIntegration.Register(_currentPath, weekly, oneTime, delayMinutes);
+
+        if (success)
+        {
+            _statusLabel.Text = $"백업 작업 갱신됨(+{delayMinutes}분): {_currentPath}";
+            MessageBox.Show(this, message, "갱신 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        else
+        {
+            MessageBox.Show(this, message, "갱신 실패", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     /// <summary>
@@ -803,7 +885,7 @@ public sealed class MainForm : Form
         }
     }
 
-    private void TrySave(string path)
+    private void TrySave(string path, bool offerBackupRefresh = true)
     {
         if (_root == null) return;
 
@@ -830,7 +912,10 @@ public sealed class MainForm : Form
             UpdateTitle();
             _statusLabel.Text = $"저장됨: {path}";
 
-            OfferBackupRefresh();
+            if (offerBackupRefresh)
+            {
+                OfferBackupRefresh();
+            }
         }
         catch (Exception e)
         {
