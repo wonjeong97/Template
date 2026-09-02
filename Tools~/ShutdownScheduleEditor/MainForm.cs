@@ -800,7 +800,7 @@ public sealed class MainForm : Form
     /// 파일이 아직 없는 프로젝트를 위해 기본값(모든 요일 비활성, 월 09:10·그 외 17:35, 특정 날짜 없음)을 담은
     /// 파일을 새로 만듦.
     /// </summary>
-    private static void CreateDefaultSettingsFile(string path)
+    internal static void CreateDefaultSettingsFile(string path)
     {
         string? dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
