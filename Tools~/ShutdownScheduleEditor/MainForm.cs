@@ -49,6 +49,7 @@ public sealed class MainForm : Form
     private Button _argumentsResetButton = null!;
     private Button _saveButton = null!;
     private Button _updateBackupButton = null!;
+    private Button _deleteBackupButton = null!;
     private ToolStripStatusLabel _statusLabel = null!;
 
     private JsonObject? _root;
@@ -101,6 +102,7 @@ public sealed class MainForm : Form
 
         ToolStripMenuItem toolMenu = new("도구(&T)");
         toolMenu.DropDownItems.Add(new ToolStripMenuItem("작업 스케줄러 백업(&B)...", null, (_, _) => OnTaskSchedulerClicked()));
+        toolMenu.DropDownItems.Add(new ToolStripMenuItem("작업 스케줄러 백업 삭제(&D)...", null, (_, _) => OnDeleteTaskSchedulerClicked()));
 
         menu.Items.Add(fileMenu);
         menu.Items.Add(toolMenu);
@@ -414,8 +416,18 @@ public sealed class MainForm : Form
         };
         _updateBackupButton.Click += (_, _) => OnUpdateTaskSchedulerClicked();
 
+        _deleteBackupButton = new Button
+        {
+            Text = "작업 스케줄러 삭제",
+            AutoSize = true,
+            Padding = new Padding(12, 4, 12, 4),
+            Margin = new Padding(0, 0, 8, 0)
+        };
+        _deleteBackupButton.Click += (_, _) => OnDeleteTaskSchedulerClicked();
+
         saveBar.Controls.Add(_saveButton);
         saveBar.Controls.Add(_updateBackupButton);
+        saveBar.Controls.Add(_deleteBackupButton);
         Controls.Add(saveBar);
     }
 
@@ -442,6 +454,7 @@ public sealed class MainForm : Form
         _argumentsResetButton.Enabled = enabled;
         _saveButton.Enabled = enabled;
         _updateBackupButton.Enabled = enabled;
+        _deleteBackupButton.Enabled = enabled;
     }
 
     private void MarkDirty()
@@ -623,6 +636,38 @@ public sealed class MainForm : Form
         else
         {
             MessageBox.Show(this, message, "갱신 실패", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>
+    /// 창 하단의 [작업 스케줄러 삭제] 버튼 또는 메뉴 클릭 시, 등록된 백업 작업을 작업 스케줄러에서 제거함.
+    /// </summary>
+    private void OnDeleteTaskSchedulerClicked()
+    {
+        if (!TaskSchedulerIntegration.IsRegistered())
+        {
+            MessageBox.Show(this, "작업 스케줄러에 등록된 백업 작업이 없습니다.", "작업 없음", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        DialogResult confirm = MessageBox.Show(
+            this,
+            "백업 작업을 작업 스케줄러에서 삭제할까요?\n\n삭제하면 유니티 앱이 멈췄을 때 PC가 자동으로 꺼지지 않습니다.",
+            "작업 삭제 확인",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+        if (confirm != DialogResult.Yes) return;
+
+        (bool success, string message) = TaskSchedulerIntegration.Unregister();
+
+        if (success)
+        {
+            _statusLabel.Text = "백업 작업이 작업 스케줄러에서 삭제되었습니다.";
+            MessageBox.Show(this, message, "삭제 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        else
+        {
+            MessageBox.Show(this, message, "삭제 실패", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
