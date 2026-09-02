@@ -1,6 +1,39 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.3] - 2026-09-02
+
+### Added
+- **프로그램 종료 시 서버 종료 로그 전송 추가(`ApiManagerBase`):** 시작 로그("Program started"/"Program restarted")와 짝이 되도록, 앱이 종료될 때 `Settings.json`의 `apiUrl`로 "Program exited" 상태 메시지를 전송함. `apiUrl`이 비어 있으면 생략하고, 네트워크 자체가 연결되어 있지 않으면 즉시 포기하며, 실패 시 재시도하는 정책은 `ApiRetryUtil`을 그대로 재사용하므로 시작 로그와 동일함.
+
+  `OnApplicationQuit`이 아니라 `Application.wantsToQuit`을 사용함. `OnApplicationQuit`에서 전송을 시작하면 요청은 나가더라도 응답을 받기 전에 프로세스가 사라져 로그가 유실되기 때문. `wantsToQuit`에서 `false`를 반환해 종료를 한 번 보류시키고, 전송이 끝난 뒤 다시 종료를 진행함(전송 성공·실패·시간 초과와 무관하게 `finally`에서 반드시 종료를 재개하므로 로그 때문에 종료가 막히지 않음).
+
+  다만 종료를 보류하는 시간은 짧아야 함 — 사용자가 종료를 기다리는 상황인 데다, OS가 시작한 종료(작업 스케줄러의 `shutdown`, 시스템 종료 등)에서는 Windows가 앱을 기다려주는 시간이 `WaitToKillAppTimeout`으로 제한되어 그 안에 끝내지 못하면 어차피 강제 종료됨. 그래서 시작 로그(3초 x 10회)보다 훨씬 짧은 기본값(1초 x 3회, 전체 상한 5초)을 쓰고, 프로젝트별로 조정할 수 있도록 `ExitLogMaxAttemptCount`/`ExitLogRetryDelaySeconds`/`ExitLogTimeoutSeconds`를 `protected virtual` 프로퍼티로 노출함. 에디터의 플레이 모드 종료는 `Application.Quit()`으로 재개되지 않으므로 `GameCloser`와 동일하게 `EditorApplication.isPlaying = false`로 분기함. 전송이 동기적으로 즉시 끝나는 경우(에디터·네트워크 미연결) 종료 재개가 `wantsToQuit`의 반환보다 앞서지 않도록 한 프레임 양보한 뒤 진행함.
+
+- **예약 종료 스케줄러(`ShutdownScheduler`) 추가:** `Runtime/Core/ShutdownScheduler.cs`를 신설하고 `RootLifetimeScope.ConfigureOptionalComponents`에 기존 선택 매니저와 동일한 `RegisterIfPresentInScene` 패턴으로 자동 등록함(씬에 배치하지 않으면 조용히 비활성이므로 기존 프로젝트에는 동작 변화가 없음). StreamingAssets의 `ShutdownSettings.json`을 읽어 요일별·날짜별 예정 시각에 도달하면, 서버에 종료 로그를 보낸 뒤 Windows `shutdown` 명령으로 PC를 종료함.
+
+  종료를 작업 스케줄러에 전적으로 맡기지 않고 앱이 직접 거는 이유는 **순서를 통제하기 위함**임. 외부에서 종료 신호가 오면 Windows가 앱의 정리를 기다려주는 시간이 `WaitToKillAppTimeout`으로 제한되어, 종료 로그 전송이 그 안에 끝나지 못하면 유실될 수 있음. 앱이 스스로 시각을 판단하면 `shutdown` 명령의 지연 시간(`-t`)만큼 여유를 확보한 뒤 정상 종료 절차를 태울 수 있어 이 경합이 사라짐.
+
+  동작 순서는 마무리 이벤트 실행 → `shutdown` 명령으로 OS 종료 예약 → `Application.Quit()`임. 종료 로그를 이 클래스가 직접 보내지 않고 위의 `ApiManagerBase` 종료 로그 경로에 맡기는 이유는, 양쪽에서 보내면 예약 종료 때만 로그가 두 번 기록되기 때문. `shutdown`이 지연 시간을 두고 OS 종료를 예약하므로 그 사이에 `ApiManagerBase`가 로그를 끝까지 보낼 시간이 확보됨.
+
+  로드는 `JsonLoader.LoadAsync`를 재사용함. 종료 직전에 페이드아웃·저장 등 프로젝트별 마무리를 끼워 넣을 수 있도록 `UnityEvent onBeforeShutdown`을 인스펙터에 노출하고, 런타임 생성 시에도 연결할 수 있게 `OnBeforeShutdown` 프로퍼티로 공개함(`InactivityTimer`와 동일한 패턴).
+
+  예정 시각이 이미 지난 뒤에 앱이 시작된 경우(운영자가 밤에 키오스크를 재시작한 상황 등)에는 그날을 이미 처리한 것으로 표시해 건너뜀 — 그렇지 않으면 켜자마자 다시 꺼져 현장에서 손을 쓸 수 없게 됨. 확인 주기(기본 15초)는 인스펙터로 조정 가능하되 0 이하로 설정해도 프레임마다 도는 폭주가 되지 않도록 1초 하한을 둠. 에디터와 Windows 이외 플랫폼에서는 실제 종료 대신 무엇을 실행했을지만 로그로 남김.
+
+- **종료 스케줄 데이터 구조(`ShutdownSetting`) 추가:** `Runtime/Data/TemplateData.cs`에 `ShutdownDaySchedule`(요일별 `enabled`/`time`), `ShutdownDateOverride`(특정 날짜 `date`/`enabled`/`time`), 이를 담는 `ShutdownSetting`(월~일 + `dateOverrides` + `shutdownArguments`)을 추가함. `Settings.json`에 합치지 않고 StreamingAssets의 **별도 파일 `ShutdownSettings.json`**(이 클래스가 파일의 루트)로 분리한 이유는, 현장에서 종료 시각만 수정할 때 다른 설정 파일을 건드릴 일이 없도록 하기 위함. `dateOverrides`에 등록된 날짜는 그날의 요일별 기본 스케줄보다 우선 적용됨(특정 월요일 하루만 휴무로 지정하거나 시각을 늦추는 용도). `shutdownArguments`는 기본값 `-s -f -t 45`이며, 지연 시간을 두는 것은 종료 로그 전송이 끝날 시간을 확보하기 위함(`-r`로 바꾸면 재부팅).
+
+- **종료 스케줄 편집기(`Tools/ShutdownScheduleEditor`) 추가:** `ShutdownSettings.json`을 편집하는 독립 실행형 Windows GUI 도구(.NET 8 WinForms). Unity가 설치되지 않은 전시 현장 PC에서도 쓸 수 있도록 Unity 패키지 어셈블리(Runtime/Editor asmdef)와 완전히 분리된 프로젝트로 두었으며, 런타임에는 포함되지 않음. `파일 > 프로젝트에서 열기`로 Unity 프로젝트 루트·`Assets`·`StreamingAssets` 중 어느 폴더를 선택해도 `StreamingAssets/ShutdownSettings.json` 위치를 찾아내고, 파일이 없으면 확인 후 기본값(전 요일 비활성, 월요일 09:10·나머지 요일 17:35)으로 생성함. 요일별 종료 여부·시각, 특정 날짜 재정의(달력 입력 + 중복 날짜 덮어쓰기 확인 + 날짜순 자동 정렬), 종료 명령 인수를 편집할 수 있음. 잘못된 형식이 들어갈 여지를 없애기 위해 날짜 목록은 직접 편집을 막고 입력 줄로만 등록하도록 했으며, 저장 시 이 도구가 다루지 않는 키는 원본 그대로 보존함(루트를 통째로 교체하지 않고 편집 대상 키만 덮어씀).
+
+- **작업 스케줄러 백업 연동(`도구 > 작업 스케줄러 백업`) 추가:** 앱 자체가 멈춰 `ShutdownScheduler`가 동작하지 못하는 경우를 대비해, 예정 시각 +N분(기본 5분)에 PC를 끄는 Windows 작업 스케줄러 항목을 등록·해제하는 기능. 가드 스크립트는 유니티와 무관한 별도 `powershell.exe` 프로세스로 실행되므로 앱이 프리징·크래시 상태여도 동작함.
+
+  작업 스케줄러의 트리거는 "요일 + 시각" 반복은 표현할 수 있어도 **"특정 날짜는 제외"를 표현할 수 없어**, 요일 트리거만 걸면 휴무일로 지정한 날에도 백업이 PC를 꺼버림. 그래서 트리거는 시각을 잡는 역할만 하고 실제 종료 여부는 실행 시점에 `ShutdownBackupGuard.ps1`(등록 시 설정 파일 옆에 자동 생성)이 `ShutdownSettings.json`을 다시 읽어 판단하도록 함 — 특정 날짜 규칙을 바꿔도 작업을 재등록할 필요가 없음(요일·시각 변경 시에는 재등록 필요). 실행 기록은 설정 파일 옆 `ShutdownBackup.log`에 남음.
+
+  가드가 실행 시점에 파일을 다시 읽는 덕분에 "잘못 꺼지는" 방향의 변경(특정 날짜를 휴무로 지정, 요일 끄기)은 재등록 없이 반영되지만, 반대로 시각을 바꾸거나 새로 종료를 켜는 변경은 트리거 자체가 옛날 값이거나 아예 없어 **백업이 조용히 동작하지 않는 상태**가 됨. 이를 눈치채지 못하는 것이 가장 위험하므로, 백업이 등록된 상태에서 스케줄을 저장하면 작업 스케줄러도 갱신할지 물어보고, 수락 시 기존에 등록된 지연 시간(`-DelayMinutes` 값을 되읽음)을 그대로 유지한 채 재등록함.
+
+  등록되는 작업 이름은 `shutdown-backup`이며, 로그온 세션에 의존하지 않도록 `S4U` 로그온 유형("사용자의 로그온 여부에 관계없이 실행" + "암호를 저장하지 않습니다. 이 작업은 로컬 리소스에만 액세스할 수 있습니다")과 `HighestAvailable` 실행 수준("가장 높은 수준의 권한으로 실행")으로 등록함. 자동 로그인이 풀려 있어도 백업이 동작해야 하고, 로컬에서 `shutdown`만 실행하므로 네트워크 자원 접근 제약은 문제가 되지 않음. 이 두 설정은 승격 없이 등록되지 않으므로 등록·해제는 UAC 승격(`ShellExecute`의 `runas`)으로 수행하며, 사용자가 승격을 취소하면(`ERROR_CANCELLED`) 변경 없이 안내만 함. 승격은 출력 리디렉션을 지원하지 않아 실패 시 종료 코드만 표시됨. 상태 조회는 읽기 전용이라 승격 없이 수행함.
+
+  놓친 트리거를 다음 부팅 직후에 따라잡는 `StartWhenAvailable`은 **끔** — 켜져 있어야 할 트리거를 놓쳤다는 것은 그 시각에 PC가 이미 꺼져 있었다는 뜻이므로, 따라잡으면 아침에 켠 키오스크를 그대로 다시 끄는 사고가 남. 종료 시각 + 지연 시간이 자정을 넘기면 트리거가 다음 날로 밀려 가드가 엉뚱한 요일의 스케줄을 보게 되므로 등록 시 막고 안내함.
+
 ## [26.9.2] - 2026-09-02
 
 ### Added

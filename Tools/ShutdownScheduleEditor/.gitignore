@@ -1,0 +1,6 @@
+bin/
+obj/
+
+# 루트 .gitignore의 전역 *.csproj 제외 규칙(Unity 자동생성 csproj용)에서
+# 이 프로젝트의 수동 작성 csproj는 예외로 둠.
+!*.csproj

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Wonjeong.Tools.ShutdownScheduleEditor</RootNamespace>
+    <AssemblyName>ShutdownScheduleEditor</AssemblyName>
+    <!-- 고해상도 모니터에서 흐릿하게 확대되지 않도록 DPI를 직접 처리함. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+  </PropertyGroup>
+
+</Project>

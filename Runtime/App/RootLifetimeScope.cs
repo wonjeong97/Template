@@ -64,6 +64,7 @@ namespace Wonjeong.App
             RegisterIfPresentInScene<ArduinoManager>(builder);
             RegisterIfPresentInScene<ApiManagerBase>(builder);
             RegisterIfPresentInScene<InactivityTimer>(builder);
+            RegisterIfPresentInScene<ShutdownScheduler>(builder);
         }
 
         /// <summary>
