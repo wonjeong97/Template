@@ -91,6 +91,7 @@ namespace Wonjeong.Data
     [Serializable]
     public class Settings
     {
+        public bool useInactivityTimer;
         public float warningTime;
         public float resetTime;
         public float fadeTime;

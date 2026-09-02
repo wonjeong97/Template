@@ -1,6 +1,11 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.2] - 2026-09-02
+
+### Added
+- **비활동 타이머(`InactivityTimer`) 추가:** `Runtime/Core/InactivityTimer.cs`를 신설하고 `RootLifetimeScope.ConfigureOptionalComponents`에 기존 선택 매니저와 동일한 `RegisterIfPresentInScene` 패턴으로 자동 등록함. "최초 화면"이 별도 씬인지 같은 씬의 첫 패널인지는 프로젝트마다 다르므로, 이 컴포넌트는 언제 타임아웃됐는지만 감지하고 실제 복귀 로직은 인스펙터에 노출된 `UnityEvent`(`On Inactivity Timeout`)에 프로젝트가 원하는 메서드를 연결해 구현하도록 함(코드 작성 없이 인스펙터 연결만으로도 사용 가능). 입력 감지는 특정 UI 위에 전체 화면 캐처를 깔아 다른 UI의 입력을 가로채는 부작용을 피하기 위해 New Input System의 전역 이벤트(`InputSystem.onEvent`)를 사용하여, 화면 어디를 눌러도(마우스/터치/키보드) 활동으로 인식함. 타임아웃 이후에는 다음 입력이 들어올 때까지 다시 발동하지 않아 키오스크의 대기(어트랙트) 화면 패턴에 맞음. `Settings.json`에 `useInactivityTimer`(bool) 필드를 추가했으며, 기존에 미사용 상태로 남아있던 `resetTime`(초)을 타임아웃 시간으로 재사용함. `useInactivityTimer`가 `false`이거나 `resetTime`이 0 이하이면 비활성화되어 기존 프로젝트에는 동작 변화가 없음. 같은 그룹으로 예약돼 있던 `warningTime`/`fadeTime`은 이번 범위에 포함하지 않고 향후 경고 단계·전환 연출 기능을 위해 남겨둠. 긴 영상 재생처럼 입력이 없어도 사용자가 실제로는 콘텐츠를 보고 있는 구간까지 타임아웃으로 처리하면 안 되므로, `Pause()`/`Resume()`을 추가해 카운트를 일시 중지할 수 있게 함. `Resume()`은 정지 중 흐른 실제 시간을 그대로 반영하는 대신(재생이 끝나자마자 곧바로 타임아웃되는 것을 막기 위해) 재개 시점을 새 활동으로 취급해 `ResetTimer()`로 카운트를 처음부터 다시 시작함.
+
 ## [26.8.24] - 2026-08-24
 
 ### Added

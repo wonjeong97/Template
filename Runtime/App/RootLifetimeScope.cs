@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
+using Wonjeong.Core;
 using Wonjeong.Data;
 using Wonjeong.Hardware;
 using Wonjeong.Network;
@@ -62,6 +63,7 @@ namespace Wonjeong.App
             RegisterIfPresentInScene<VideoManager>(builder);
             RegisterIfPresentInScene<ArduinoManager>(builder);
             RegisterIfPresentInScene<ApiManagerBase>(builder);
+            RegisterIfPresentInScene<InactivityTimer>(builder);
         }
 
         /// <summary>
