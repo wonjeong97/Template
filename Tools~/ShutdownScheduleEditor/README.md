@@ -175,4 +175,16 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 ```
 
 `bin/Release/net8.0-windows/win-x64/publish/ShutdownScheduleEditor.exe` 하나만 복사해서
-현장 PC에서 실행하면 됨.
+현장 PC에서 실행하면 됨(네이티브 DLL도 exe 안에 묶여 있어 다른 파일 없이 이거 하나로 동작함).
+
+### StreamingAssets에 넣어두고 바로 실행하기
+
+이 exe를 프로젝트의 `Assets/StreamingAssets/ShutdownSettings.json`과 같은 폴더에 두면,
+인자 없이 실행해도(더블클릭) **같은 폴더의 ShutdownSettings.json을 자동으로 찾아 엶**
+(`Program.cs`의 `ResolveDefaultPath`). 매번 "프로젝트에서 열기"로 경로를 찾을 필요 없이
+StreamingAssets 폴더에서 이 exe를 실행하기만 하면 됨.
+
+이 방식으로 두면 프로젝트를 빌드할 때 exe가 StreamingAssets 전체와 함께 최종 빌드에도
+그대로 포함되어, 현장에 배포된 빌드 폴더 안에서 편집기가 항상 설정 파일 옆에 붙어 있게 됨.
+단, exe 코드를 수정한 뒤에는 `dotnet publish`로 다시 게시해서 수동으로 교체해야 함(자동
+갱신되지 않음).

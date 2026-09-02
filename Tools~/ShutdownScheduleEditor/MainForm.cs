@@ -19,7 +19,10 @@ public sealed class MainForm : Form
 
     private const string TimeFormat = "HH:mm";
     private const string DateFormat = "yyyy-MM-dd";
-    private const string TargetFileName = "ShutdownSettings.json";
+    /// <summary>
+    /// 편집 대상 파일명. Program.cs가 exe와 같은 폴더에서 이 파일을 자동으로 찾을 때도 참조함.
+    /// </summary>
+    internal const string TargetFileName = "ShutdownSettings.json";
 
     /// <summary>45초 뒤 강제 종료. 종료 로그 전송이 끝날 시간을 확보하려고 지연을 둠.</summary>
     private const string DefaultShutdownArguments = "-s -f -t 45";
