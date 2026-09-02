@@ -16,14 +16,16 @@ namespace Wonjeong.Core
     /// 일정 시간 동안 입력이 없으면 등록된 동작을 실행하는 범용 비활동 타이머.
     /// "최초 화면"이 별도 씬인지, 같은 씬의 첫 패널인지는 프로젝트마다 다르므로,
     /// 이 컴포넌트는 언제 타임아웃됐는지만 알리고 실제 복귀 로직은 onInactivityTimeout에
-    /// 프로젝트가 원하는 메서드를 인스펙터(또는 코드)에서 연결해 구현함.
+    /// 프로젝트가 원하는 메서드를 연결해 구현함. VContainer로 런타임에 생성해 쓰는 경우처럼
+    /// 인스펙터에 미리 참조를 꽂아둘 수 없는 배치에서는 OnInactivityTimeout(공개 프로퍼티)에
+    /// 코드로 AddListener하면 되고, 씬에 미리 배치해 두는 프로젝트라면 인스펙터에서도 연결 가능함.
     /// Settings.json의 useInactivityTimer가 false거나 resetTime이 0 이하이면 동작하지 않음.
     /// 긴 영상 재생처럼 입력 없이도 사용자가 실제로는 콘텐츠를 보고 있는 구간에서는
     /// Pause()/Resume()으로 카운트를 일시 중지할 수 있음.
     /// </summary>
     public class InactivityTimer : MonoBehaviour
     {
-        [SerializeField, Tooltip("타임아웃 시 실행할 동작. 최초 화면으로 되돌아가는 로직을 프로젝트에서 연결함.")]
+        [SerializeField, Tooltip("타임아웃 시 실행할 동작. 최초 화면으로 되돌아가는 로직을 프로젝트에서 연결함(런타임 생성 시에는 OnInactivityTimeout에 코드로 연결).")]
         private UnityEvent onInactivityTimeout = new UnityEvent();
 
         private bool _isEnabled;
@@ -34,6 +36,18 @@ namespace Wonjeong.Core
 
         private ILogger<InactivityTimer> _logger;
         private AppSettingsProvider _settingsProvider;
+
+        /// <summary>
+        /// 인스펙터에서 연결할 수 없는 런타임 코드에서도 AddListener/RemoveListener로
+        /// 구독할 수 있도록 노출한 프로퍼티.
+        /// </summary>
+        public UnityEvent OnInactivityTimeout => onInactivityTimeout;
+
+        /// <summary>Settings.json 로드가 끝난 뒤 타이머가 활성화된 상태인지.</summary>
+        public bool IsEnabled => _isEnabled;
+
+        /// <summary>Pause() 호출로 카운트가 일시 중지된 상태인지.</summary>
+        public bool IsPaused => _isPaused;
 
         /// <summary>
         /// VContainer 의존성 주입.
@@ -77,6 +91,10 @@ namespace Wonjeong.Core
                 {
                     _logger.ZLogError($"[InactivityTimer] AppSettingsProvider was not injected. Check that RegisterComponentInHierarchy<InactivityTimer>() is registered on the LifetimeScope.");
                 }
+                else
+                {
+                    Debug.LogError("[InactivityTimer] Dependencies were not injected. Check that RegisterComponentInHierarchy<InactivityTimer>() is registered on the LifetimeScope.");
+                }
                 return;
             }
 
@@ -96,6 +114,11 @@ namespace Wonjeong.Core
                 {
                     _isEnabled = true;
                     _timeoutSeconds = settings.resetTime;
+
+                    if (_logger != null)
+                    {
+                        _logger.ZLogInformation($"[InactivityTimer] Enabled. Will return to the first screen after {_timeoutSeconds}s of inactivity.");
+                    }
                 }
                 else
                 {
@@ -104,6 +127,10 @@ namespace Wonjeong.Core
                     if (settings != null && settings.useInactivityTimer && _logger != null)
                     {
                         _logger.ZLogWarning($"[InactivityTimer] useInactivityTimer is true but resetTime is not positive ({settings.resetTime}). Timer disabled.");
+                    }
+                    else if (_logger != null)
+                    {
+                        _logger.ZLogInformation($"[InactivityTimer] Disabled (useInactivityTimer is false).");
                     }
                 }
 

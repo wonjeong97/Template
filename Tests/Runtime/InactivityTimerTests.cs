@@ -1,10 +1,10 @@
 using System;
 using System.Collections;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.Events;
 using UnityEngine.TestTools;
 using Wonjeong.Core;
 
@@ -32,7 +32,7 @@ namespace Wonjeong.Tests
             _timer = _go.AddComponent<InactivityTimer>();
             _invoked = false;
 
-            GetOnTimeoutEvent().AddListener(() => _invoked = true);
+            _timer.OnInactivityTimeout.AddListener(() => _invoked = true);
         }
 
         [TearDown]
@@ -48,6 +48,7 @@ namespace Wonjeong.Tests
         [UnityTest]
         public IEnumerator 비활성_상태면_시간이_지나도_이벤트가_발동하지_않는다() => UniTask.ToCoroutine(async () =>
         {
+            ExpectMissingDependencyLog();
             SetTimeout(0.05f, isEnabled: false);
 
             await UniTask.Delay(TimeSpan.FromSeconds(0.2), DelayType.UnscaledDeltaTime);
@@ -61,6 +62,7 @@ namespace Wonjeong.Tests
         [UnityTest]
         public IEnumerator 활성_상태에서_설정_시간이_지나면_이벤트가_한번_발동한다() => UniTask.ToCoroutine(async () =>
         {
+            ExpectMissingDependencyLog();
             SetTimeout(0.05f, isEnabled: true);
 
             await AwaitInvocation();
@@ -79,6 +81,7 @@ namespace Wonjeong.Tests
         [UnityTest]
         public IEnumerator 타임아웃_전_ResetTimer_호출시_발동이_늦춰진다() => UniTask.ToCoroutine(async () =>
         {
+            ExpectMissingDependencyLog();
             SetTimeout(0.15f, isEnabled: true);
 
             await UniTask.Delay(TimeSpan.FromSeconds(0.08), DelayType.UnscaledDeltaTime);
@@ -97,6 +100,7 @@ namespace Wonjeong.Tests
         [UnityTest]
         public IEnumerator Pause_중에는_시간이_지나도_이벤트가_발동하지_않는다() => UniTask.ToCoroutine(async () =>
         {
+            ExpectMissingDependencyLog();
             SetTimeout(0.05f, isEnabled: true);
             _timer.Pause();
 
@@ -112,6 +116,7 @@ namespace Wonjeong.Tests
         [UnityTest]
         public IEnumerator Resume_직후에는_바로_발동하지_않고_전체_시간이_다시_주어진다() => UniTask.ToCoroutine(async () =>
         {
+            ExpectMissingDependencyLog();
             SetTimeout(0.1f, isEnabled: true);
             _timer.Pause();
 
@@ -127,18 +132,23 @@ namespace Wonjeong.Tests
             Assert.IsTrue(_invoked, "Resume 이후 재설정된 시간이 지났는데도 발동하지 않음");
         });
 
+        /// <summary>
+        /// DI 없이 AddComponent로 생성하므로 Construct()가 호출되지 않아 Start()에서
+        /// "Dependencies were not injected" 폴백 에러 로그가 항상 발생함(정상 동작).
+        /// [SetUp](동기 메서드)에서 기대하면 Start()가 아직 실행되지 않은 시점(프레임 경계 전)에
+        /// 검증돼 "로그가 나타나지 않음"으로 실패하므로, 첫 await 전인 각 테스트 코루틴
+        /// 시작부에서 기대하여 Test 스텝 안에서 검증되도록 함.
+        /// </summary>
+        private void ExpectMissingDependencyLog()
+        {
+            LogAssert.Expect(LogType.Error, new Regex("Dependencies were not injected"));
+        }
+
         private void SetTimeout(float seconds, bool isEnabled)
         {
             typeof(InactivityTimer).GetField("_timeoutSeconds", Nonpublic).SetValue(_timer, seconds);
             typeof(InactivityTimer).GetField("_isEnabled", Nonpublic).SetValue(_timer, isEnabled);
             _timer.ResetTimer();
-        }
-
-        private UnityEvent GetOnTimeoutEvent()
-        {
-            return (UnityEvent)typeof(InactivityTimer)
-                .GetField("onInactivityTimeout", Nonpublic)
-                .GetValue(_timer);
         }
 
         /// <summary>

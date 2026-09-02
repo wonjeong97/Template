@@ -245,13 +245,24 @@ public class GameManager : GameManagerBase<GameManager>
 
 ### InactivityTimer (비활동 타이머)
 
-씬에 `InactivityTimer` 컴포넌트를 배치하면(선택 매니저이므로 배치 자체가 사용 선언) `Settings.json`의 `useInactivityTimer`/`resetTime`에 따라 일정 시간 입력이 없을 때 인스펙터의 `On Inactivity Timeout` 이벤트를 실행합니다. "최초 화면"이 별도 씬인지, 같은 씬의 첫 패널인지는 프로젝트마다 다르므로, 실제로 되돌아가는 로직(씬 로드, 패널 전환 등)은 이 이벤트에 프로젝트가 원하는 메서드를 연결해 구현합니다.
+`Settings.json`의 `useInactivityTimer`/`resetTime`에 따라 일정 시간 입력이 없을 때 `On Inactivity Timeout` 이벤트를 실행합니다. "최초 화면"이 별도 씬인지, 같은 씬의 첫 패널인지는 프로젝트마다 다르므로, 실제로 되돌아가는 로직(씬 로드, 패널 전환 등)은 이 이벤트에 프로젝트가 원하는 메서드를 연결해 구현합니다.
+
+등록 방식은 두 가지입니다.
+
+1. **씬에 미리 배치** — 다른 선택 매니저와 동일하게 씬에 `InactivityTimer` 컴포넌트를 두면(배치 자체가 사용 선언) `RootLifetimeScope`가 자동으로 찾아 등록합니다. 이 경우 인스펙터의 `On Inactivity Timeout`에 메서드를 직접 드래그해 연결할 수 있습니다.
+2. **VContainer로 런타임 생성** — `builder.RegisterComponentOnNewGameObject<InactivityTimer>(Lifetime.Singleton, "InactivityTimer").UnderTransform(transform)`처럼 프로젝트의 파생 스코프에서 직접 생성하는 경우, 인스펙터에 미리 참조를 꽂아둘 대상이 없으므로 코드에서 `OnInactivityTimeout`(공개 프로퍼티)에 `AddListener`로 연결합니다.
 
 ```csharp
 public class PanelManager : MonoBehaviour
 {
-    // InactivityTimer의 On Inactivity Timeout에 이 메서드를 인스펙터에서 연결
-    public void ReturnToFirstPanel()
+    [Inject]
+    public void Construct(InactivityTimer inactivityTimer)
+    {
+        // 씬 배치 여부와 무관하게 항상 코드로 연결 가능
+        inactivityTimer.OnInactivityTimeout.AddListener(ReturnToFirstPanel);
+    }
+
+    private void ReturnToFirstPanel()
     {
         // 프로젝트별 복귀 로직
     }
@@ -261,7 +272,7 @@ public class PanelManager : MonoBehaviour
 긴 영상 재생처럼 입력 없이도 사용자가 실제로는 콘텐츠를 보고 있는 구간에서는 재생 시작/종료 시점에 `Pause()`/`Resume()`을 호출해 그동안 카운트가 멈추도록 합니다.
 
 ```csharp
-[Inject] private InactivityTimer _inactivityTimer; // 씬에 있을 때만 등록되므로 선택 매니저처럼 IObjectResolver.ResolveOrDefault로 조회하는 것을 권장
+[Inject] private InactivityTimer _inactivityTimer; // 씬 배치형이라면 선택 매니저처럼 IObjectResolver.ResolveOrDefault로 조회하는 것을 권장
 
 void OnVideoStarted() => _inactivityTimer?.Pause();
 void OnVideoFinished() => _inactivityTimer?.Resume();
