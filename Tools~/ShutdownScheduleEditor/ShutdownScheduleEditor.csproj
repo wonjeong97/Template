@@ -12,4 +12,10 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- schtasks.exe 출력을 OS의 OEM 코드페이지(한글 Windows는 949)로 읽기 위해 필요함.
+         .NET 8은 UTF-8/UTF-16/UTF-32/ASCII/Latin1 외의 코드페이지를 기본 내장하지 않음. -->
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+  </ItemGroup>
+
 </Project>
