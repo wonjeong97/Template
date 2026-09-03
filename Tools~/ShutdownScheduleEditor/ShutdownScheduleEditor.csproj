@@ -10,6 +10,7 @@
     <AssemblyName>ShutdownScheduleEditor</AssemblyName>
     <!-- 고해상도 모니터에서 흐릿하게 확대되지 않도록 DPI를 직접 처리함. -->
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>app.ico</ApplicationIcon>
 
     <!-- self-contained 단일 파일 게시 시 .NET Desktop 런타임의 네이티브 DLL까지 exe 안에
          묶어, 옆에 딸린 DLL 없이 exe 하나만 배포할 수 있게 함. -->

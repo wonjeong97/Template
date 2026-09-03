@@ -39,6 +39,16 @@ public sealed class MainForm : Form
     private readonly CheckBox[] _dayEnabledCheckBoxes = new CheckBox[DayKeys.Length];
     private readonly DateTimePicker[] _dayTimePickers = new DateTimePicker[DayKeys.Length];
 
+    // "특정 날짜" 영역만 Dock=Fill이고 나머지는 전부 Dock=Top/Bottom 고정 영역이라, 창 높이가
+    // 이 고정 영역들의 실제(폰트/DPI 반영 후) 필요 높이를 못 따라가면 Fill 영역이 밀려서
+    // 안 보이게 됨. OnLoad/OnDpiChanged에서 이 영역들의 실제 높이를 다시 합산해 창을 그만큼
+    // 키우기 위해 참조를 들고 있음.
+    private MenuStrip _menu = null!;
+    private GroupBox _weekdayGroup = null!;
+    private GroupBox _argumentsGroup = null!;
+    private FlowLayoutPanel _saveBar = null!;
+    private StatusStrip _statusBar = null!;
+
     private DataGridView _overridesGrid = null!;
     private DateTimePicker _overrideDatePicker = null!;
     private CheckBox _overrideEnabledCheckBox = null!;
@@ -58,11 +68,28 @@ public sealed class MainForm : Form
 
     public MainForm(string? initialPath)
     {
+        // Program.cs의 ApplicationConfiguration.Initialize()가 이미 PerMonitorV2 DPI 인식을
+        // 설정함. 여기에 AutoScaleMode.Dpi/AutoScaleDimensions를 추가로 지정했더니 두 스케일링
+        // 메커니즘이 충돌해 창이 절반 크기로 줄어드는 것으로 실측 확인됨(680x760 지정 → 실제
+        // 345x384). 그래서 AutoScaleMode는 건드리지 않고, 버튼이 잘리는 문제는 아래 각 패널의
+        // 고정 Height를 없애고 AutoSize로 바꾸는 방식으로 해결함(DPI 배율이 얼마든 실제 필요한
+        // 크기만큼 패널이 스스로 커지므로 특정 배율을 가정할 필요가 없음).
+
+        // ApplicationIcon(csproj)은 exe 파일 자체의 아이콘(탐색기)만 바꾸고, 창의 제목표시줄·
+        // 작업표시줄 아이콘은 Form.Icon을 따로 지정해야 함. 같은 아이콘을 다시 임베드하지 않고
+        // exe에 이미 구운 아이콘을 그대로 추출해 재사용함.
+        string? exePath = Environment.ProcessPath;
+        Icon? appIcon = string.IsNullOrEmpty(exePath) ? null : Icon.ExtractAssociatedIcon(exePath);
+        if (appIcon != null)
+        {
+            Icon = appIcon;
+        }
+
         Text = "종료 스케줄 편집기";
         Width = 680;
-        Height = 900;
+        Height = 760;
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(620, 780);
+        MinimumSize = new Size(620, 680);
 
         // WinForms는 도킹을 Controls에 추가한 순서의 "역순"으로 처리하므로(마지막에 추가한 것이
         // 가장 먼저 바깥 가장자리를 차지함), 화면 위에서부터 메뉴 → 요일 패널 → 상태바 → 나머지를
@@ -80,6 +107,79 @@ public sealed class MainForm : Form
         {
             OpenFile(initialPath!);
         }
+    }
+
+    /// <summary>
+    /// DateTimePicker는 TextBox/Label과 달리 내용 기준 AutoSize를 지원하지 않아 Width를 직접
+    /// 계산해야 함. 생성 시점에는 아직 이 폼이 최종적으로 어느 모니터에 뜰지, 그래서 어떤
+    /// 폰트 크기로 보정될지 확정되지 않을 수 있으므로, 폰트가 확정된 뒤인 OnLoad에서 다시
+    /// 계산함. 컬럼을 AutoSize로 바꿔둔 덕분에 여기서 Width만 갱신하면 컬럼도 같이 넓어짐.
+    /// </summary>
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        ApplyDynamicFieldWidths();
+        EnsureMinimumHeightForContent();
+    }
+
+    /// <summary>
+    /// 창을 다른 DPI의 모니터로 드래그하면 OnLoad는 다시 불리지 않고 이 이벤트만 발생함.
+    /// 폰트는 프레임워크가 알아서 갱신해주지만(라벨/체크박스는 AutoSize라 자동 반영됨),
+    /// 1) DateTimePicker Width는 직접 계산한 값이라 여기서도 다시 계산해야 하고,
+    /// 2) 창 자체 크기는 그대로 두면 요일별 스케줄 등 위쪽 영역이 커진 폰트만큼 늘어나면서
+    /// Dock=Fill인 "특정 날짜" 영역이 밀려 거의 안 보이게 됨. SuggestedRectangle이 새 DPI에
+    /// 맞춰 Windows가 계산해준 창 크기이므로 그대로 적용해 전체 창도 같이 키움.
+    /// </summary>
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        Bounds = e.SuggestedRectangle;
+        ApplyDynamicFieldWidths();
+        EnsureMinimumHeightForContent();
+    }
+
+    /// <summary>
+    /// SuggestedRectangle은 Windows가 "이전 창 크기 × DPI 비율"로 계산한 값이라, 이 폼처럼
+    /// AutoSize와 폰트 기준 폭 계산을 섞어 쓰는 레이아웃에서는 실제 필요한 높이보다 부족할 수
+    /// 있음(요일별/인수 영역이 커진 만큼 딱 비례해서 늘어난다는 보장이 없음). 그래서 나머지
+    /// 고정 영역들의 실측 높이를 직접 더해 부족하면 창을 그만큼 키움 — "특정 날짜" 영역이
+    /// 밀려서 안 보이는 사고를 근본적으로 막기 위함.
+    /// </summary>
+    private void EnsureMinimumHeightForContent()
+    {
+        PerformLayout();
+
+        int fixedHeight = _menu.Height + _weekdayGroup.Height + _argumentsGroup.Height +
+                          _saveBar.Height + _statusBar.Height;
+        int minOverridesHeight = Font.Height * 12;
+        int desired = fixedHeight + minOverridesHeight;
+
+        if (Height < desired)
+        {
+            Height = desired;
+        }
+    }
+
+    private void ApplyDynamicFieldWidths()
+    {
+        foreach (DateTimePicker picker in _dayTimePickers)
+        {
+            picker.Width = MeasureFieldWidth(picker, "00:00");
+        }
+
+        _overrideDatePicker.Width = MeasureFieldWidth(_overrideDatePicker, "0000-00-00");
+        _overrideTimePicker.Width = MeasureFieldWidth(_overrideTimePicker, "00:00");
+    }
+
+    /// <summary>
+    /// 표본 텍스트를 현재(모니터별로 보정된) 폰트로 측정해 필요한 폭을 구함. 스핀 버튼 등
+    /// 네이티브 크롬 여유분도 고정 픽셀이 아니라 폰트 크기에 비례하게 둬, 고DPI 모니터에서
+    /// 크롬이 커지는 만큼 같이 커지게 함.
+    /// </summary>
+    private static int MeasureFieldWidth(Control control, string sampleText)
+    {
+        Size textSize = TextRenderer.MeasureText(sampleText, control.Font);
+        return textSize.Width + control.Font.Height * 2;
     }
 
     private void BuildMenu()
@@ -108,32 +208,42 @@ public sealed class MainForm : Form
         menu.Items.Add(toolMenu);
 
         MainMenuStrip = menu;
+        _menu = menu;
         Controls.Add(menu);
     }
 
     private void BuildWeekdayPanel()
     {
+        // 고정 Height 대신 AutoSize를 써서, 실제 렌더링된 자식 컨트롤 크기(폰트/DPI에 따라
+        // 달라짐)에 맞춰 그룹박스 스스로 커지게 함. 픽셀 값을 하드코딩하면 화면 배율이나
+        // 폰트 설정에 따라 버튼/행이 잘리는 문제가 재발하기 쉬움.
         GroupBox group = new()
         {
             Text = "요일별 기본 스케줄",
             Dock = DockStyle.Top,
-            Height = 268,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Padding = new Padding(12, 8, 12, 8)
         };
 
         TableLayoutPanel table = new()
         {
             Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 3,
             RowCount = DayKeys.Length
         };
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
-        table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+        // 세 컬럼 모두 AutoSize로 둠. Absolute 픽셀 값을 쓰면 PerMonitorV2가 모니터별로
+        // 폰트를 정확히 키워줘도(라벨/체크박스 자체는 AutoSize라 문제 없음) 컬럼 폭은 고정된
+        // 그대로라 높은 DPI 모니터에서 "월요일" 같은 라벨이 줄바꿈되거나 잘리는 문제가 있었음.
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         for (int i = 0; i < DayKeys.Length; i++)
         {
-            table.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             Label label = new()
             {
@@ -170,6 +280,7 @@ public sealed class MainForm : Form
         }
 
         group.Controls.Add(table);
+        _weekdayGroup = group;
         Controls.Add(group);
     }
 
@@ -216,7 +327,8 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Top,
             FlowDirection = FlowDirection.LeftToRight,
-            Height = 40,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             WrapContents = false
         };
 
@@ -263,7 +375,9 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Bottom,
             FlowDirection = FlowDirection.LeftToRight,
-            Height = 40
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false
         };
         _overrideRemoveButton = new Button { Text = "선택한 날짜 삭제", AutoSize = true };
         _overrideRemoveButton.Click += (_, _) =>
@@ -329,21 +443,24 @@ public sealed class MainForm : Form
         {
             Text = "종료 명령 인수",
             Dock = DockStyle.Bottom,
-            Height = 108,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Padding = new Padding(12, 8, 12, 12)
         };
 
         TableLayoutPanel table = new()
         {
             Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             ColumnCount = 3,
             RowCount = 2
         };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        table.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         Label label = new()
         {
@@ -383,6 +500,7 @@ public sealed class MainForm : Form
         table.Controls.Add(hint, 1, 1);
 
         group.Controls.Add(table);
+        _argumentsGroup = group;
         Controls.Add(group);
     }
 
@@ -395,7 +513,8 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Bottom,
             FlowDirection = FlowDirection.RightToLeft,
-            Height = 48,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Padding = new Padding(12, 8, 12, 8)
         };
 
@@ -428,6 +547,7 @@ public sealed class MainForm : Form
         saveBar.Controls.Add(_saveButton);
         saveBar.Controls.Add(_updateBackupButton);
         saveBar.Controls.Add(_deleteBackupButton);
+        _saveBar = saveBar;
         Controls.Add(saveBar);
     }
 
@@ -436,6 +556,7 @@ public sealed class MainForm : Form
         StatusStrip status = new();
         _statusLabel = new ToolStripStatusLabel("파일을 열어주세요.");
         status.Items.Add(_statusLabel);
+        _statusBar = status;
         Controls.Add(status);
     }
 
@@ -492,28 +613,20 @@ public sealed class MainForm : Form
     }
 
     /// <summary>
-    /// 백업 작업이 등록된 상태에서 스케줄을 저장했을 때, 작업 스케줄러도 함께 갱신할지 물어봄.
+    /// 백업 작업이 등록된 상태에서 스케줄을 저장하면, 작업 스케줄러도 확인 없이 곧바로 함께 갱신함.
     /// <para>
     /// 특정 날짜를 휴무로 지정하거나 요일을 끄는 변경은 가드 스크립트가 실행 시점에 파일을 다시
     /// 읽으므로 재등록 없이도 반영되지만, 시각을 바꾸거나 새로 종료를 켜는 변경은 트리거 자체가
-    /// 옛날 값이거나 아예 없어서 백업이 조용히 동작하지 않게 됨. 그 상태를 눈치채지 못하는 것이
-    /// 가장 위험하므로 저장 시점에 알림.
+    /// 옛날 값이거나 아예 없어서 백업이 조용히 동작하지 않게 됨. 예전엔 저장 시점에 갱신할지
+    /// 물어봤는데, 이 확인창 자체를 깜빡하고 "아니오"에 가깝게 지나치기 쉬워 결국 같은 문제가
+    /// 재발했음. 저장 = 백업도 최신 상태로 확정, 이 한 가지 규칙만 기억하면 되도록 확인 없이
+    /// 바로 갱신하는 쪽으로 바꿈(UAC 승격 창이 저장마다 뜨는 대가는 있음).
     /// </para>
     /// </summary>
-    private void OfferBackupRefresh()
+    private void SyncBackupIfRegistered()
     {
         if (_currentPath == null) return;
         if (!TaskSchedulerIntegration.IsRegistered()) return;
-
-        DialogResult refresh = MessageBox.Show(
-            this,
-            "작업 스케줄러 백업이 등록되어 있습니다.\n\n" +
-            "바꾼 시각이나 새로 켠 종료 예정을 백업에도 반영하려면 다시 등록해야 합니다.\n" +
-            "지금 갱신할까요?",
-            "백업 갱신",
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Question);
-        if (refresh != DialogResult.Yes) return;
 
         if (!TaskSchedulerIntegration.TryGetRegisteredDelayMinutes(out int delayMinutes))
         {
@@ -561,7 +674,7 @@ public sealed class MainForm : Form
                 MessageBoxIcon.Question);
             if (save != DialogResult.Yes) return;
 
-            TrySave(_currentPath, offerBackupRefresh: false);
+            TrySave(_currentPath, syncBackup: false);
             if (_isDirty) return;
         }
 
@@ -591,7 +704,7 @@ public sealed class MainForm : Form
                 MessageBoxIcon.Question);
             if (save != DialogResult.Yes) return;
 
-            TrySave(_currentPath, offerBackupRefresh: false);
+            TrySave(_currentPath, syncBackup: false);
             if (_isDirty) return;
         }
 
@@ -930,7 +1043,7 @@ public sealed class MainForm : Form
         }
     }
 
-    private void TrySave(string path, bool offerBackupRefresh = true)
+    private void TrySave(string path, bool syncBackup = true)
     {
         if (_root == null) return;
 
@@ -957,9 +1070,9 @@ public sealed class MainForm : Form
             UpdateTitle();
             _statusLabel.Text = $"저장됨: {path}";
 
-            if (offerBackupRefresh)
+            if (syncBackup)
             {
-                OfferBackupRefresh();
+                SyncBackupIfRegistered();
             }
         }
         catch (Exception e)

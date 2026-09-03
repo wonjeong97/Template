@@ -14,6 +14,12 @@ namespace Wonjeong.Tools.ShutdownScheduleEditor;
 /// 실행되는 순간 ShutdownSettings.json을 다시 읽는 가드 스크립트가 판단함. 덕분에 스케줄을
 /// 수정해도 특정 날짜 규칙은 다시 등록하지 않아도 그대로 반영됨.
 /// </para>
+/// <para>
+/// 이 경로가 발동한다는 것 자체가 유니티(및 ApiManagerBase의 정상 종료 로그)가 응답하지
+/// 못했다는 뜻이므로, 가드 스크립트가 같은 폴더의 Settings.json에서 apiUrl을 읽어 구분되는
+/// 메시지("Program exited (by TaskScheduler)")로 직접 종료 로그를 전송함. 유니티 프로세스와 무관한
+/// 별도 PowerShell 프로세스라 유니티가 멈춘 상태에서도 전송을 시도할 수 있음.
+/// </para>
 /// </summary>
 public static class TaskSchedulerIntegration
 {
@@ -107,6 +113,27 @@ public static class TaskSchedulerIntegration
 
         $shutdownArguments = $config.shutdownArguments
         if ([string]::IsNullOrWhiteSpace($shutdownArguments)) { $shutdownArguments = '-s -f -t 45' }
+
+        # 이 시점에 도달했다는 것 자체가 유니티가 정상 종료 로그를 못 보냈다는 뜻이므로,
+        # 별도 프로세스인 이 스크립트가 구분되는 메시지로 직접 종료 로그를 전송함.
+        # 전송 실패는 종료를 막지 않도록 무시함.
+        $settingsJsonPath = Join-Path (Split-Path -Parent $SettingsPath) 'Settings.json'
+        try {
+            $appSettings = Get-Content -LiteralPath $settingsJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($appSettings.apiUrl) {
+                $exitLogUrl = $appSettings.apiUrl + [uri]::EscapeDataString('Program exited (by TaskScheduler)')
+                try {
+                    Invoke-WebRequest -Uri $exitLogUrl -UseBasicParsing -TimeoutSec 5 | Out-Null
+                    Write-BackupLog "백업 종료 로그 전송 성공: $exitLogUrl"
+                } catch {
+                    Write-BackupLog "백업 종료 로그 전송 실패(무시하고 종료 진행): $_"
+                }
+            } else {
+                Write-BackupLog "Settings.json에 apiUrl이 없어 백업 종료 로그를 건너뜀"
+            }
+        } catch {
+            Write-BackupLog "Settings.json을 읽지 못해 백업 종료 로그를 건너뜀: $_"
+        }
 
         Write-BackupLog "$source 예정 시각이 지났으나 아직 실행 중이므로 종료 실행: shutdown $shutdownArguments"
         Start-Process -FilePath 'shutdown.exe' -ArgumentList $shutdownArguments -NoNewWindow

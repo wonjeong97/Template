@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using UnityEngine;
 using VContainer;
 using Wonjeong.Data;
+using Wonjeong.Utils;
 using ZLogger;
 
 #if UNITY_EDITOR
@@ -34,7 +35,10 @@ namespace Wonjeong.Network
         /// </summary>
         private const string LastStartupLogDateKey = "ApiManagerBase_LastStartupLogDate";
 
-        /// <summary>종료 시 서버에 보낼 상태 메시지.</summary>
+        /// <summary>
+        /// 종료 시 서버에 보낼 상태 메시지. 실제 전송 시에는 QuitReason.Current를 덧붙여
+        /// "Program exited (by User/GameCloser/ShutdownScheduler)" 형태로 나감.
+        /// </summary>
         private const string ExitLogMessage = "Program exited";
 
         // 종료 요청을 한 번 보류하고 로그를 보낸 뒤 다시 종료를 진행하기 위한 상태.
@@ -181,11 +185,14 @@ namespace Wonjeong.Network
                     return;
                 }
 
-                string url = settings.apiUrl + Uri.EscapeDataString(ExitLogMessage);
+                // 누가 종료시켰는지(사용자의 Alt+F4/창 닫기, GameCloser, ShutdownScheduler)
+                // 메시지에 남겨서 서버 로그만 보고도 원인을 구분할 수 있게 함.
+                string message = $"{ExitLogMessage} (by {QuitReason.Current})";
+                string url = settings.apiUrl + Uri.EscapeDataString(message);
 
                 await ApiRetryUtil.SendGetRequestWithRetryAsync(
                     url,
-                    $"exit log ({ExitLogMessage})",
+                    $"exit log ({message})",
                     Logger,
                     cts.Token,
                     ExitLogMaxAttemptCount,

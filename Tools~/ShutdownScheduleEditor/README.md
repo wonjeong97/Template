@@ -106,7 +106,13 @@ Windows 작업 스케줄러가 PC를 대신 끔. 유니티와 무관한 별도 �
 1. 오늘 날짜가 특정 날짜 목록에 있으면 그 설정을, 없으면 요일 설정을 사용
 2. `종료함`이 아니면 아무것도 하지 않고 종료
 3. 예정 시각 + 지연 시간이 아직 안 됐으면 아무것도 하지 않고 종료
-4. 위를 모두 통과하면 `shutdownArguments`로 `shutdown` 실행
+4. 위를 모두 통과하면, 같은 폴더의 `Settings.json`에서 `apiUrl`을 읽어
+   `"Program exited (by TaskScheduler)"` 종료 로그를 직접 전송(전송 실패는 무시하고 계속 진행)
+5. `shutdownArguments`로 `shutdown` 실행
+
+이 경로가 발동한다는 것 자체가 유니티(및 `ApiManagerBase`의 정상 종료 로그)가 응답하지 못했다는
+뜻이므로, 정상 종료 로그("Program exited")와 구분되는 값으로 별도 전송함. 유니티 프로세스와
+무관한 PowerShell 프로세스라 유니티가 멈춘 상태에서도 전송을 시도할 수 있음.
 
 실행 기록은 설정 파일 옆 `ShutdownBackup.log`에 남음.
 

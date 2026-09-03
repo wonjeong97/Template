@@ -25,6 +25,17 @@ public sealed class TaskSchedulerForm : Form
         _settingsPath = settingsPath;
         _buildTriggers = buildTriggers;
 
+        // MainForm과 같은 이유로 AutoScaleMode는 건드리지 않음(주석 참고). 버튼 줄이 잘리는
+        // 문제는 아래에서 각 FlowLayoutPanel을 고정 Height 대신 AutoSize로 바꿔서 해결함.
+
+        // 이 창도 독립된 최상위 Form이라 제목표시줄 아이콘을 따로 지정해야 함(MainForm 참고).
+        string? exePath = Environment.ProcessPath;
+        Icon? appIcon = string.IsNullOrEmpty(exePath) ? null : Icon.ExtractAssociatedIcon(exePath);
+        if (appIcon != null)
+        {
+            Icon = appIcon;
+        }
+
         Text = "작업 스케줄러 백업";
         Width = 620;
         Height = 460;
@@ -38,12 +49,39 @@ public sealed class TaskSchedulerForm : Form
         RefreshStatus();
     }
 
+    /// <summary>
+    /// MainForm과 같은 이유로 NumericUpDown의 Width를 폰트가 확정된 뒤 다시 계산함
+    /// (자세한 설명은 MainForm.OnLoad 참고).
+    /// </summary>
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        _delayInput.Width = MeasureFieldWidth(_delayInput, "000");
+    }
+
+    /// <summary>
+    /// MainForm과 같은 이유(다른 DPI 모니터로 드래그해도 OnLoad는 다시 안 불림)로 여기서도
+    /// Width를 다시 계산하고, SuggestedRectangle로 창 전체 크기도 새 DPI에 맞게 키움.
+    /// </summary>
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        Bounds = e.SuggestedRectangle;
+        _delayInput.Width = MeasureFieldWidth(_delayInput, "000");
+    }
+
+    private static int MeasureFieldWidth(Control control, string sampleText)
+    {
+        Size textSize = TextRenderer.MeasureText(sampleText, control.Font);
+        return textSize.Width + control.Font.Height * 2;
+    }
+
     private void BuildUi()
     {
         Label description = new()
         {
             Dock = DockStyle.Top,
-            Height = 108,
+            AutoSize = true,
             Padding = new Padding(16, 14, 16, 6),
             Text =
                 "유니티 앱이 멈춰서 스스로 PC를 끄지 못한 경우를 대비한 백업입니다.\n\n" +
@@ -55,7 +93,8 @@ public sealed class TaskSchedulerForm : Form
         FlowLayoutPanel delayPanel = new()
         {
             Dock = DockStyle.Top,
-            Height = 44,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Padding = new Padding(16, 0, 16, 0),
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false
@@ -73,7 +112,8 @@ public sealed class TaskSchedulerForm : Form
         FlowLayoutPanel buttonPanel = new()
         {
             Dock = DockStyle.Top,
-            Height = 52,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Padding = new Padding(16, 8, 16, 8),
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false

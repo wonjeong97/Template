@@ -34,6 +34,24 @@
 
   놓친 트리거를 다음 부팅 직후에 따라잡는 `StartWhenAvailable`은 **끔** — 켜져 있어야 할 트리거를 놓쳤다는 것은 그 시각에 PC가 이미 꺼져 있었다는 뜻이므로, 따라잡으면 아침에 켠 키오스크를 그대로 다시 끄는 사고가 남. 종료 시각 + 지연 시간이 자정을 넘기면 트리거가 다음 날로 밀려 가드가 엉뚱한 요일의 스케줄을 보게 되므로 등록 시 막고 안내함.
 
+- **작업 스케줄러 백업 경로에도 종료 로그 전송:** 유니티가 멈춰서 `ApiManagerBase`의 정상 종료 로그 경로를 타지 못한 경우, 가드 스크립트(`ShutdownBackupGuard.ps1`)가 같은 폴더의 `Settings.json`에서 `apiUrl`을 직접 읽어 종료 로그를 전송함. 유니티 프로세스와 무관한 PowerShell 프로세스라 유니티가 멈춘 상태에서도 전송을 시도할 수 있고, 정상 종료 로그와 구분되는 메시지를 쓰므로 두 경로가 겹쳐도 중복 기록되지 않음.
+
+- **종료 로그에 종료 주체 구분 추가(`QuitReason`):** `Runtime/Utils/QuitReason.cs`를 신설함. `Application.wantsToQuit` 자체는 누가 종료를 요청했는지 알려주지 않으므로, 종료를 직접 발동시키는 쪽(`ShutdownScheduler`, `GameCloser`)이 `Application.Quit()` 직전에 자기 이름을 정적 상태에 남기고, `ApiManagerBase`가 종료 로그 전송 시 이를 메시지에 반영함. 아무도 기록하지 않은 채 종료되는 경우(Alt+F4, 창 닫기 버튼처럼 OS가 직접 발생시키는 종료)는 사용자가 직접 닫은 것이므로 기본값 `User`로 남음. 최종적으로 `Program exited (by User)` / `(by GameCloser)` / `(by ShutdownScheduler)` / `(by TaskScheduler)` 네 가지로 구분되어, 서버 로그만 보고도 어떤 경로로 종료됐는지 알 수 있음.
+
+- **종료 스케줄 편집기 exe/창 아이콘 적용:** `Irem_Icon.png`를 16/32/48/256px 멀티 해상도 `app.ico`로 변환해 `ApplicationIcon`으로 등록함. exe 파일 자체의 아이콘(탐색기)과 실행 중인 창의 제목표시줄·작업표시줄 아이콘은 별개라, `Form.Icon`에 exe에 구운 아이콘을 추출해 명시적으로 지정함.
+
+### Fixed
+- **종료 스케줄 편집기 레이아웃이 고DPI 모니터에서 깨지던 문제 수정:** PerMonitorV2 DPI 인식이 폰트는 모니터별로 정확히 키워주지만, 코드에 하드코딩된 픽셀 크기(FlowLayoutPanel/GroupBox의 고정 `Height`, `TableLayoutPanel`의 `Absolute` 컬럼, `DateTimePicker`/`NumericUpDown`의 고정 `Width`)는 그대로라 폰트가 커진 모니터에서 라벨이 줄바꿈되거나 값이 잘리는 문제가 있었음(예: "월요일"이 두 줄로 줄바꿈, "09:10"이 "09:1"로 잘림).
+
+  고정 `Height`는 전부 `AutoSize`로 바꾸고, 라벨/체크박스처럼 내용 기반 AutoSize를 지원하는 컨트롤은 `TableLayoutPanel` 컬럼도 `Absolute`에서 `AutoSize`로 바꿔 자동으로 맞춰지게 함. `DateTimePicker`/`NumericUpDown`처럼 내용 기반 AutoSize를 지원하지 않는 컨트롤은 `OnLoad`에서 실제 폰트로 표본 텍스트 폭을 직접 측정(`TextRenderer.MeasureText`)해 `Width`를 계산함.
+
+  다른 DPI의 모니터로 창을 드래그하면 `OnLoad`는 다시 호출되지 않으므로 `OnDpiChanged`를 오버라이드해 폭을 다시 계산하도록 했고, 위쪽 고정 영역(요일별 스케줄 등)이 커진 폰트만큼 늘어나는데 창 자체 크기가 그대로면 `Dock=Fill`인 "특정 날짜" 영역이 밀려 안 보이는 문제가 있어, 고정 영역들의 실측 높이를 합산해 부족하면 창 높이를 직접 늘리도록 함(Windows가 제안하는 `DpiChangedEventArgs.SuggestedRectangle`은 폰트 기준 커스텀 레이아웃까지 정확히 반영하지 못해 그대로 신뢰하지 않음).
+
+  참고로 `AutoScaleMode.Dpi`를 `Program.cs`의 `ApplicationConfiguration.Initialize()`가 이미 설정한 PerMonitorV2와 함께 쓰면 두 스케일링 메커니즘이 충돌해 창이 절반 크기로 줄어드는 것을 실측으로 확인함 — 그래서 `AutoScaleMode`는 건드리지 않고 위 방식으로 해결함.
+
+### Changed
+- **저장 시 백업 스케줄러 자동 갱신:** 백업이 이미 등록된 상태에서 저장하면 "갱신할까요?" 확인창 없이 곧바로 함께 갱신하도록 바꿈. 확인창 자체가 깜빡하고 지나치기 쉬운 지점이라, 시각을 바꾸거나 새로 종료를 켠 변경이 백업에 반영되지 않는 사고가 재발했었음. 저장 = 백업도 최신 상태로 확정, 이 규칙 하나만 기억하면 되도록 함(대가로 백업이 등록되어 있으면 저장마다 UAC 승격 창이 뜸).
+
 ## [26.9.2] - 2026-09-02
 
 ### Added

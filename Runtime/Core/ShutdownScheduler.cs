@@ -222,6 +222,10 @@ namespace Wonjeong.Core
         /// </summary>
         private void ShutdownSequence()
         {
+            // ApiManagerBase가 종료 로그 메시지에 "누가 종료시켰는지" 반영할 수 있도록,
+            // Application.Quit()을 부르기 직전에 남겨둠.
+            QuitReason.Set(QuitReason.ShutdownScheduler);
+
             onBeforeShutdown.Invoke();
 
             string arguments = string.IsNullOrWhiteSpace(_schedule.shutdownArguments)
