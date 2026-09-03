@@ -1,6 +1,65 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.3] - 2026-09-02
+
+### Added
+- **프로그램 종료 시 서버 종료 로그 전송 추가(`ApiManagerBase`):** 시작 로그("Program started"/"Program restarted")와 짝이 되도록, 앱이 종료될 때 `Settings.json`의 `apiUrl`로 "Program exited" 상태 메시지를 전송함. `apiUrl`이 비어 있으면 생략하고, 네트워크 자체가 연결되어 있지 않으면 즉시 포기하며, 실패 시 재시도하는 정책은 `ApiRetryUtil`을 그대로 재사용하므로 시작 로그와 동일함.
+
+  `OnApplicationQuit`이 아니라 `Application.wantsToQuit`을 사용함. `OnApplicationQuit`에서 전송을 시작하면 요청은 나가더라도 응답을 받기 전에 프로세스가 사라져 로그가 유실되기 때문. `wantsToQuit`에서 `false`를 반환해 종료를 한 번 보류시키고, 전송이 끝난 뒤 다시 종료를 진행함(전송 성공·실패·시간 초과와 무관하게 `finally`에서 반드시 종료를 재개하므로 로그 때문에 종료가 막히지 않음).
+
+  다만 종료를 보류하는 시간은 짧아야 함 — 사용자가 종료를 기다리는 상황인 데다, OS가 시작한 종료(작업 스케줄러의 `shutdown`, 시스템 종료 등)에서는 Windows가 앱을 기다려주는 시간이 `WaitToKillAppTimeout`으로 제한되어 그 안에 끝내지 못하면 어차피 강제 종료됨. 그래서 시작 로그(3초 x 10회)보다 훨씬 짧은 기본값(1초 x 3회, 전체 상한 5초)을 쓰고, 프로젝트별로 조정할 수 있도록 `ExitLogMaxAttemptCount`/`ExitLogRetryDelaySeconds`/`ExitLogTimeoutSeconds`를 `protected virtual` 프로퍼티로 노출함. 에디터의 플레이 모드 종료는 `Application.Quit()`으로 재개되지 않으므로 `GameCloser`와 동일하게 `EditorApplication.isPlaying = false`로 분기함. 전송이 동기적으로 즉시 끝나는 경우(에디터·네트워크 미연결) 종료 재개가 `wantsToQuit`의 반환보다 앞서지 않도록 한 프레임 양보한 뒤 진행함.
+
+- **예약 종료 스케줄러(`ShutdownScheduler`) 추가:** `Runtime/Core/ShutdownScheduler.cs`를 신설하고 `RootLifetimeScope.ConfigureOptionalComponents`에 기존 선택 매니저와 동일한 `RegisterIfPresentInScene` 패턴으로 자동 등록함(씬에 배치하지 않으면 조용히 비활성이므로 기존 프로젝트에는 동작 변화가 없음). StreamingAssets의 `ShutdownSettings.json`을 읽어 요일별·날짜별 예정 시각에 도달하면, 서버에 종료 로그를 보낸 뒤 Windows `shutdown` 명령으로 PC를 종료함.
+
+  종료를 작업 스케줄러에 전적으로 맡기지 않고 앱이 직접 거는 이유는 **순서를 통제하기 위함**임. 외부에서 종료 신호가 오면 Windows가 앱의 정리를 기다려주는 시간이 `WaitToKillAppTimeout`으로 제한되어, 종료 로그 전송이 그 안에 끝나지 못하면 유실될 수 있음. 앱이 스스로 시각을 판단하면 `shutdown` 명령의 지연 시간(`-t`)만큼 여유를 확보한 뒤 정상 종료 절차를 태울 수 있어 이 경합이 사라짐.
+
+  동작 순서는 마무리 이벤트 실행 → `shutdown` 명령으로 OS 종료 예약 → `Application.Quit()`임. 종료 로그를 이 클래스가 직접 보내지 않고 위의 `ApiManagerBase` 종료 로그 경로에 맡기는 이유는, 양쪽에서 보내면 예약 종료 때만 로그가 두 번 기록되기 때문. `shutdown`이 지연 시간을 두고 OS 종료를 예약하므로 그 사이에 `ApiManagerBase`가 로그를 끝까지 보낼 시간이 확보됨.
+
+  로드는 `JsonLoader.LoadAsync`를 재사용함. 종료 직전에 페이드아웃·저장 등 프로젝트별 마무리를 끼워 넣을 수 있도록 `UnityEvent onBeforeShutdown`을 인스펙터에 노출하고, 런타임 생성 시에도 연결할 수 있게 `OnBeforeShutdown` 프로퍼티로 공개함(`InactivityTimer`와 동일한 패턴).
+
+  예정 시각이 이미 지난 뒤에 앱이 시작된 경우(운영자가 밤에 키오스크를 재시작한 상황 등)에는 그날을 이미 처리한 것으로 표시해 건너뜀 — 그렇지 않으면 켜자마자 다시 꺼져 현장에서 손을 쓸 수 없게 됨. 확인 주기(기본 15초)는 인스펙터로 조정 가능하되 0 이하로 설정해도 프레임마다 도는 폭주가 되지 않도록 1초 하한을 둠. 에디터와 Windows 이외 플랫폼에서는 실제 종료 대신 무엇을 실행했을지만 로그로 남김.
+
+- **종료 스케줄 데이터 구조(`ShutdownSetting`) 추가:** `Runtime/Data/TemplateData.cs`에 `ShutdownDaySchedule`(요일별 `enabled`/`time`), `ShutdownDateOverride`(특정 날짜 `date`/`enabled`/`time`), 이를 담는 `ShutdownSetting`(월~일 + `dateOverrides` + `shutdownArguments`)을 추가함. `Settings.json`에 합치지 않고 StreamingAssets의 **별도 파일 `ShutdownSettings.json`**(이 클래스가 파일의 루트)로 분리한 이유는, 현장에서 종료 시각만 수정할 때 다른 설정 파일을 건드릴 일이 없도록 하기 위함. `dateOverrides`에 등록된 날짜는 그날의 요일별 기본 스케줄보다 우선 적용됨(특정 월요일 하루만 휴무로 지정하거나 시각을 늦추는 용도). `shutdownArguments`는 기본값 `-s -f -t 45`이며, 지연 시간을 두는 것은 종료 로그 전송이 끝날 시간을 확보하기 위함(`-r`로 바꾸면 재부팅).
+
+- **종료 스케줄 편집기(`Tools~/ShutdownScheduleEditor`) 추가:** `ShutdownSettings.json`을 편집하는 독립 실행형 Windows GUI 도구(.NET 8 WinForms). Unity가 설치되지 않은 전시 현장 PC에서도 쓸 수 있도록 Unity 패키지 어셈블리(Runtime/Editor asmdef)와 완전히 분리된 프로젝트로 두었으며, 런타임에는 포함되지 않음. `파일 > 프로젝트에서 열기`로 Unity 프로젝트 루트·`Assets`·`StreamingAssets` 중 어느 폴더를 선택해도 `StreamingAssets/ShutdownSettings.json` 위치를 찾아내고, 파일이 없으면 확인 후 기본값(전 요일 비활성, 월요일 09:10·나머지 요일 17:35)으로 생성함. 요일별 종료 여부·시각, 특정 날짜 재정의(달력 입력 + 중복 날짜 덮어쓰기 확인 + 날짜순 자동 정렬), 종료 명령 인수를 편집할 수 있음. 잘못된 형식이 들어갈 여지를 없애기 위해 날짜 목록은 직접 편집을 막고 입력 줄로만 등록하도록 했으며, 저장 시 이 도구가 다루지 않는 키는 원본 그대로 보존함(루트를 통째로 교체하지 않고 편집 대상 키만 덮어씀).
+
+- **작업 스케줄러 백업 연동(`도구 > 작업 스케줄러 백업`) 추가:** 앱 자체가 멈춰 `ShutdownScheduler`가 동작하지 못하는 경우를 대비해, 예정 시각 +N분(기본 5분)에 PC를 끄는 Windows 작업 스케줄러 항목을 등록·해제하는 기능. 가드 스크립트는 유니티와 무관한 별도 `powershell.exe` 프로세스로 실행되므로 앱이 프리징·크래시 상태여도 동작함.
+
+  작업 스케줄러의 트리거는 "요일 + 시각" 반복은 표현할 수 있어도 **"특정 날짜는 제외"를 표현할 수 없어**, 요일 트리거만 걸면 휴무일로 지정한 날에도 백업이 PC를 꺼버림. 그래서 트리거는 시각을 잡는 역할만 하고 실제 종료 여부는 실행 시점에 `ShutdownBackupGuard.ps1`(등록 시 설정 파일 옆에 자동 생성)이 `ShutdownSettings.json`을 다시 읽어 판단하도록 함 — 특정 날짜 규칙을 바꿔도 작업을 재등록할 필요가 없음(요일·시각 변경 시에는 재등록 필요). 실행 기록은 설정 파일 옆 `ShutdownBackup.log`에 남음.
+
+  가드가 실행 시점에 파일을 다시 읽는 덕분에 "잘못 꺼지는" 방향의 변경(특정 날짜를 휴무로 지정, 요일 끄기)은 재등록 없이 반영되지만, 반대로 시각을 바꾸거나 새로 종료를 켜는 변경은 트리거 자체가 옛날 값이거나 아예 없어 **백업이 조용히 동작하지 않는 상태**가 됨. 이를 눈치채지 못하는 것이 가장 위험하므로, 백업이 등록된 상태에서 스케줄을 저장하면 작업 스케줄러도 갱신할지 물어보고, 수락 시 기존에 등록된 지연 시간(`-DelayMinutes` 값을 되읽음)을 그대로 유지한 채 재등록함.
+
+  등록되는 작업 이름은 `shutdown-backup`이며, 로그온 세션에 의존하지 않도록 `S4U` 로그온 유형("사용자의 로그온 여부에 관계없이 실행" + "암호를 저장하지 않습니다. 이 작업은 로컬 리소스에만 액세스할 수 있습니다")과 `HighestAvailable` 실행 수준("가장 높은 수준의 권한으로 실행")으로 등록함. 자동 로그인이 풀려 있어도 백업이 동작해야 하고, 로컬에서 `shutdown`만 실행하므로 네트워크 자원 접근 제약은 문제가 되지 않음. 이 두 설정은 승격 없이 등록되지 않으므로 등록·해제는 UAC 승격(`ShellExecute`의 `runas`)으로 수행하며, 사용자가 승격을 취소하면(`ERROR_CANCELLED`) 변경 없이 안내만 함. 승격은 출력 리디렉션을 지원하지 않아 실패 시 종료 코드만 표시됨. 상태 조회는 읽기 전용이라 승격 없이 수행함.
+
+  놓친 트리거를 다음 부팅 직후에 따라잡는 `StartWhenAvailable`은 **끔** — 켜져 있어야 할 트리거를 놓쳤다는 것은 그 시각에 PC가 이미 꺼져 있었다는 뜻이므로, 따라잡으면 아침에 켠 키오스크를 그대로 다시 끄는 사고가 남. 종료 시각 + 지연 시간이 자정을 넘기면 트리거가 다음 날로 밀려 가드가 엉뚱한 요일의 스케줄을 보게 되므로 등록 시 막고 안내함.
+
+- **작업 스케줄러 백업 경로에도 종료 로그 전송:** 유니티가 멈춰서 `ApiManagerBase`의 정상 종료 로그 경로를 타지 못한 경우, 가드 스크립트(`ShutdownBackupGuard.ps1`)가 같은 폴더의 `Settings.json`에서 `apiUrl`을 직접 읽어 종료 로그를 전송함. 유니티 프로세스와 무관한 PowerShell 프로세스라 유니티가 멈춘 상태에서도 전송을 시도할 수 있고, 정상 종료 로그와 구분되는 메시지를 쓰므로 두 경로가 겹쳐도 중복 기록되지 않음.
+
+- **종료 로그에 종료 주체 구분 추가(`QuitReason`):** `Runtime/Utils/QuitReason.cs`를 신설함. `Application.wantsToQuit` 자체는 누가 종료를 요청했는지 알려주지 않으므로, 종료를 직접 발동시키는 쪽(`ShutdownScheduler`, `GameCloser`)이 `Application.Quit()` 직전에 자기 이름을 정적 상태에 남기고, `ApiManagerBase`가 종료 로그 전송 시 이를 메시지에 반영함. 아무도 기록하지 않은 채 종료되는 경우(Alt+F4, 창 닫기 버튼처럼 OS가 직접 발생시키는 종료)는 사용자가 직접 닫은 것이므로 기본값 `User`로 남음. 최종적으로 `Program exited (by User)` / `(by GameCloser)` / `(by ShutdownScheduler)` / `(by TaskScheduler)` 네 가지로 구분되어, 서버 로그만 보고도 어떤 경로로 종료됐는지 알 수 있음.
+
+- **종료 스케줄 편집기 exe/창 아이콘 적용:** `Irem_Icon.png`를 16/32/48/256px 멀티 해상도 `app.ico`로 변환해 `ApplicationIcon`으로 등록함. exe 파일 자체의 아이콘(탐색기)과 실행 중인 창의 제목표시줄·작업표시줄 아이콘은 별개라, `Form.Icon`에 exe에 구운 아이콘을 추출해 명시적으로 지정함.
+
+### Fixed
+- **종료 스케줄 편집기 레이아웃이 고DPI 모니터에서 깨지던 문제 수정:** PerMonitorV2 DPI 인식이 폰트는 모니터별로 정확히 키워주지만, 코드에 하드코딩된 픽셀 크기(FlowLayoutPanel/GroupBox의 고정 `Height`, `TableLayoutPanel`의 `Absolute` 컬럼, `DateTimePicker`/`NumericUpDown`의 고정 `Width`)는 그대로라 폰트가 커진 모니터에서 라벨이 줄바꿈되거나 값이 잘리는 문제가 있었음(예: "월요일"이 두 줄로 줄바꿈, "09:10"이 "09:1"로 잘림).
+
+  고정 `Height`는 전부 `AutoSize`로 바꾸고, 라벨/체크박스처럼 내용 기반 AutoSize를 지원하는 컨트롤은 `TableLayoutPanel` 컬럼도 `Absolute`에서 `AutoSize`로 바꿔 자동으로 맞춰지게 함. `DateTimePicker`/`NumericUpDown`처럼 내용 기반 AutoSize를 지원하지 않는 컨트롤은 `OnLoad`에서 실제 폰트로 표본 텍스트 폭을 직접 측정(`TextRenderer.MeasureText`)해 `Width`를 계산함.
+
+  다른 DPI의 모니터로 창을 드래그하면 `OnLoad`는 다시 호출되지 않으므로 `OnDpiChanged`를 오버라이드해 폭을 다시 계산하도록 했고, 위쪽 고정 영역(요일별 스케줄 등)이 커진 폰트만큼 늘어나는데 창 자체 크기가 그대로면 `Dock=Fill`인 "특정 날짜" 영역이 밀려 안 보이는 문제가 있어, 고정 영역들의 실측 높이를 합산해 부족하면 창 높이를 직접 늘리도록 함(Windows가 제안하는 `DpiChangedEventArgs.SuggestedRectangle`은 폰트 기준 커스텀 레이아웃까지 정확히 반영하지 못해 그대로 신뢰하지 않음).
+
+  참고로 `AutoScaleMode.Dpi`를 `Program.cs`의 `ApplicationConfiguration.Initialize()`가 이미 설정한 PerMonitorV2와 함께 쓰면 두 스케일링 메커니즘이 충돌해 창이 절반 크기로 줄어드는 것을 실측으로 확인함 — 그래서 `AutoScaleMode`는 건드리지 않고 위 방식으로 해결함.
+
+### Changed
+- **저장 시 백업 스케줄러 자동 갱신:** 백업이 이미 등록된 상태에서 저장하면 "갱신할까요?" 확인창 없이 곧바로 함께 갱신하도록 바꿈. 확인창 자체가 깜빡하고 지나치기 쉬운 지점이라, 시각을 바꾸거나 새로 종료를 켠 변경이 백업에 반영되지 않는 사고가 재발했었음. 저장 = 백업도 최신 상태로 확정, 이 규칙 하나만 기억하면 되도록 함(대가로 백업이 등록되어 있으면 저장마다 UAC 승격 창이 뜸).
+
+- **서버 로그 메시지 규칙을 외부 로깅 명세에 맞춰 재정리(Breaking):** 기존 "Program started"/"Program restarted"/"Program exited (by X)" 문자열을 명세가 요구하는 형식으로 전면 교체함. 서버가 이 정확한 문자열로 파싱하므로 이전 값에 의존하는 서버/대시보드 쪽도 함께 갱신해야 함.
+  - 시작: `start` / `start (restart)`
+  - 종료: `end (by User)` / `end (by GameCloser)` / `end (by Shutdown Scheduler)`
+  - 종료(강제): 유니티가 멈춰 작업 스케줄러 백업이 대신 끈 경우만 `end`가 아니라 `end_kill (by Task Scheduler)` — 정상 종료와 강제 종료를 서버 로그만으로 구분하기 위함
+  - idle 화면 진입: `move_idle` / `move_idle_timeout`
+
+  `QuitReason`(`Runtime/Utils/QuitReason.cs`)의 문자열 값을 표기 규칙에 맞춰 공백 포함 형태("Shutdown Scheduler")로 바꿨고, `ApiManagerBase`에 idle 로그 전송용 공개 메서드 `SendMoveIdleLogAsync()`/`SendMoveIdleTimeoutLogAsync()`를 추가함. "최초 화면"이 프로젝트마다 다르므로 일반적인 idle 복귀(`move_idle`)는 프로젝트 코드가 해당 지점에서 직접 호출해야 하지만, `InactivityTimer`의 타임아웃(`move_idle_timeout`)은 두 컴포넌트 모두 표준 컴포넌트라 프로젝트마다 다를 이유가 없으므로 `RootLifetimeScope`가 씬에 `InactivityTimer`와 `ApiManagerBase`가 함께 있을 때 자동으로 연결함(`RegisterIfPresentInScene`가 등록 여부를 `bool`로 반환하도록 변경해, 둘 다 있을 때만 연결하도록 판단).
+
 ## [26.9.2] - 2026-09-02
 
 ### Added

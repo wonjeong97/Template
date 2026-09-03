@@ -31,6 +31,55 @@ namespace Wonjeong.Data
         public float imageAlpha;
     }
 
+    /// <summary>
+    /// 요일 하나에 대한 종료 스케줄. time은 "HH:mm" 형식(예: "21:30")이며,
+    /// enabled가 false면 이 요일에는 예약 종료를 하지 않음.
+    /// </summary>
+    [Serializable]
+    public class ShutdownDaySchedule
+    {
+        public bool enabled;
+        public string time;
+    }
+
+    /// <summary>
+    /// 특정 날짜 하나에 대한 종료 스케줄 재정의. date는 "yyyy-MM-dd" 형식이며,
+    /// 해당 날짜의 요일별 기본 스케줄(ShutdownSetting의 monday~sunday)보다 우선 적용됨.
+    /// </summary>
+    [Serializable]
+    public class ShutdownDateOverride
+    {
+        public string date;
+        public bool enabled;
+        public string time;
+    }
+
+    /// <summary>
+    /// 예약 종료 스케줄. Settings.json과 별개로 StreamingAssets의 ShutdownSettings.json에
+    /// 단독 루트 오브젝트로 저장되며, 전용 편집 도구(Tools~/ShutdownScheduleEditor)로 편집함.
+    /// dateOverrides에 등록된 날짜는 같은 날짜의 요일별 기본 스케줄보다 우선 적용됨.
+    /// </summary>
+    [Serializable]
+    public class ShutdownSetting
+    {
+        public ShutdownDaySchedule monday;
+        public ShutdownDaySchedule tuesday;
+        public ShutdownDaySchedule wednesday;
+        public ShutdownDaySchedule thursday;
+        public ShutdownDaySchedule friday;
+        public ShutdownDaySchedule saturday;
+        public ShutdownDaySchedule sunday;
+        public ShutdownDateOverride[] dateOverrides;
+
+        /// <summary>
+        /// 종료 시각에 실행할 Windows shutdown 명령의 인수. 기본값 "-s -f -t 45"는
+        /// 45초 뒤 강제 종료를 뜻함(-s 종료, -f 실행 중인 앱 강제 종료, -t 지연 시간(초)).
+        /// 지연 시간을 두는 이유는 종료 로그 전송이 끝날 시간을 확보하기 위함이며,
+        /// 재부팅으로 바꾸려면 -s 대신 -r을 쓰면 됨.
+        /// </summary>
+        public string shutdownArguments;
+    }
+
     // ---------------------- UISettingBase 상속-------------------------------
     
     [Serializable]

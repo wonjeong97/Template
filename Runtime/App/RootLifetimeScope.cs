@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Cysharp.Threading.Tasks;
 using MessagePipe;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
@@ -62,12 +63,30 @@ namespace Wonjeong.App
             RegisterIfPresentInScene<SoundManager>(builder);
             RegisterIfPresentInScene<VideoManager>(builder);
             RegisterIfPresentInScene<ArduinoManager>(builder);
-            RegisterIfPresentInScene<ApiManagerBase>(builder);
-            RegisterIfPresentInScene<InactivityTimer>(builder);
+            bool hasApiManager = RegisterIfPresentInScene<ApiManagerBase>(builder);
+            bool hasInactivityTimer = RegisterIfPresentInScene<InactivityTimer>(builder);
+            RegisterIfPresentInScene<ShutdownScheduler>(builder);
+
+            // InactivityTimer의 타임아웃은 "move_idle_timeout" 로그와 항상 짝을 이루므로(둘 다
+            // 표준 컴포넌트라 프로젝트마다 다를 이유가 없음), 씬에 둘 다 있으면 여기서 자동으로
+            // 연결함. 반면 일반적인 idle 복귀(예: 콘텐츠 종료 버튼)는 화면 구조가 프로젝트마다
+            // 달라 자동 연결이 불가능하므로 ApiManagerBase.SendMoveIdleLogAsync를 프로젝트
+            // 코드가 직접 호출하도록 남겨둠.
+            if (hasApiManager && hasInactivityTimer)
+            {
+                builder.RegisterBuildCallback(resolver =>
+                {
+                    ApiManagerBase apiManager = resolver.Resolve<ApiManagerBase>();
+                    InactivityTimer inactivityTimer = resolver.Resolve<InactivityTimer>();
+                    inactivityTimer.OnInactivityTimeout.AddListener(() => apiManager.SendMoveIdleTimeoutLogAsync().Forget());
+                });
+            }
         }
 
         /// <summary>
         /// 컴포넌트가 이 스코프가 속한 씬에 존재할 때만 RegisterComponentInHierarchy를 수행함.
+        /// 등록했는지 여부를 반환해, 씬에 함께 있을 때만 서로 연결해야 하는 선택 컴포넌트
+        /// 쌍(예: InactivityTimer ↔ ApiManagerBase)을 호출부에서 판단할 수 있게 함.
         /// <para>
         /// FindAnyObjectByType 대신 스코프 씬의 루트만 검사하는 이유:
         /// RegisterComponentInHierarchy는 '스코프가 속한 씬'에서만 컴포넌트를 찾으므로,
@@ -76,16 +95,18 @@ namespace Wonjeong.App
         /// 등록 메커니즘과 동일하게 맞춰 이 불일치를 원천 차단함.
         /// </para>
         /// </summary>
-        protected void RegisterIfPresentInScene<T>(IContainerBuilder builder) where T : MonoBehaviour
+        protected bool RegisterIfPresentInScene<T>(IContainerBuilder builder) where T : MonoBehaviour
         {
             foreach (GameObject root in gameObject.scene.GetRootGameObjects())
             {
                 if (root.GetComponentInChildren<T>(true) != null)
                 {
                     builder.RegisterComponentInHierarchy<T>();
-                    return;
+                    return true;
                 }
             }
+
+            return false;
         }
 
         /// <summary>
