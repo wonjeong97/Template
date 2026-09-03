@@ -181,6 +181,11 @@ self-contained 게시를 권장함.
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
+또는 Unity에서 **Tools > Build Shutdown Scheduler Exe** 메뉴를 실행하면 위 명령을 대신
+실행하고, 결과 exe를 현재 프로젝트의 `Assets/StreamingAssets/`로 자동 복사함(로컬에 .NET 8
+SDK 필요). 생성된 exe는 용량이 커서(약 150MB) git에 커밋하지 않으며, 필요할 때마다 이
+메뉴로 다시 만드는 방식을 권장함.
+
 `bin/Release/net8.0-windows/win-x64/publish/ShutdownScheduleEditor.exe` 하나만 복사해서
 현장 PC에서 실행하면 됨(네이티브 DLL도 exe 안에 묶여 있어 다른 파일 없이 이거 하나로 동작함).
 
