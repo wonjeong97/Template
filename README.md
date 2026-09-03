@@ -245,21 +245,24 @@ public class GameManager : GameManagerBase<GameManager>
 
 ### InactivityTimer (비활동 타이머)
 
-`Settings.json`의 `useInactivityTimer`/`resetTime`에 따라 일정 시간 입력이 없을 때 `On Inactivity Timeout` 이벤트를 실행합니다. "최초 화면"이 별도 씬인지, 같은 씬의 첫 패널인지는 프로젝트마다 다르므로, 실제로 되돌아가는 로직(씬 로드, 패널 전환 등)은 이 이벤트에 프로젝트가 원하는 메서드를 연결해 구현합니다.
+`Settings.json`의 `useInactivityTimer`/`resetTime`에 따라 일정 시간 입력이 없으면 `Wonjeong.App.InactivityTimeoutEvent`(MessagePipe 메시지)를 발행합니다. "최초 화면"이 별도 씬인지, 같은 씬의 첫 패널인지는 프로젝트마다 다르므로, 실제로 되돌아가는 로직(씬 로드, 패널 전환 등)은 이 이벤트를 `ISubscriber<InactivityTimeoutEvent>`로 구독해 프로젝트가 직접 구현합니다.
 
-등록 방식은 두 가지입니다.
-
-1. **씬에 미리 배치** — 다른 선택 매니저와 동일하게 씬에 `InactivityTimer` 컴포넌트를 두면(배치 자체가 사용 선언) `RootLifetimeScope`가 자동으로 찾아 등록합니다. 이 경우 인스펙터의 `On Inactivity Timeout`에 메서드를 직접 드래그해 연결할 수 있습니다.
-2. **VContainer로 런타임 생성** — `builder.RegisterComponentOnNewGameObject<InactivityTimer>(Lifetime.Singleton, "InactivityTimer").UnderTransform(transform)`처럼 프로젝트의 파생 스코프에서 직접 생성하는 경우, 인스펙터에 미리 참조를 꽂아둘 대상이 없으므로 코드에서 `OnInactivityTimeout`(공개 프로퍼티)에 `AddListener`로 연결합니다.
+다른 선택 매니저와 동일하게, 씬에 `InactivityTimer` 컴포넌트를 두면(배치 자체가 사용 선언) `RootLifetimeScope`가 자동으로 찾아 등록합니다. VContainer로 런타임 생성하는 경우도 동작 방식은 동일하며, 두 경우 모두 이벤트 연결은 코드로만 가능합니다(런타임 스폰 특성상 인스펙터 연결은 지원하지 않음).
 
 ```csharp
 public class PanelManager : MonoBehaviour
 {
+    private IDisposable _subscription;
+
     [Inject]
-    public void Construct(InactivityTimer inactivityTimer)
+    public void Construct(ISubscriber<InactivityTimeoutEvent> subscriber)
     {
-        // 씬 배치 여부와 무관하게 항상 코드로 연결 가능
-        inactivityTimer.OnInactivityTimeout.AddListener(ReturnToFirstPanel);
+        _subscription = subscriber.Subscribe(_ => ReturnToFirstPanel());
+    }
+
+    private void OnDestroy()
+    {
+        _subscription?.Dispose();
     }
 
     private void ReturnToFirstPanel()
@@ -268,6 +271,8 @@ public class PanelManager : MonoBehaviour
     }
 }
 ```
+
+`ApiManagerBase`를 함께 쓰는 프로젝트라면, 타임아웃으로 복귀했을 때 `move_idle_timeout` 로그가 자동으로 전송됩니다(`ApiManagerBase`가 `InactivityTimeoutEvent`를 직접 구독함). 종료 버튼처럼 사용자가 직접 첫 화면으로 돌아가는 일반적인 경우에는 `IPublisher<MoveIdleEvent>.Publish(new MoveIdleEvent())`를 호출하면 동일하게 `move_idle` 로그가 자동 전송됩니다(`ApiManagerBase`를 직접 참조할 필요 없음). 두 경우 모두 실제 화면 전환 로직과는 무관하므로, 위 `ReturnToFirstPanel` 같은 복귀 함수 안에서 로그를 직접 호출할 필요는 없습니다.
 
 긴 영상 재생처럼 입력 없이도 사용자가 실제로는 콘텐츠를 보고 있는 구간에서는 재생 시작/종료 시점에 `Pause()`/`Resume()`을 호출해 그동안 카운트가 멈추도록 합니다.
 

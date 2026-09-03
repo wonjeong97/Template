@@ -1,9 +1,11 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using MessagePipe;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
 using VContainer;
+using Wonjeong.App;
 using Wonjeong.Data;
 using Wonjeong.Utils;
 using ZLogger;
@@ -51,6 +53,12 @@ namespace Wonjeong.Network
         private bool _isQuitConfirmed;
         private bool _isSendingExitLog;
 
+        private ISubscriber<InactivityTimeoutEvent> _inactivityTimeoutSubscriber;
+        private IDisposable _inactivityTimeoutSubscription;
+
+        private ISubscriber<MoveIdleEvent> _moveIdleSubscriber;
+        private IDisposable _moveIdleSubscription;
+
         protected ILogger<ApiManagerBase> Logger { get; private set; }
         protected AppSettingsProvider SettingsProvider { get; private set; }
 
@@ -70,10 +78,13 @@ namespace Wonjeong.Network
         protected virtual float ExitLogTimeoutSeconds => 5f;
 
         [Inject]
-        public void Construct(ILogger<ApiManagerBase> logger, AppSettingsProvider settingsProvider)
+        public void Construct(ILogger<ApiManagerBase> logger, AppSettingsProvider settingsProvider,
+            ISubscriber<InactivityTimeoutEvent> inactivityTimeoutSubscriber, ISubscriber<MoveIdleEvent> moveIdleSubscriber)
         {
             Logger = logger;
             SettingsProvider = settingsProvider;
+            _inactivityTimeoutSubscriber = inactivityTimeoutSubscriber;
+            _moveIdleSubscriber = moveIdleSubscriber;
         }
 
         /// <summary>
@@ -90,12 +101,16 @@ namespace Wonjeong.Network
 
         /// <summary>
         /// 종료 로그 전송을 위해 종료 요청을 가로챌 수 있도록 이벤트를 구독함.
+        /// InactivityTimer의 타임아웃 이벤트, 그리고 프로젝트 코드가 발행하는 MoveIdleEvent도
+        /// 함께 구독해 idle 관련 로그를 자동으로 보냄.
         /// 파생 클래스에서 override할 경우 반드시 base.OnEnable()을 호출할 것.
-        /// 빠뜨리면 구독이 누락되어 종료 로그가 전송되지 않음.
+        /// 빠뜨리면 구독이 누락되어 종료/idle 로그가 전송되지 않음.
         /// </summary>
         protected virtual void OnEnable()
         {
             Application.wantsToQuit += OnWantsToQuit;
+            _inactivityTimeoutSubscription = _inactivityTimeoutSubscriber?.Subscribe(_ => SendMoveIdleTimeoutLogAsync().Forget());
+            _moveIdleSubscription = _moveIdleSubscriber?.Subscribe(_ => SendMoveIdleLogAsync().Forget());
         }
 
         /// <summary>
@@ -104,6 +119,10 @@ namespace Wonjeong.Network
         protected virtual void OnDisable()
         {
             Application.wantsToQuit -= OnWantsToQuit;
+            _inactivityTimeoutSubscription?.Dispose();
+            _inactivityTimeoutSubscription = null;
+            _moveIdleSubscription?.Dispose();
+            _moveIdleSubscription = null;
         }
 
         /// <summary>
@@ -276,10 +295,12 @@ namespace Wonjeong.Network
 
         /// <summary>
         /// "최초 화면"이 별도 씬인지 같은 씬의 첫 패널인지는 프로젝트마다 다르므로, 언제
-        /// 그 화면으로 돌아갔는지는 이 클래스가 자동으로 판단하지 않음. 프로젝트 코드가
-        /// 실제로 idle 화면에 진입하는 지점에서 직접 호출할 것.
+        /// 그 화면으로 돌아갔는지는 이 클래스가 자동으로 판단하지 않음. 대신 OnEnable에서
+        /// MoveIdleEvent를 구독해 이 메서드를 자동으로 호출하므로, 프로젝트 코드는 실제로
+        /// idle 화면에 진입하는 지점에서 IPublisher&lt;MoveIdleEvent&gt;.Publish만 호출하면
+        /// 됨(ApiManagerBase를 직접 참조하지 않아도 됨). 이 메서드를 직접 호출해도 무방함.
         /// InactivityTimer의 타임아웃으로 돌아간 경우는 <see cref="SendMoveIdleTimeoutLogAsync"/>를
-        /// 대신 호출할 것(RootLifetimeScope가 둘 다 씬에 있으면 자동으로 연결함).
+        /// 대신 호출할 것(이 클래스가 InactivityTimeoutEvent를 직접 구독해 자동으로 호출함).
         /// </summary>
         public UniTask SendMoveIdleLogAsync(CancellationToken cancellationToken = default)
         {
@@ -287,8 +308,10 @@ namespace Wonjeong.Network
         }
 
         /// <summary>
-        /// InactivityTimer가 타임아웃되어 idle 화면으로 돌아간 경우 전용. 일반적인 idle
-        /// 복귀(예: 콘텐츠 종료 버튼)는 <see cref="SendMoveIdleLogAsync"/>를 쓸 것.
+        /// InactivityTimer가 타임아웃되어 idle 화면으로 돌아간 경우 전용. OnEnable에서
+        /// InactivityTimeoutEvent를 구독해 이 메서드를 자동으로 호출하므로 보통 직접 호출할
+        /// 일은 없음. 일반적인 idle 복귀(예: 콘텐츠 종료 버튼)는 <see cref="SendMoveIdleLogAsync"/>를
+        /// 쓸 것(직접 호출하거나 MoveIdleEvent를 발행하면 자동으로 호출됨).
         /// </summary>
         public UniTask SendMoveIdleTimeoutLogAsync(CancellationToken cancellationToken = default)
         {

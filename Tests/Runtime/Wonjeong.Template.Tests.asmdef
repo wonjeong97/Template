@@ -3,6 +3,7 @@
     "rootNamespace": "Wonjeong.Tests",
     "references": [
         "Wonjeong.Template",
+        "MessagePipe",
         "UniTask",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",

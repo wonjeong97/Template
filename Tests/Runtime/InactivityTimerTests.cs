@@ -3,9 +3,11 @@ using System.Collections;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Cysharp.Threading.Tasks;
+using MessagePipe;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using Wonjeong.App;
 using Wonjeong.Core;
 
 namespace Wonjeong.Tests
@@ -16,6 +18,8 @@ namespace Wonjeong.Tests
     /// Settings.json 비동기 로드(AppSettingsProvider/DI)를 거치지 않고, UIManagerTests와
     /// 동일하게 리플렉션으로 설정 로드 완료 상태(_isEnabled/_timeoutSeconds)를 직접
     /// 주입하여 파일 I/O·DI 컨테이너 없이 Update() 타임아웃 로직만 검증함.
+    /// 메시지 파이프 퍼블리셔도 전체 DI 컨테이너 없이, Publish 시 콜백만 실행하는
+    /// 최소 테스트 더블(FakePublisher)을 리플렉션으로 주입해 검증함.
     /// </summary>
     public class InactivityTimerTests
     {
@@ -25,6 +29,22 @@ namespace Wonjeong.Tests
         private InactivityTimer _timer;
         private bool _invoked;
 
+        /// <summary> Publish 호출을 콜백으로만 전달하는 최소 IPublisher 테스트 더블. </summary>
+        private class FakePublisher : IPublisher<InactivityTimeoutEvent>
+        {
+            private readonly Action _onPublish;
+
+            public FakePublisher(Action onPublish)
+            {
+                _onPublish = onPublish;
+            }
+
+            public void Publish(InactivityTimeoutEvent message)
+            {
+                _onPublish();
+            }
+        }
+
         [SetUp]
         public void SetUp()
         {
@@ -32,7 +52,8 @@ namespace Wonjeong.Tests
             _timer = _go.AddComponent<InactivityTimer>();
             _invoked = false;
 
-            _timer.OnInactivityTimeout.AddListener(() => _invoked = true);
+            typeof(InactivityTimer).GetField("_publisher", Nonpublic)
+                .SetValue(_timer, new FakePublisher(() => _invoked = true));
         }
 
         [TearDown]
