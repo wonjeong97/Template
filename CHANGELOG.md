@@ -1,6 +1,14 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.4] - 2026-09-03
+
+> **⚠️ Breaking:** `InactivityTimer.OnInactivityTimeout`과 `ShutdownScheduler.OnBeforeShutdown`이 `UnityEvent`에서 MessagePipe 메시지(`InactivityTimeoutEvent`/`BeforeShutdownEvent`)로 바뀌었습니다. 두 프로퍼티가 제거되어 더 이상 인스펙터나 `.AddListener`로 연결할 수 없고, 코드에서 `IPublisher<T>`/`ISubscriber<T>`로만 연결 가능합니다.
+
+### Changed
+- **`InactivityTimer`/`ShutdownScheduler`를 UnityEvent에서 MessagePipe로 전환:** 두 컴포넌트 모두 `RootLifetimeScope`(`GameLifetimeScope` 프리팹의 자식)가 플레이 시 런타임으로 스폰하는 구조라 인스펙터에 미리 배치할 수 없었고, 결국 항상 코드로만 `.AddListener`를 호출해 왔음. 인스펙터 연결이라는 UnityEvent 고유의 이점이 애초에 없었으므로, 이 프로젝트가 이미 전역 이벤트 표준으로 쓰는 MessagePipe(`InspectorEvent`와 동일한 패턴)로 통일함. `RootLifetimeScope`에 `InactivityTimeoutEvent`/`BeforeShutdownEvent` 두 구조체와 브로커 등록을 추가하고, 각 컴포넌트는 `IPublisher<T>`를 주입받아 `Publish`로 발행함.
+- **`ApiManagerBase`가 `InactivityTimeoutEvent`를 직접 구독:** 기존에는 `RootLifetimeScope.ConfigureOptionalComponents`가 `InactivityTimer`와 `ApiManagerBase`가 둘 다 씬에 있을 때 `RegisterBuildCallback`으로 둘을 수동으로 연결했음. 이 글루 코드를 제거하고, 대신 `ApiManagerBase`가 `ISubscriber<InactivityTimeoutEvent>`를 주입받아 `OnEnable`에서 직접 구독(`OnDisable`에서 구독 해제)하도록 옮김 — 종료 로그 구독(`Application.wantsToQuit`)과 동일한 생명주기로 관리되어 일관성이 생기고, `RootLifetimeScope`가 두 컴포넌트의 존재 여부를 서로 알아야 할 필요가 없어짐.
+
 ## [26.9.3] - 2026-09-02
 
 ### Added

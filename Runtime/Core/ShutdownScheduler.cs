@@ -2,10 +2,11 @@ using System;
 using System.Threading;
 using Cysharp.Text;
 using Cysharp.Threading.Tasks;
+using MessagePipe;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
-using UnityEngine.Events;
 using VContainer;
+using Wonjeong.App;
 using Wonjeong.Data;
 using Wonjeong.Utils;
 using ZLogger;
@@ -39,8 +40,7 @@ namespace Wonjeong.Core
         [SerializeField, Tooltip("예정 시각 도달 여부를 확인하는 주기(초).")]
         private float checkIntervalSeconds = 15f;
 
-        [SerializeField, Tooltip("종료 직전에 실행할 동작. 페이드아웃이나 저장 등 프로젝트별 마무리를 연결함(런타임 생성 시에는 OnBeforeShutdown에 코드로 연결).")]
-        private UnityEvent onBeforeShutdown = new UnityEvent();
+        private IPublisher<BeforeShutdownEvent> _publisher;
 
         private ShutdownSetting _schedule;
         private bool _isShuttingDown;
@@ -51,17 +51,13 @@ namespace Wonjeong.Core
         private ILogger<ShutdownScheduler> _logger;
 
         /// <summary>
-        /// 인스펙터에서 연결할 수 없는 런타임 코드에서도 구독할 수 있도록 노출한 프로퍼티.
-        /// </summary>
-        public UnityEvent OnBeforeShutdown => onBeforeShutdown;
-
-        /// <summary>
         /// VContainer 의존성 주입.
-        /// ZLogger 할당.
+        /// 메시지 파이프 퍼블리셔 및 ZLogger 할당.
         /// </summary>
         [Inject]
-        public void Construct(ILogger<ShutdownScheduler> logger)
+        public void Construct(IPublisher<BeforeShutdownEvent> publisher, ILogger<ShutdownScheduler> logger)
         {
+            _publisher = publisher;
             _logger = logger;
         }
 
@@ -226,7 +222,7 @@ namespace Wonjeong.Core
             // Application.Quit()을 부르기 직전에 남겨둠.
             QuitReason.Set(QuitReason.ShutdownScheduler);
 
-            onBeforeShutdown.Invoke();
+            _publisher?.Publish(new BeforeShutdownEvent());
 
             string arguments = string.IsNullOrWhiteSpace(_schedule.shutdownArguments)
                 ? DefaultShutdownArguments
