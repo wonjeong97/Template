@@ -15,16 +15,19 @@ using UnityEditor;
 namespace Wonjeong.Network
 {
     /// <summary>
-    /// 프로그램 시작 시 서버에 시작 로그를 1회 전송하는 매니저의 기반 클래스.
+    /// 프로그램 시작·종료·idle 화면 진입 로그를 서버에 전송하는 매니저의 기반 클래스.
     /// 콘텐츠마다 호출해야 하는 API가 다를 수 있으므로, 프로젝트별 클래스가 이 클래스를
     /// 상속해 Start()를 override하고 <see cref="ApiRetryUtil.SendGetRequestWithRetryAsync"/>를
-    /// 재사용하면 시작 로그 외의 다른 API 호출에도 동일한 재시도/네트워크 확인/에디터·디벨롭
-    /// 빌드 스킵 정책을 그대로 적용할 수 있음(GameManagerBase&lt;T&gt;와 동일하게, abstract이므로
-    /// 씬에는 이 클래스를 상속한 프로젝트 전용 클래스를 배치할 것).
+    /// 재사용하면 여기서 다루는 로그 외의 다른 API 호출에도 동일한 재시도/네트워크 확인/
+    /// 에디터·디벨롭 빌드 스킵 정책을 그대로 적용할 수 있음(GameManagerBase&lt;T&gt;와 동일하게,
+    /// abstract이므로 씬에는 이 클래스를 상속한 프로젝트 전용 클래스를 배치할 것).
     /// <para>
     /// Settings.json의 apiUrl은 idx_content_device, uid 등 콘텐츠별 쿼리 파라미터가
-    /// 이미 포함된 형태(message= 까지)로 서버에서 발급되므로, 시작 로그는 여기에 상태
-    /// 메시지 값만 이어붙여 GET 요청을 보냄.
+    /// 이미 포함된 형태(message= 까지)로 서버에서 발급되므로, 각 로그는 여기에 상태
+    /// 메시지 값만 이어붙여 GET 요청을 보냄. 메시지 규칙: 시작 "start"/"start (restart)",
+    /// 종료 "end (by User/GameCloser/Shutdown Scheduler)", idle 진입 "move_idle"/
+    /// "move_idle_timeout". 유니티가 멈춰 작업 스케줄러가 대신 끈 경우("end_kill (by Task
+    /// Scheduler)")는 이 클래스가 아니라 Tools~/ShutdownScheduleEditor의 가드 스크립트가 별도로 보냄.
     /// </para>
     /// </summary>
     public abstract class ApiManagerBase : MonoBehaviour
@@ -36,10 +39,13 @@ namespace Wonjeong.Network
         private const string LastStartupLogDateKey = "ApiManagerBase_LastStartupLogDate";
 
         /// <summary>
-        /// 종료 시 서버에 보낼 상태 메시지. 실제 전송 시에는 QuitReason.Current를 덧붙여
-        /// "Program exited (by User/GameCloser/ShutdownScheduler)" 형태로 나감.
+        /// 정상 종료 시 서버에 보낼 상태 메시지. 실제 전송 시에는 QuitReason.Current를 덧붙여
+        /// "end (by User/GameCloser/Shutdown Scheduler)" 형태로 나감.
         /// </summary>
-        private const string ExitLogMessage = "Program exited";
+        private const string ExitLogMessage = "end";
+
+        private const string MoveIdleMessage = "move_idle";
+        private const string MoveIdleTimeoutMessage = "move_idle_timeout";
 
         // 종료 요청을 한 번 보류하고 로그를 보낸 뒤 다시 종료를 진행하기 위한 상태.
         private bool _isQuitConfirmed;
@@ -186,7 +192,9 @@ namespace Wonjeong.Network
                 }
 
                 // 누가 종료시켰는지(사용자의 Alt+F4/창 닫기, GameCloser, ShutdownScheduler)
-                // 메시지에 남겨서 서버 로그만 보고도 원인을 구분할 수 있게 함.
+                // 메시지에 남겨서 서버 로그만 보고도 원인을 구분할 수 있게 함. 작업 스케줄러
+                // 백업(유니티가 멈춰 강제로 꺼진 경우)은 이 경로를 타지 않고 가드 스크립트가
+                // "end_kill (by Task Scheduler)"를 직접 보냄(TaskSchedulerIntegration.cs 참고).
                 string message = $"{ExitLogMessage} (by {QuitReason.Current})";
                 string url = settings.apiUrl + Uri.EscapeDataString(message);
 
@@ -244,7 +252,7 @@ namespace Wonjeong.Network
 
                 string today = DateTime.Now.ToString("yyyy-MM-dd");
                 bool alreadyLoggedToday = PlayerPrefs.GetString(LastStartupLogDateKey, string.Empty) == today;
-                string message = alreadyLoggedToday ? "Program restarted" : "Program started";
+                string message = alreadyLoggedToday ? "start (restart)" : "start";
                 string url = settings.apiUrl + Uri.EscapeDataString(message);
 
                 bool success = await ApiRetryUtil.SendGetRequestWithRetryAsync(url, $"startup log ({message})", Logger, cancellationToken);
@@ -263,6 +271,61 @@ namespace Wonjeong.Network
             catch (Exception e)
             {
                 if (Logger != null) Logger.ZLogError($"[ApiManagerBase] Exception while sending startup log: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// "최초 화면"이 별도 씬인지 같은 씬의 첫 패널인지는 프로젝트마다 다르므로, 언제
+        /// 그 화면으로 돌아갔는지는 이 클래스가 자동으로 판단하지 않음. 프로젝트 코드가
+        /// 실제로 idle 화면에 진입하는 지점에서 직접 호출할 것.
+        /// InactivityTimer의 타임아웃으로 돌아간 경우는 <see cref="SendMoveIdleTimeoutLogAsync"/>를
+        /// 대신 호출할 것(RootLifetimeScope가 둘 다 씬에 있으면 자동으로 연결함).
+        /// </summary>
+        public UniTask SendMoveIdleLogAsync(CancellationToken cancellationToken = default)
+        {
+            return SendSimpleLogAsync(MoveIdleMessage, cancellationToken);
+        }
+
+        /// <summary>
+        /// InactivityTimer가 타임아웃되어 idle 화면으로 돌아간 경우 전용. 일반적인 idle
+        /// 복귀(예: 콘텐츠 종료 버튼)는 <see cref="SendMoveIdleLogAsync"/>를 쓸 것.
+        /// </summary>
+        public UniTask SendMoveIdleTimeoutLogAsync(CancellationToken cancellationToken = default)
+        {
+            return SendSimpleLogAsync(MoveIdleTimeoutMessage, cancellationToken);
+        }
+
+        /// <summary>
+        /// 시작/종료 로그처럼 재시도·시간 상한 정책이 특별히 필요하지 않은 단발성 상태
+        /// 메시지를 ApiRetryUtil의 기본 정책(최대 10회, 3초 간격)으로 전송하는 공통 경로.
+        /// </summary>
+        private async UniTask SendSimpleLogAsync(string message, CancellationToken cancellationToken)
+        {
+            if (SettingsProvider == null)
+            {
+                return;
+            }
+
+            try
+            {
+                Settings settings = await SettingsProvider.GetAsync(cancellationToken);
+
+                if (settings == null || string.IsNullOrEmpty(settings.apiUrl))
+                {
+                    if (Logger != null) Logger.ZLogInformation($"[ApiManagerBase] apiUrl is not set; skipping log: {message}");
+                    return;
+                }
+
+                string url = settings.apiUrl + Uri.EscapeDataString(message);
+                await ApiRetryUtil.SendGetRequestWithRetryAsync(url, message, Logger, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // 오브젝트 파괴 등으로 인한 정상적인 취소
+            }
+            catch (Exception e)
+            {
+                if (Logger != null) Logger.ZLogError($"[ApiManagerBase] Exception while sending log ({message}): {e.Message}");
             }
         }
     }

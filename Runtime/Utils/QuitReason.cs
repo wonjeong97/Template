@@ -16,7 +16,11 @@ namespace Wonjeong.Utils
     {
         public const string User = "User";
         public const string GameCloser = "GameCloser";
-        public const string ShutdownScheduler = "ShutdownScheduler";
+
+        /// <summary>
+        /// 로그 메시지에 그대로 노출되는 값이라 표기 규칙(공백 포함)에 맞춤: "end (by Shutdown Scheduler)".
+        /// </summary>
+        public const string ShutdownScheduler = "Shutdown Scheduler";
 
         public static string Current { get; private set; } = User;
 

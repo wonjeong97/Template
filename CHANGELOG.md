@@ -52,6 +52,14 @@
 ### Changed
 - **저장 시 백업 스케줄러 자동 갱신:** 백업이 이미 등록된 상태에서 저장하면 "갱신할까요?" 확인창 없이 곧바로 함께 갱신하도록 바꿈. 확인창 자체가 깜빡하고 지나치기 쉬운 지점이라, 시각을 바꾸거나 새로 종료를 켠 변경이 백업에 반영되지 않는 사고가 재발했었음. 저장 = 백업도 최신 상태로 확정, 이 규칙 하나만 기억하면 되도록 함(대가로 백업이 등록되어 있으면 저장마다 UAC 승격 창이 뜸).
 
+- **서버 로그 메시지 규칙을 외부 로깅 명세에 맞춰 재정리(Breaking):** 기존 "Program started"/"Program restarted"/"Program exited (by X)" 문자열을 명세가 요구하는 형식으로 전면 교체함. 서버가 이 정확한 문자열로 파싱하므로 이전 값에 의존하는 서버/대시보드 쪽도 함께 갱신해야 함.
+  - 시작: `start` / `start (restart)`
+  - 종료: `end (by User)` / `end (by GameCloser)` / `end (by Shutdown Scheduler)`
+  - 종료(강제): 유니티가 멈춰 작업 스케줄러 백업이 대신 끈 경우만 `end`가 아니라 `end_kill (by Task Scheduler)` — 정상 종료와 강제 종료를 서버 로그만으로 구분하기 위함
+  - idle 화면 진입: `move_idle` / `move_idle_timeout`
+
+  `QuitReason`(`Runtime/Utils/QuitReason.cs`)의 문자열 값을 표기 규칙에 맞춰 공백 포함 형태("Shutdown Scheduler")로 바꿨고, `ApiManagerBase`에 idle 로그 전송용 공개 메서드 `SendMoveIdleLogAsync()`/`SendMoveIdleTimeoutLogAsync()`를 추가함. "최초 화면"이 프로젝트마다 다르므로 일반적인 idle 복귀(`move_idle`)는 프로젝트 코드가 해당 지점에서 직접 호출해야 하지만, `InactivityTimer`의 타임아웃(`move_idle_timeout`)은 두 컴포넌트 모두 표준 컴포넌트라 프로젝트마다 다를 이유가 없으므로 `RootLifetimeScope`가 씬에 `InactivityTimer`와 `ApiManagerBase`가 함께 있을 때 자동으로 연결함(`RegisterIfPresentInScene`가 등록 여부를 `bool`로 반환하도록 변경해, 둘 다 있을 때만 연결하도록 판단).
+
 ## [26.9.2] - 2026-09-02
 
 ### Added

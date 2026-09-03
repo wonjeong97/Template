@@ -17,7 +17,9 @@ namespace Wonjeong.Tools.ShutdownScheduleEditor;
 /// <para>
 /// 이 경로가 발동한다는 것 자체가 유니티(및 ApiManagerBase의 정상 종료 로그)가 응답하지
 /// 못했다는 뜻이므로, 가드 스크립트가 같은 폴더의 Settings.json에서 apiUrl을 읽어 구분되는
-/// 메시지("Program exited (by TaskScheduler)")로 직접 종료 로그를 전송함. 유니티 프로세스와 무관한
+/// 메시지("end_kill (by Task Scheduler)")로 직접 종료 로그를 전송함. 정상 종료("end")와
+/// 구분되는 "end_kill"을 쓰는 이유는, 이 경로가 곧 유니티가 응답 없이 강제로 꺼졌다는
+/// 뜻이기 때문. 유니티 프로세스와 무관한
 /// 별도 PowerShell 프로세스라 유니티가 멈춘 상태에서도 전송을 시도할 수 있음.
 /// </para>
 /// </summary>
@@ -121,7 +123,7 @@ public static class TaskSchedulerIntegration
         try {
             $appSettings = Get-Content -LiteralPath $settingsJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
             if ($appSettings.apiUrl) {
-                $exitLogUrl = $appSettings.apiUrl + [uri]::EscapeDataString('Program exited (by TaskScheduler)')
+                $exitLogUrl = $appSettings.apiUrl + [uri]::EscapeDataString('end_kill (by Task Scheduler)')
                 try {
                     Invoke-WebRequest -Uri $exitLogUrl -UseBasicParsing -TimeoutSec 5 | Out-Null
                     Write-BackupLog "백업 종료 로그 전송 성공: $exitLogUrl"
