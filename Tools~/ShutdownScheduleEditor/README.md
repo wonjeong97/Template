@@ -77,7 +77,7 @@ StreamingAssets 폴더를 선택하면 `StreamingAssets/ShutdownSettings.json`�
 동작 순서는 다음과 같음:
 
 1. 시작 시 `ShutdownSettings.json`을 로드하고, 주기적으로(기본 15초) 예정 시각 도달 여부 확인
-2. 도달하면 `OnBeforeShutdown` 이벤트 실행(페이드아웃 등 프로젝트별 마무리를 연결)
+2. 도달하면 `BeforeShutdownEvent` 메시지 발행(페이드아웃 등 프로젝트별 마무리는 이 메시지를 구독해 연결)
 3. `shutdownArguments`로 `shutdown` 실행 — 지연 시간(`-t`)만큼 OS 종료가 예약됨
 4. `Application.Quit()`으로 앱을 정상 종료
 

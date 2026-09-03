@@ -23,6 +23,8 @@ namespace Wonjeong.App
 
     public struct BeforeShutdownEvent { }
 
+    public struct MoveIdleEvent { }
+
     public class RootLifetimeScope : LifetimeScope
     {
         /// <summary>
@@ -174,6 +176,7 @@ namespace Wonjeong.App
             builder.RegisterMessageBroker<InspectorEvent>(options);
             builder.RegisterMessageBroker<InactivityTimeoutEvent>(options);
             builder.RegisterMessageBroker<BeforeShutdownEvent>(options);
+            builder.RegisterMessageBroker<MoveIdleEvent>(options);
         }
     }
 }
