@@ -1,6 +1,13 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.5] - 2026-09-03
+
+### Added
+- **`ShutdownScheduleEditor.exe` 원클릭 빌드 메뉴 추가(`Editor/ShutdownScheduleEditorBuilder.cs`, `Tools/Build Shutdown Scheduler Exe`):** `Tools~/ShutdownScheduleEditor`는 self-contained 단일 파일로 게시하면 약 150MB라 git에 커밋하지 않고 필요할 때 로컬에서 `dotnet publish`로 새로 만들어 각 프로젝트의 `StreamingAssets`에 수동으로 복사해 왔음. 이 과정을 Unity 에디터 메뉴 하나로 자동화함(`PackageUpdater`와 동일한 `Tools/` 메뉴 컨벤션).
+
+  패키지 자신의 경로를 하드코딩하지 않고 `PackageInfo.FindForAssembly`로 조회함 — Git 소스로 설치하면 `Library/PackageCache/com.wonjeong.template@<커밋해시>/` 형태라 해시가 패키지 갱신마다 바뀌기 때문. `dotnet` SDK가 PATH에 없으면 명확한 에러로 즉시 중단하고, `dotnet publish`는 표준 출력/에러를 비동기 이벤트로 읽어(동기 `ReadToEnd`가 출력량이 많을 때 일으킬 수 있는 파이프 버퍼 교착을 피함) 동기적으로 대기함. 완료되면 게시 결과물을 호출한 프로젝트의 `Assets/StreamingAssets/ShutdownScheduleEditor.exe`로 덮어쓰기 복사하고 `AssetDatabase.Refresh()`로 반영함.
+
 ## [26.9.4] - 2026-09-03
 
 > **⚠️ Breaking:** `InactivityTimer.OnInactivityTimeout`과 `ShutdownScheduler.OnBeforeShutdown`이 `UnityEvent`에서 MessagePipe 메시지(`InactivityTimeoutEvent`/`BeforeShutdownEvent`)로 바뀌었습니다. 두 프로퍼티가 제거되어 더 이상 인스펙터나 `.AddListener`로 연결할 수 없고, 코드에서 `IPublisher<T>`/`ISubscriber<T>`로만 연결 가능합니다.
