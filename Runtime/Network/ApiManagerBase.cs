@@ -28,7 +28,8 @@ namespace Wonjeong.Network
     /// 이미 포함된 형태(message= 까지)로 서버에서 발급되므로, 각 로그는 여기에 상태
     /// 메시지 값만 이어붙여 GET 요청을 보냄. 메시지 규칙: 시작 "start"/"start (restart)",
     /// 종료 "end (by User/GameCloser/Shutdown Scheduler)", idle 진입 "move_idle"/
-    /// "move_idle_timeout". 유니티가 멈춰 작업 스케줄러가 대신 끈 경우("end_kill (by Task
+    /// "move_idle_timeout", 외부 API 호출 "Call API {url}", 외부 API 응답 "Return OK"/
+    /// "Return fail". 유니티가 멈춰 작업 스케줄러가 대신 끈 경우("end_kill (by Task
     /// Scheduler)")는 이 클래스가 아니라 Tools~/ShutdownScheduleEditor의 가드 스크립트가 별도로 보냄.
     /// </para>
     /// </summary>
@@ -48,6 +49,9 @@ namespace Wonjeong.Network
 
         private const string MoveIdleMessage = "move_idle";
         private const string MoveIdleTimeoutMessage = "move_idle_timeout";
+        private const string ExternalApiCallPrefix = "Call API ";
+        private const string ExternalApiReturnOkMessage = "Return OK";
+        private const string ExternalApiReturnFailMessage = "Return fail";
 
         // 종료 요청을 한 번 보류하고 로그를 보낸 뒤 다시 종료를 진행하기 위한 상태.
         private bool _isQuitConfirmed;
@@ -58,6 +62,12 @@ namespace Wonjeong.Network
 
         private ISubscriber<MoveIdleEvent> _moveIdleSubscriber;
         private IDisposable _moveIdleSubscription;
+
+        private ISubscriber<ExternalApiCallEvent> _externalApiCallSubscriber;
+        private IDisposable _externalApiCallSubscription;
+
+        private ISubscriber<ExternalApiReturnEvent> _externalApiReturnSubscriber;
+        private IDisposable _externalApiReturnSubscription;
 
         protected ILogger<ApiManagerBase> Logger { get; private set; }
         protected AppSettingsProvider SettingsProvider { get; private set; }
@@ -79,12 +89,15 @@ namespace Wonjeong.Network
 
         [Inject]
         public void Construct(ILogger<ApiManagerBase> logger, AppSettingsProvider settingsProvider,
-            ISubscriber<InactivityTimeoutEvent> inactivityTimeoutSubscriber, ISubscriber<MoveIdleEvent> moveIdleSubscriber)
+            ISubscriber<InactivityTimeoutEvent> inactivityTimeoutSubscriber, ISubscriber<MoveIdleEvent> moveIdleSubscriber,
+            ISubscriber<ExternalApiCallEvent> externalApiCallSubscriber = null, ISubscriber<ExternalApiReturnEvent> externalApiReturnSubscriber = null)
         {
             Logger = logger;
             SettingsProvider = settingsProvider;
             _inactivityTimeoutSubscriber = inactivityTimeoutSubscriber;
             _moveIdleSubscriber = moveIdleSubscriber;
+            _externalApiCallSubscriber = externalApiCallSubscriber;
+            _externalApiReturnSubscriber = externalApiReturnSubscriber;
         }
 
         /// <summary>
@@ -101,16 +114,18 @@ namespace Wonjeong.Network
 
         /// <summary>
         /// 종료 로그 전송을 위해 종료 요청을 가로챌 수 있도록 이벤트를 구독함.
-        /// InactivityTimer의 타임아웃 이벤트, 그리고 프로젝트 코드가 발행하는 MoveIdleEvent도
-        /// 함께 구독해 idle 관련 로그를 자동으로 보냄.
+        /// InactivityTimer의 타임아웃 이벤트, 그리고 프로젝트 코드가 발행하는 MoveIdleEvent,
+        /// 외부 API 호출/반환 이벤트도 함께 구독해 관련 로그를 자동으로 보냄.
         /// 파생 클래스에서 override할 경우 반드시 base.OnEnable()을 호출할 것.
-        /// 빠뜨리면 구독이 누락되어 종료/idle 로그가 전송되지 않음.
+        /// 빠뜨리면 구독이 누락되어 종료/idle/외부 API 로그가 전송되지 않음.
         /// </summary>
         protected virtual void OnEnable()
         {
             Application.wantsToQuit += OnWantsToQuit;
-            _inactivityTimeoutSubscription = _inactivityTimeoutSubscriber?.Subscribe(_ => SendMoveIdleTimeoutLogAsync().Forget());
-            _moveIdleSubscription = _moveIdleSubscriber?.Subscribe(_ => SendMoveIdleLogAsync().Forget());
+            _inactivityTimeoutSubscription = _inactivityTimeoutSubscriber?.Subscribe(_ => OnInactivityTimeout());
+            _moveIdleSubscription = _moveIdleSubscriber?.Subscribe(_ => OnMoveIdle());
+            _externalApiCallSubscription = _externalApiCallSubscriber?.Subscribe(e => OnExternalApiCall(e.RequestUrl));
+            _externalApiReturnSubscription = _externalApiReturnSubscriber?.Subscribe(e => OnExternalApiReturn(e.IsSuccess));
         }
 
         /// <summary>
@@ -123,6 +138,10 @@ namespace Wonjeong.Network
             _inactivityTimeoutSubscription = null;
             _moveIdleSubscription?.Dispose();
             _moveIdleSubscription = null;
+            _externalApiCallSubscription?.Dispose();
+            _externalApiCallSubscription = null;
+            _externalApiReturnSubscription?.Dispose();
+            _externalApiReturnSubscription = null;
         }
 
         /// <summary>
@@ -294,6 +313,47 @@ namespace Wonjeong.Network
         }
 
         /// <summary>
+        /// InactivityTimer 타임아웃 이벤트(<see cref="InactivityTimeoutEvent"/>) 수신 시 호출되는 가상 핸들러.
+        /// 기본 동작은 <see cref="SendMoveIdleTimeoutLogAsync"/>를 호출하여 move_idle_timeout 로그를 전송함.
+        /// 아웃트로(마지막 씬)처럼 타임아웃이 발생해도 중도 이탈이 아닌 정상 관람 완료(move_idle)로 집계되어야
+        /// 하는 등 씬별/조건별 분기가 필요한 경우 파생 클래스에서 override할 것.
+        /// </summary>
+        protected virtual void OnInactivityTimeout()
+        {
+            SendMoveIdleTimeoutLogAsync().Forget();
+        }
+
+        /// <summary>
+        /// 대기 화면 복귀 이벤트(<see cref="MoveIdleEvent"/>) 수신 시 호출되는 가상 핸들러.
+        /// 기본 동작은 <see cref="SendMoveIdleLogAsync"/>를 호출하여 move_idle 로그를 전송함.
+        /// 조건에 따라 로그 전송 방식을 커스텀해야 하는 경우 파생 클래스에서 override할 것.
+        /// </summary>
+        protected virtual void OnMoveIdle()
+        {
+            SendMoveIdleLogAsync().Forget();
+        }
+
+        /// <summary>
+        /// 외부 API 호출 이벤트(<see cref="ExternalApiCallEvent"/>) 수신 시 호출되는 가상 핸들러.
+        /// 기본 동작은 <see cref="SendExternalApiCallLogAsync"/>를 호출하여 "Call API {requestUrl}" 로그를 전송함.
+        /// 조건에 따라 로그 전송 방식을 커스텀해야 하는 경우 파생 클래스에서 override할 것.
+        /// </summary>
+        protected virtual void OnExternalApiCall(string requestUrl)
+        {
+            SendExternalApiCallLogAsync(requestUrl).Forget();
+        }
+
+        /// <summary>
+        /// 외부 API 반환 이벤트(<see cref="ExternalApiReturnEvent"/>) 수신 시 호출되는 가상 핸들러.
+        /// 기본 동작은 <see cref="SendExternalApiReturnLogAsync"/>를 호출하여 "Return OK" 또는 "Return fail" 로그를 전송함.
+        /// 조건에 따라 로그 전송 방식을 커스텀해야 하는 경우 파생 클래스에서 override할 것.
+        /// </summary>
+        protected virtual void OnExternalApiReturn(bool isSuccess)
+        {
+            SendExternalApiReturnLogAsync(isSuccess).Forget();
+        }
+
+        /// <summary>
         /// "최초 화면"이 별도 씬인지 같은 씬의 첫 패널인지는 프로젝트마다 다르므로, 언제
         /// 그 화면으로 돌아갔는지는 이 클래스가 자동으로 판단하지 않음. 대신 OnEnable에서
         /// MoveIdleEvent를 구독해 이 메서드를 자동으로 호출하므로, 프로젝트 코드는 실제로
@@ -316,6 +376,94 @@ namespace Wonjeong.Network
         public UniTask SendMoveIdleTimeoutLogAsync(CancellationToken cancellationToken = default)
         {
             return SendSimpleLogAsync(MoveIdleTimeoutMessage, cancellationToken);
+        }
+
+        /// <summary>
+        /// 외부 API(wavespeed, gpt 등) 호출 시작 로그("Call API {requestUrl}")를 서버에 전송함.
+        /// 직접 호출하거나 <see cref="ExternalApiCallEvent"/>를 발행하면 자동으로 호출됨.
+        /// </summary>
+        public UniTask SendExternalApiCallLogAsync(string requestUrl, CancellationToken cancellationToken = default)
+        {
+            return SendSimpleLogAsync($"{ExternalApiCallPrefix}{requestUrl}", cancellationToken);
+        }
+
+        /// <summary>
+        /// 외부 API(wavespeed, gpt 등) 호출 결과 로그("Return OK" 또는 "Return fail")를 서버에 전송함.
+        /// 직접 호출하거나 <see cref="ExternalApiReturnEvent"/>를 발행하면 자동으로 호출됨.
+        /// </summary>
+        public UniTask SendExternalApiReturnLogAsync(bool isSuccess, CancellationToken cancellationToken = default)
+        {
+            string message = isSuccess ? ExternalApiReturnOkMessage : ExternalApiReturnFailMessage;
+            return SendSimpleLogAsync(message, cancellationToken);
+        }
+
+        /// <summary>
+        /// 외부 API 호출 성공 로그("Return OK")를 서버에 전송함.
+        /// </summary>
+        public UniTask SendExternalApiReturnSuccessLogAsync(CancellationToken cancellationToken = default)
+        {
+            return SendExternalApiReturnLogAsync(true, cancellationToken);
+        }
+
+        /// <summary>
+        /// 외부 API 호출 실패 로그("Return fail")를 서버에 전송함.
+        /// </summary>
+        public UniTask SendExternalApiReturnFailLogAsync(CancellationToken cancellationToken = default)
+        {
+            return SendExternalApiReturnLogAsync(false, cancellationToken);
+        }
+
+        /// <summary>
+        /// 외부 API 호출 전후로 서버에 Call/Return 로그를 자동 전송하며 비동기 작업을 수행하는 헬퍼 메서드.
+        /// 시작 시 "Call API {requestUrl}"을 전송하고, 성공 시 "Return OK", 예외 발생 시 "Return fail"을 전송함
+        /// (발생한 예외는 로그 전송 후 다시 throw됨).
+        /// </summary>
+        public async UniTask<T> ExecuteWithExternalApiLoggingAsync<T>(string requestUrl, Func<UniTask<T>> apiAction, CancellationToken cancellationToken = default)
+        {
+            if (apiAction == null)
+            {
+                throw new ArgumentNullException(nameof(apiAction));
+            }
+
+            await SendExternalApiCallLogAsync(requestUrl, cancellationToken);
+            try
+            {
+                T result = await apiAction();
+                await SendExternalApiReturnLogAsync(true, cancellationToken);
+                return result;
+            }
+            catch
+            {
+                // apiAction 실행 도중 전달된 토큰이 취소되었더라도 Return fail 로그가 유실되지 않도록 CancellationToken.None으로 전송함.
+                await SendExternalApiReturnLogAsync(false, CancellationToken.None);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 반환값이 없는 외부 API 호출 전후로 서버에 Call/Return 로그를 자동 전송하며 비동기 작업을 수행하는 헬퍼 메서드.
+        /// 시작 시 "Call API {requestUrl}"을 전송하고, 성공 시 "Return OK", 예외 발생 시 "Return fail"을 전송함
+        /// (발생한 예외는 로그 전송 후 다시 throw됨).
+        /// </summary>
+        public async UniTask ExecuteWithExternalApiLoggingAsync(string requestUrl, Func<UniTask> apiAction, CancellationToken cancellationToken = default)
+        {
+            if (apiAction == null)
+            {
+                throw new ArgumentNullException(nameof(apiAction));
+            }
+
+            await SendExternalApiCallLogAsync(requestUrl, cancellationToken);
+            try
+            {
+                await apiAction();
+                await SendExternalApiReturnLogAsync(true, cancellationToken);
+            }
+            catch
+            {
+                // apiAction 실행 도중 전달된 토큰이 취소되었더라도 Return fail 로그가 유실되지 않도록 CancellationToken.None으로 전송함.
+                await SendExternalApiReturnLogAsync(false, CancellationToken.None);
+                throw;
+            }
         }
 
         /// <summary>

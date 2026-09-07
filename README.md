@@ -272,7 +272,7 @@ public class PanelManager : MonoBehaviour
 }
 ```
 
-`ApiManagerBase`를 함께 쓰는 프로젝트라면, 타임아웃으로 복귀했을 때 `move_idle_timeout` 로그가 자동으로 전송됩니다(`ApiManagerBase`가 `InactivityTimeoutEvent`를 직접 구독함). 종료 버튼처럼 사용자가 직접 첫 화면으로 돌아가는 일반적인 경우에는 `IPublisher<MoveIdleEvent>.Publish(new MoveIdleEvent())`를 호출하면 동일하게 `move_idle` 로그가 자동 전송됩니다(`ApiManagerBase`를 직접 참조할 필요 없음). 두 경우 모두 실제 화면 전환 로직과는 무관하므로, 위 `ReturnToFirstPanel` 같은 복귀 함수 안에서 로그를 직접 호출할 필요는 없습니다.
+`ApiManagerBase`를 함께 쓰는 프로젝트라면, 타임아웃으로 복귀했을 때 `move_idle_timeout` 로그가 자동으로 전송됩니다(`ApiManagerBase`가 `InactivityTimeoutEvent`를 직접 구독함). 종료 버튼처럼 사용자가 직접 첫 화면으로 돌아가는 일반적인 경우에는 `IPublisher<MoveIdleEvent>.Publish(new MoveIdleEvent())`를 호출하면 동일하게 `move_idle` 로그가 자동 전송됩니다(`ApiManagerBase`를 직접 참조할 필요 없음). 두 경우 모두 실제 화면 전환 로직과는 무관하므로, 위 `ReturnToFirstPanel` 같은 복귀 함수 안에서 로그를 직접 호출할 필요는 없습니다(아웃트로 등 특정 씬에서 타임아웃 시 정상 관람 완료로 집계하는 등 분기가 필요하면 `ApiManagerBase.OnInactivityTimeout()` / `OnMoveIdle()` 가상 메서드를 override).
 
 긴 영상 재생처럼 입력 없이도 사용자가 실제로는 콘텐츠를 보고 있는 구간에서는 재생 시작/종료 시점에 `Pause()`/`Resume()`을 호출해 그동안 카운트가 멈추도록 합니다.
 
@@ -281,6 +281,28 @@ public class PanelManager : MonoBehaviour
 
 void OnVideoStarted() => _inactivityTimer?.Pause();
 void OnVideoFinished() => _inactivityTimer?.Resume();
+```
+
+### 외부 API 호출 로깅 (wavespeed, GPT 등)
+
+프로젝트 내에서 외부 API를 호출할 때 사내 로깅 서버(`Settings.json`의 `apiUrl`)로 호출 및 반환 상태를 전송해야 하는 경우 세 가지 방식 중 상황에 맞춰 사용할 수 있습니다.
+- **호출 규격:** `Call API {http://apiaddress+parameter}`
+- **반환 규격:** `Return OK` (성공) / `Return fail` (실패)
+
+```csharp
+// 방법 1: 래퍼 메서드로 자동 전송 (호출 전 "Call API ~", 성공 시 "Return OK", 예외 발생 시 "Return fail")
+var response = await _apiManager.ExecuteWithExternalApiLoggingAsync(
+    "https://api.wavespeed.ai/v1/task?user=123",
+    async () => await CallWavespeedAsync());
+
+// 방법 2: ApiManagerBase 직접 호출
+await _apiManager.SendExternalApiCallLogAsync("https://api.openai.com/v1/chat/completions");
+bool success = await CallGptAsync();
+await _apiManager.SendExternalApiReturnLogAsync(success);
+
+// 방법 3: MessagePipe 이벤트 발행 (ApiManagerBase를 직접 참조하지 않는 경우)
+_externalApiCallPublisher.Publish(new ExternalApiCallEvent("https://api.openai.com/v1/chat/completions"));
+_externalApiReturnPublisher.Publish(new ExternalApiReturnEvent(true));
 ```
 
 ### 단축키 (기본 제공)

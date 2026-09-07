@@ -1,6 +1,15 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.7] - 2026-09-07
+
+### Added
+- **`ApiManagerBase` 비활동 타임아웃 및 idle 핸들러 가상 메서드(`OnInactivityTimeout`, `OnMoveIdle`) 추가:** `OnEnable` 내부에서 람다식으로 `SendMoveIdleTimeoutLogAsync().Forget()`과 `SendMoveIdleLogAsync().Forget()`을 직접 호출하던 구조를 `protected virtual void OnInactivityTimeout()` 및 `protected virtual void OnMoveIdle()` 가상 메서드로 분리함. 아웃트로(마지막 씬)에서 비활동 타임아웃 발생 시 중도 이탈(`move_idle_timeout`) 대신 정상 관람 완료(`move_idle`)로 집계해야 하는 등, 특정 씬이나 조건별로 로그 전송 방식을 분기해야 할 때 파생 클래스에서 리플렉션 없이 override하여 커스텀할 수 있도록 개선함.
+- **외부 API(wavespeed, gpt 등) 호출 및 반환 로깅 규격 지원(`ApiManagerBase`, `RootLifetimeScope`):** 프로젝트 내에서 외부 API를 호출할 때 사내 로깅 서버(`Settings.json`의 `apiUrl`)로 상태 메시지를 전송하는 규칙(`Call API {url}`, `Return OK`, `Return fail`)을 지원함. `RootLifetimeScope`에 `ExternalApiCallEvent(RequestUrl)` 및 `ExternalApiReturnEvent(IsSuccess)` MessagePipe 이벤트를 추가해 디커플링된 이벤트 발행을 지원하며, `ApiManagerBase`에 직접 호출 메서드(`SendExternalApiCallLogAsync`, `SendExternalApiReturnLogAsync`), 가상 핸들러(`OnExternalApiCall`, `OnExternalApiReturn`), 그리고 비동기 작업을 감싸 로그 전송을 자동화하는 래퍼(`ExecuteWithExternalApiLoggingAsync`, null 인자 방어 및 작업 취소 시 실패 로그 유실 방지 처리 포함)를 함께 제공함.
+
+### Changed
+- **패키지 설명(`package.json`)에서 WebGL 호환 문구 제거:** `description` 필드에 포함되어 있던 `Windows/WebGL 동시 호환.` 문구를 제거함.
+
 ## [26.9.5] - 2026-09-03
 
 ### Added

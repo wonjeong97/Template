@@ -25,6 +25,34 @@ namespace Wonjeong.App
 
     public struct MoveIdleEvent { }
 
+    /// <summary>
+    /// 외부 API(wavespeed, gpt 등) 호출 시작 시 서버 로그 전송용 이벤트.
+    /// ApiManagerBase가 이를 구독해 "Call API {RequestUrl}" 로그를 전송함.
+    /// </summary>
+    public readonly struct ExternalApiCallEvent
+    {
+        public string RequestUrl { get; }
+
+        public ExternalApiCallEvent(string requestUrl)
+        {
+            RequestUrl = requestUrl;
+        }
+    }
+
+    /// <summary>
+    /// 외부 API(wavespeed, gpt 등) 호출 완료 시 서버 로그 전송용 이벤트.
+    /// ApiManagerBase가 이를 구독해 "Return OK" 또는 "Return fail" 로그를 전송함.
+    /// </summary>
+    public readonly struct ExternalApiReturnEvent
+    {
+        public bool IsSuccess { get; }
+
+        public ExternalApiReturnEvent(bool isSuccess)
+        {
+            IsSuccess = isSuccess;
+        }
+    }
+
     public class RootLifetimeScope : LifetimeScope
     {
         /// <summary>
@@ -177,6 +205,8 @@ namespace Wonjeong.App
             builder.RegisterMessageBroker<InactivityTimeoutEvent>(options);
             builder.RegisterMessageBroker<BeforeShutdownEvent>(options);
             builder.RegisterMessageBroker<MoveIdleEvent>(options);
+            builder.RegisterMessageBroker<ExternalApiCallEvent>(options);
+            builder.RegisterMessageBroker<ExternalApiReturnEvent>(options);
         }
     }
 }
