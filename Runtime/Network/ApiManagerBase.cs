@@ -420,6 +420,11 @@ namespace Wonjeong.Network
         /// </summary>
         public async UniTask<T> ExecuteWithExternalApiLoggingAsync<T>(string requestUrl, Func<UniTask<T>> apiAction, CancellationToken cancellationToken = default)
         {
+            if (apiAction == null)
+            {
+                throw new ArgumentNullException(nameof(apiAction));
+            }
+
             await SendExternalApiCallLogAsync(requestUrl, cancellationToken);
             try
             {
@@ -429,7 +434,8 @@ namespace Wonjeong.Network
             }
             catch
             {
-                await SendExternalApiReturnLogAsync(false, cancellationToken);
+                // apiAction 실행 도중 전달된 토큰이 취소되었더라도 Return fail 로그가 유실되지 않도록 CancellationToken.None으로 전송함.
+                await SendExternalApiReturnLogAsync(false, CancellationToken.None);
                 throw;
             }
         }
@@ -441,6 +447,11 @@ namespace Wonjeong.Network
         /// </summary>
         public async UniTask ExecuteWithExternalApiLoggingAsync(string requestUrl, Func<UniTask> apiAction, CancellationToken cancellationToken = default)
         {
+            if (apiAction == null)
+            {
+                throw new ArgumentNullException(nameof(apiAction));
+            }
+
             await SendExternalApiCallLogAsync(requestUrl, cancellationToken);
             try
             {
@@ -449,7 +460,8 @@ namespace Wonjeong.Network
             }
             catch
             {
-                await SendExternalApiReturnLogAsync(false, cancellationToken);
+                // apiAction 실행 도중 전달된 토큰이 취소되었더라도 Return fail 로그가 유실되지 않도록 CancellationToken.None으로 전송함.
+                await SendExternalApiReturnLogAsync(false, CancellationToken.None);
                 throw;
             }
         }
