@@ -102,6 +102,10 @@ namespace Wonjeong.Network
 
         public void Dispose()
         {
+            _reachabilitySubject?.OnCompleted();
+            _networkLostSubject?.OnCompleted();
+            _networkRestoredSubject?.OnCompleted();
+
             _reachabilitySubject?.Dispose();
             _networkLostSubject?.Dispose();
             _networkRestoredSubject?.Dispose();

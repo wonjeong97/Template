@@ -134,5 +134,34 @@ namespace Wonjeong.Tests
                 DestroyUtil.SafeDestroy(goB);
             }
         }
+
+        [Test]
+        public void CheckDuplicate_WhenPreviousInstanceDestroyedWithoutRelease_SelfHeals()
+        {
+            GameObject go1 = new GameObject("TestA_1");
+            TestComponentA comp1 = go1.AddComponent<TestComponentA>();
+            SingletonGuard<TestComponentA>.CheckDuplicate(comp1, out bool isOriginal1, dontDestroyOnLoad: false);
+            Assert.IsTrue(isOriginal1);
+
+            // Release 호출 없이 GameObject를 파괴 (도메인 리로드 꺼진 에디터에서 플레이 모드 종료 상황 모사)
+            DestroyUtil.SafeDestroy(go1);
+
+            // 다음 인스턴스가 생성됨
+            GameObject go2 = new GameObject("TestA_2");
+            try
+            {
+                TestComponentA comp2 = go2.AddComponent<TestComponentA>();
+                bool isDuplicate2 = SingletonGuard<TestComponentA>.CheckDuplicate(comp2, out bool isOriginal2, dontDestroyOnLoad: false);
+
+                // 파괴된 이전 인스턴스를 감지하고 자가 복구하여 정상적으로 원본으로 등록되어야 함
+                Assert.IsFalse(isDuplicate2);
+                Assert.IsTrue(isOriginal2);
+                Assert.IsTrue(comp2.enabled);
+            }
+            finally
+            {
+                DestroyUtil.SafeDestroy(go2);
+            }
+        }
     }
 }

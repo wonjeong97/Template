@@ -106,6 +106,10 @@ namespace Wonjeong.Network
         /// 다른 선택 매니저(FadeManager/SoundManager/UIManager/VideoManager)와 동일하게,
         /// 씬 전환으로 재생성되어 시작 로그가 중복 전송되지 않도록 파괴를 방지함.
         /// 중복 생성 시 기존 인스턴스를 유지하고 새로 생성된 객체를 파괴함.
+        /// <para>
+        /// 파생 클래스에서 override할 경우 반드시 base.Awake()를 호출할 것.
+        /// 빠뜨리면 중복 생성 방어 로직이 누락되어 시작 로그가 중복 전송될 수 있음.
+        /// </para>
         /// </summary>
         protected virtual void Awake()
         {
