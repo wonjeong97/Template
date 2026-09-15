@@ -198,15 +198,41 @@ public class TestLifetimeScope : RootLifetimeScope
 
 ```
 Runtime/
-├─ App/        RootLifetimeScope   — DI 컨테이너 구성 진입점
-├─ Core/       GameManagerBase<T>  — 상속용 게임 매니저 기반 클래스
+├─ App/        RootLifetimeScope    — DI 컨테이너 구성 진입점
+├─ Core/       GameManagerBase      — 순수 DI 게임 매니저 기반 클래스
+│              InactivityTimer      — 무입력 감지 및 복귀 이벤트
+│              ShutdownScheduler    — 자동 종료 스케줄러
 ├─ Data/       Settings 스키마 + AppSettingsProvider
-├─ Hardware/   ArduinoManager      — 시리얼 통신 (WebGL은 스텁)
+├─ Hardware/   ArduinoManager       — 시리얼 통신 및 자동 재연결 (WebGL은 스텁)
 ├─ Input/      TemplateInputActions
+├─ Logging/    LogRetentionService  — 로그 파일 회전 및 만료 정리
+├─ Network/    NetworkStatusService — R3 기반 실시간 네트워크 모니터링
+│              ApiManagerBase       — 서버 상태 로깅 베이스
+│              ApiRetryUtil         — 네트워크 예외 격리 재시도
 ├─ UI/         UIManager · SoundManager · VideoManager · FadeManager
-├─ Utils/      JsonLoader · GameCloser · SystemCanvas
+├─ Utils/      SingletonGuard<T> · JsonLoader · GameCloser · SystemCanvas
 └─ ThirdParty/ RuntimeInspector · LogViewer(Reporter)
 ```
+
+### 주요 클래스 및 기능
+
+| 모듈 | 클래스 | 주요 기능 및 역할 |
+|---|---|---|
+| **Core** | `GameManagerBase` | 앱 수명주기 총괄, VContainer DI 기반 비동기 초기화, `OnSettingsLoaded` 가상 훅 제공 |
+| | `InactivityTimer` | 키오스크 무입력 시간 감지 및 자동 복귀 이벤트(`InactivityTimeoutEvent`) 발행 |
+| | `ShutdownScheduler` | 일별/요일별 자동 종료 스케줄링 및 사전 알림(`BeforeShutdownEvent`) 발행 |
+| **UI & Media** | `UIManager` | uGUI/TextMeshPro 비동기 폰트 프리로드/일괄 적용, 텍스처 VRAM 압축(`compress`) 제어 |
+| | `FadeManager` | 화면 페이드 인/아웃(DOTween/UniTask), 커스텀 색상(`Color? color`) 및 `SortingOrder` 제어 |
+| | `SoundManager` | BGM/SFX 비동기 재생, 마스터/BGM/SFX 개별 볼륨 및 음소거(`Mute`), DOTween 페이드 충돌 방어 |
+| | `VideoManager` | 비디오 비동기 프리로드/재생, 고아 RenderTexture 메모리 최적 해제 ($O(N+M)$) |
+| **Network** | `NetworkStatusService` | R3 기반 실시간 네트워크 도달성/끊김/복구 모니터링 (오프라인 키오스크 초기 알림 억제) |
+| | `ApiManagerBase` | 시작/종료/비활동/외부 API 호출 이력 사내 서버 전송 추상 베이스 클래스 |
+| | `ApiRetryUtil` | 지수 백오프 및 소켓/DNS 네트워크 예외 격리를 지원하는 WebRequest 안정적 재시도 |
+| **Logging** | `LogRetentionService` | 일별 로그 파일 회전(`AddZLoggerRollingFile`) 및 30일 보관 주기 만료 파일 자동 정리 |
+| **Hardware** | `ArduinoManager` | 시리얼 통신, 읽기 스레드 예외 격리 및 메인 스레드 마샬링 기반 자동 재연결(`AutoReconnect`) |
+| **Data & Utils**| `AppSettingsProvider` | `Settings.json` 단일 로드/캐싱 및 런타임 핫 리로드(`ReloadAsync`) 지원 |
+| | `JsonLoader` | `StreamingAssets` 및 `PersistentData` 지원, `.json` 확장자 자동 보정 직렬화 |
+| | `SingletonGuard<T>` | `DontDestroyOnLoad` 중복 방어 일원화, 즉시 비활성화 및 에디터 도메인 리로드 자가 복구 |
 
 ### 설계 원칙
 
@@ -233,12 +259,17 @@ Runtime/
 ### GameManager 확장
 
 ```csharp
-public class GameManager : GameManagerBase<GameManager>
+public class GameManager : GameManagerBase
 {
     protected override void Start()
     {
         base.Start();
-        // 프로젝트 고유 초기화
+        // 프로젝트 고유 시작 로직
+    }
+
+    protected override void OnSettingsLoaded(AppSettings settings)
+    {
+        // 설정 로드 완료 직후 초기화 로직
     }
 }
 ```
