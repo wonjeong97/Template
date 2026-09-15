@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using Cysharp.Threading.Tasks;
 using MessagePipe;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
@@ -13,6 +12,7 @@ using Wonjeong.Network;
 using Wonjeong.UI;
 using Wonjeong.Utils;
 using ZLogger;
+using ZLogger.Providers;
 using ZLogger.Unity;
 
 namespace Wonjeong.App
@@ -62,6 +62,7 @@ namespace Wonjeong.App
         protected override void Configure(IContainerBuilder builder)
         {
             ConfigureLogging(builder);
+            ConfigureLogRetention(builder);
             ConfigureMessagePipe(builder);
             ConfigureSettings(builder);
             ConfigureCoreComponents(builder);
@@ -175,13 +176,23 @@ namespace Wonjeong.App
 
 // WebGL에서는 파일 시스템 및 백그라운드 스레드 기반 파일 로깅이 불가능하므로 Unity 콘솔 로그만 사용함.
 #if !UNITY_EDITOR && !UNITY_WEBGL
-                    string logFilePath = Path.Combine(Application.persistentDataPath, "Logs", "GameLog.txt");
-                    
-                    logging.AddZLoggerFile(logFilePath, options =>
+                    // 회전(Rolling) 파일로 출력함. 단일 GameLog.txt에 무한 append하던 기존 방식은
+                    // 몇 주~몇 달 무중단으로 도는 키오스크에서 파일 하나가 계속 커져 디스크를 잠식했음.
+                    // 날짜(일) 단위로 회전하고, 같은 날에도 용량 상한을 넘기면 시퀀스로 분할하여
+                    // 개별 파일 크기를 제한함. 파일명: GameLog_yyyy-MM-dd_000.txt
+                    // (오래된 파일 정리는 책임을 분리해 LogRetentionService가 담당함 - ConfigureLogRetention 참고)
+                    logging.AddZLoggerRollingFile(options =>
                     {
-                        options.UsePlainTextFormatter(formatter => 
+                        // timestamp: 회전 시점, sequenceNo: 같은 구간 내 용량 분할 번호(0부터).
+                        // 프리픽스 포맷(DateTime.Now, 로컬)과 일 경계를 맞추기 위해 LocalDateTime으로 명명함.
+                        options.FilePathSelector = (timestamp, sequenceNo) =>
+                            Path.Combine(LogDirectory, $"{LogRetentionService.LogFilePrefix}_{timestamp.LocalDateTime:yyyy-MM-dd}_{sequenceNo:000}.txt");
+                        options.RollingInterval = RollingInterval.Day;
+                        options.RollingSizeKB = LogRollingSizeKB;
+
+                        options.UsePlainTextFormatter(formatter =>
                         {
-                            formatter.SetPrefixFormatter($"{0:yyyy-MM-dd HH:mm:ss} | ", (in MessageTemplate template, in LogInfo info) => 
+                            formatter.SetPrefixFormatter($"{0:yyyy-MM-dd HH:mm:ss} | ", (in MessageTemplate template, in LogInfo info) =>
                             {
                                 template.Format(DateTime.Now);
                             });
@@ -192,6 +203,33 @@ namespace Wonjeong.App
             }, Lifetime.Singleton);
 
             builder.Register(typeof(ILogger<>), typeof(Logger<>), Lifetime.Singleton);
+        }
+
+        /// <summary>
+        /// 빌드 환경의 파일 로그가 위치하는 디렉터리. ConfigureLogging(회전 설정)과
+        /// ConfigureLogRetention(정리 대상 지정)이 동일 경로를 참조하도록 단일 소스로 둠.
+        /// </summary>
+        protected static string LogDirectory => Path.Combine(Application.persistentDataPath, "Logs");
+
+        /// <summary>개별 로그 파일 용량 상한(KB). 초과 시 같은 날짜 안에서 시퀀스로 분할됨.</summary>
+        protected virtual int LogRollingSizeKB => 10 * 1024; // 10 MB
+
+        /// <summary>로그 파일 보관 기간(일). 이보다 오래된 GameLog 파일은 정리 대상.</summary>
+        protected virtual int LogRetentionDays => 30;
+
+        /// <summary>
+        /// 오래된 로그 파일을 주기적으로 정리하는 LogRetentionService를 VContainer 엔트리포인트로
+        /// 등록함. 로깅 프로바이더 구성(ConfigureLogging)과 파일 정리 책임을 분리하여, 정리 정책
+        /// (주기·보관일)을 로깅 설정과 독립적으로 바꿀 수 있고 순수 로직을 단위 테스트할 수 있게 함.
+        /// 에디터/WebGL은 애초에 파일 로깅을 하지 않으므로 등록 자체를 생략함.
+        /// </summary>
+        protected virtual void ConfigureLogRetention(IContainerBuilder builder)
+        {
+#if !UNITY_EDITOR && !UNITY_WEBGL
+            builder.RegisterEntryPoint<LogRetentionService>(
+                _ => new LogRetentionService(LogDirectory, LogRetentionDays),
+                Lifetime.Singleton);
+#endif
         }
 
         /// <summary>

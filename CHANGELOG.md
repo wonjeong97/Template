@@ -1,6 +1,15 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.15] - 2026-09-15
+
+### Added
+- **`LogRetentionService` 추가(`Runtime/Utils`):** 오래된 로그 파일 정리 책임을 `RootLifetimeScope`에서 분리한 VContainer 엔트리포인트(`IStartable`/`IDisposable`). 로깅 프로바이더 구성("무엇을 어떻게 남길지")과 파일 정리("오래된 것을 언제 지울지")가 한 메서드(`ConfigureLogging`)에 섞여 있던 것을 `ConfigureLogRetention`으로 나눠, 정리 정책을 로깅 설정과 독립적으로 바꿀 수 있게 하고 순수 정리 로직(`CleanupOldLogs`)을 MonoBehaviour나 컨테이너 없이 단위 테스트할 수 있게 함. `LogRetentionServiceTests` 7건 추가(보관 기간 초과 파일 삭제, 최근 파일 보존, 무관한 파일 미삭제, 디렉터리 부재 시 예외 없음, 레거시 GameLog.txt 만료 삭제 및 최근 파일 보존, 파일 잠금 시 예외 격리).
+
+### Changed
+- **빌드 환경 파일 로깅을 회전(Rolling) 방식으로 전환(`RootLifetimeScope`):** 단일 `GameLog.txt`에 무한 append하던 `AddZLoggerFile`을 `AddZLoggerRollingFile`로 교체함. 몇 주~몇 달 무중단으로 도는 키오스크에서 로그 파일 하나가 회전/용량 제한 없이 계속 커져 디스크를 잠식하던 문제를 해결함. **날짜(일) 단위 회전 + 개별 파일 10MB 상한**을 적용하여, 하루에도 로그가 많으면 `GameLog_yyyy-MM-dd_000.txt`, `_001.txt`처럼 시퀀스로 분할됨. 로그 레벨·문구·타임스탬프 프리픽스(`yyyy-MM-dd HH:mm:ss | `) 포맷은 기존과 동일하게 유지함. `LogDirectory`, `LogRollingSizeKB`, `LogRetentionDays`를 `protected`로 열어 파생 스코프에서 프로젝트 환경에 맞게 커스텀할 수 있도록 개선함.
+- **오래된 로그 파일 자동 정리(보관 기간 30일) 추가:** ZLogger 2.5.10의 rolling provider는 파일을 새로 만들 뿐 오래된 파일을 지우지 않아(보관 개수/기간 옵션 미지원), 회전만으로는 날짜별 파일이 계속 쌓여 디렉터리 총량이 여전히 무한정 커짐. 이를 보완하기 위해 마지막 기록 시각이 30일을 지난 `GameLog_*.txt` 및 이전 버전의 레거시 `GameLog.txt`를 삭제하는 `LogRetentionService`를 추가함. **시작 시 1회 정리 후 24시간마다 반복**하며, 메인 스레드 프레임 드랍(Hitch)을 방지하기 위해 파일 I/O는 **ThreadPool 백그라운드 스레드에서 비동기**로 수행됨. 특정 파일이 외부 프로세스에 의해 잠겨 있어도 전체 정리가 중단되지 않도록 파일 단위로 예외를 격리함. 서비스 수명은 `Application.exitCancellationToken`에 묶여 앱 종료 시 정리됨. (에디터/WebGL은 기존과 동일하게 파일 로깅 대상에서 제외)
+
 ## [26.9.7] - 2026-09-07
 
 ### Added
