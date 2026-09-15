@@ -53,7 +53,6 @@ namespace Wonjeong.Network
         private const string ExternalApiReturnOkMessage = "Return OK";
         private const string ExternalApiReturnFailMessage = "Return fail";
 
-        private static bool _isInstantiated;
         private bool _isOriginal;
 
         // 종료 요청을 한 번 보류하고 로그를 보낸 뒤 다시 종료를 진행하기 위한 상태.
@@ -110,19 +109,9 @@ namespace Wonjeong.Network
         /// </summary>
         protected virtual void Awake()
         {
-            if (!_isInstantiated)
+            if (SingletonGuard<ApiManagerBase>.CheckDuplicate(this, out _isOriginal))
             {
-                _isInstantiated = true;
-                _isOriginal = true;
-
-                if (transform.parent == null)
-                {
-                    DontDestroyOnLoad(gameObject);
-                }
-            }
-            else
-            {
-                Destroy(gameObject);
+                return;
             }
         }
 
@@ -135,6 +124,8 @@ namespace Wonjeong.Network
         /// </summary>
         protected virtual void OnEnable()
         {
+            if (!_isOriginal) return;
+
             Application.wantsToQuit += OnWantsToQuit;
             _inactivityTimeoutSubscription = _inactivityTimeoutSubscriber?.Subscribe(_ => OnInactivityTimeout());
             _moveIdleSubscription = _moveIdleSubscriber?.Subscribe(_ => OnMoveIdle());
@@ -272,6 +263,8 @@ namespace Wonjeong.Network
         /// </summary>
         protected virtual void Start()
         {
+            if (!_isOriginal) return;
+
             SendStartupLogAsync(this.GetCancellationTokenOnDestroy()).Forget();
         }
 
@@ -516,10 +509,7 @@ namespace Wonjeong.Network
 
         protected virtual void OnDestroy()
         {
-            if (_isOriginal)
-            {
-                _isInstantiated = false;
-            }
+            SingletonGuard<ApiManagerBase>.Release(_isOriginal);
         }
     }
 }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using R3;
 using UnityEngine;
 using VContainer;
+using Wonjeong.Utils;
 using ZLogger;
 
 namespace Wonjeong.Hardware
@@ -15,7 +16,6 @@ namespace Wonjeong.Hardware
     /// </summary>
     public class ArduinoManager : MonoBehaviour
     {
-        private static bool _isInstantiated;
         private bool _isOriginal;
 
         /// <summary>전체 포트 스캔을 반복할 기본 최대 횟수. (WebGL에서는 사용되지 않음)</summary>
@@ -54,19 +54,9 @@ namespace Wonjeong.Hardware
 
         private void Awake()
         {
-            if (!_isInstantiated)
+            if (SingletonGuard<ArduinoManager>.CheckDuplicate(this, out _isOriginal))
             {
-                _isInstantiated = true;
-                _isOriginal = true;
-
-                if (transform.parent == null)
-                {
-                    DontDestroyOnLoad(gameObject);
-                }
-            }
-            else
-            {
-                Destroy(gameObject);
+                return;
             }
         }
 
@@ -98,10 +88,8 @@ namespace Wonjeong.Hardware
         /// </summary>
         private void OnDestroy()
         {
-            if (_isOriginal)
-            {
-                _isInstantiated = false;
-            }
+            SingletonGuard<ArduinoManager>.Release(_isOriginal);
+            if (!_isOriginal) return;
 
             _messageSubject?.Dispose();
         }
@@ -116,13 +104,13 @@ using Microsoft.Extensions.Logging;
 using R3;
 using UnityEngine;
 using VContainer;
+using Wonjeong.Utils;
 using ZLogger;
 
 namespace Wonjeong.Hardware
 {
     public class ArduinoManager : MonoBehaviour
     {
-        private static bool _isInstantiated;
         private bool _isOriginal;
 
         /// <summary>전체 포트 스캔을 반복할 기본 최대 횟수.</summary>
@@ -182,19 +170,9 @@ namespace Wonjeong.Hardware
 
         private void Awake()
         {
-            if (!_isInstantiated)
+            if (SingletonGuard<ArduinoManager>.CheckDuplicate(this, out _isOriginal))
             {
-                _isInstantiated = true;
-                _isOriginal = true;
-
-                if (transform.parent == null)
-                {
-                    DontDestroyOnLoad(gameObject);
-                }
-            }
-            else
-            {
-                Destroy(gameObject);
+                return;
             }
         }
         
@@ -507,11 +485,25 @@ namespace Wonjeong.Hardware
 
         private void TriggerAutoReconnect()
         {
-            if (_isReconnecting) return;
-            StopAutoReconnect();
+            DispatchAutoReconnectAsync().Forget();
+        }
 
-            _reconnectCts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
-            AutoReconnectLoopAsync(_reconnectCts.Token).Forget();
+        private async UniTaskVoid DispatchAutoReconnectAsync()
+        {
+            try
+            {
+                await UniTask.SwitchToMainThread();
+                if (this == null || !isActiveAndEnabled) return;
+                if (_isReconnecting) return;
+                StopAutoReconnect();
+
+                _reconnectCts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
+                AutoReconnectLoopAsync(_reconnectCts.Token).Forget();
+            }
+            catch (Exception ex)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[ArduinoManager] Failed to dispatch auto-reconnect: {ex.Message}");
+            }
         }
 
         private void StopAutoReconnect()
@@ -617,18 +609,22 @@ namespace Wonjeong.Hardware
             }
         }
 
-        /// <summary>
-        /// 읽기 에러 발생 시 예외 처리 로직.
-        /// </summary>
         private void HandleReadException(Exception e)
         {
-            if (!_isRunning)
+            try
             {
-                return;
-            }
+                if (!_isRunning)
+                {
+                    return;
+                }
 
-            if(_logger != null) _logger.ZLogWarning($"[ArduinoManager] Read error: {e.Message}");
-            DisconnectInternal(false);
+                if (_logger != null) _logger.ZLogWarning($"[ArduinoManager] Read error: {e.Message}");
+                DisconnectInternal(false);
+            }
+            catch (Exception ex)
+            {
+                if (_logger != null) _logger.ZLogError($"[ArduinoManager] Exception during read error handling: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -637,10 +633,8 @@ namespace Wonjeong.Hardware
         /// </summary>
         private void OnDestroy()
         {
-            if (_isOriginal)
-            {
-                _isInstantiated = false;
-            }
+            SingletonGuard<ArduinoManager>.Release(_isOriginal);
+            if (!_isOriginal) return;
 
             StopAutoReconnect();
             DisconnectInternal(true);

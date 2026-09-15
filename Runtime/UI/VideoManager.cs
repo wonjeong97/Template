@@ -15,7 +15,6 @@ namespace Wonjeong.UI
 {
     public class VideoManager : MonoBehaviour
     {
-        private static bool _isInstantiated;
         private bool _isOriginal;
 
         private readonly List<RenderTexture> _activeRenderTextures = new List<RenderTexture>();
@@ -37,19 +36,9 @@ namespace Wonjeong.UI
         /// </summary>
         private void Awake()
         {
-            if (!_isInstantiated)
+            if (SingletonGuard<VideoManager>.CheckDuplicate(this, out _isOriginal))
             {
-                _isInstantiated = true;
-                _isOriginal = true;
-
-                if (transform.parent == null)
-                {
-                    DontDestroyOnLoad(gameObject);
-                }
-            }
-            else
-            {
-                Destroy(gameObject);
+                return;
             }
         }
 
@@ -257,10 +246,8 @@ namespace Wonjeong.UI
         /// </summary>
         private void OnDestroy()
         {
-            if (_isOriginal)
-            {
-                _isInstantiated = false;
-            }
+            SingletonGuard<VideoManager>.Release(_isOriginal);
+            if (!_isOriginal) return;
 
             foreach (RenderTexture rt in _activeRenderTextures)
             {

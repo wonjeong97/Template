@@ -9,6 +9,7 @@ using UnityEngine.InputSystem.LowLevel;
 using VContainer;
 using Wonjeong.App;
 using Wonjeong.Data;
+using Wonjeong.Utils;
 using ZLogger;
 
 namespace Wonjeong.Core
@@ -24,7 +25,6 @@ namespace Wonjeong.Core
     /// </summary>
     public class InactivityTimer : MonoBehaviour
     {
-        private static bool _isInstantiated;
         private bool _isOriginal;
 
         private IPublisher<InactivityTimeoutEvent> _publisher;
@@ -63,24 +63,16 @@ namespace Wonjeong.Core
         /// </summary>
         private void Awake()
         {
-            if (!_isInstantiated)
+            if (SingletonGuard<InactivityTimer>.CheckDuplicate(this, out _isOriginal))
             {
-                _isInstantiated = true;
-                _isOriginal = true;
-
-                if (transform.parent == null)
-                {
-                    DontDestroyOnLoad(gameObject);
-                }
-            }
-            else
-            {
-                Destroy(gameObject);
+                return;
             }
         }
 
         private void OnEnable()
         {
+            if (!_isOriginal) return;
+
             InputSystem.onEvent += OnAnyInputEvent;
         }
 
@@ -91,6 +83,7 @@ namespace Wonjeong.Core
 
         private void Start()
         {
+            if (!_isOriginal) return;
             // 주입 없이 컴포넌트만 붙인 경우 원인을 알기 어려운 NullReferenceException이 발생하므로
             // 무엇을 빠뜨렸는지 알려주고 중단함.
             if (_settingsProvider == null)
@@ -152,7 +145,7 @@ namespace Wonjeong.Core
 
         private void Update()
         {
-            if (!_isEnabled || _hasTimedOut || _isPaused)
+            if (!_isOriginal || !_isEnabled || _hasTimedOut || _isPaused)
             {
                 return;
             }
@@ -184,9 +177,7 @@ namespace Wonjeong.Core
         }
 
         /// <summary>
-        /// 마지막 활동 시각을 현재로 갱신하고 타임아웃 상태를 해제함.
-        /// 프로젝트가 입력이 아닌 다른 활동(예: 영상 재생 중)을 활동으로 취급하고 싶을 때
-        /// 외부에서 직접 호출할 수 있도록 public으로 공개함.
+        /// 타이머의 카운트를 0부터 다시 시작함.
         /// </summary>
         public void ResetTimer()
         {
@@ -195,8 +186,8 @@ namespace Wonjeong.Core
         }
 
         /// <summary>
-        /// 카운트를 일시 중지함. 긴 영상 재생처럼 입력 없이도 사용자가 콘텐츠를 보고 있는
-        /// 구간에서 재생 시작 시 호출해, 그 시간 동안은 타임아웃이 발동하지 않도록 함.
+        /// 비활동 시간 측정을 일시 중지함.
+        /// 긴 동영상 재생 등 사용자 입력 없이 화면을 봐야 하는 상황에서 호출함.
         /// </summary>
         public void Pause()
         {
@@ -216,10 +207,8 @@ namespace Wonjeong.Core
 
         private void OnDestroy()
         {
-            if (_isOriginal)
-            {
-                _isInstantiated = false;
-            }
+            SingletonGuard<InactivityTimer>.Release(_isOriginal);
+            if (!_isOriginal) return;
         }
     }
 }

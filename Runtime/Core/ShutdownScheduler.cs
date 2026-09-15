@@ -32,7 +32,6 @@ namespace Wonjeong.Core
     /// </summary>
     public class ShutdownScheduler : MonoBehaviour
     {
-        private static bool _isInstantiated;
         private bool _isOriginal;
 
         private const string ShutdownSettingsFileName = "ShutdownSettings.json";
@@ -70,19 +69,9 @@ namespace Wonjeong.Core
         /// </summary>
         private void Awake()
         {
-            if (!_isInstantiated)
+            if (SingletonGuard<ShutdownScheduler>.CheckDuplicate(this, out _isOriginal))
             {
-                _isInstantiated = true;
-                _isOriginal = true;
-
-                if (transform.parent == null)
-                {
-                    DontDestroyOnLoad(gameObject);
-                }
-            }
-            else
-            {
-                Destroy(gameObject);
+                return;
             }
         }
 
@@ -91,6 +80,7 @@ namespace Wonjeong.Core
         /// </summary>
         private void Start()
         {
+            if (!_isOriginal) return;
             // 이 매니저는 로거 외에 주입받는 의존성이 없어 주입이 없어도 동작 자체는 가능하지만,
             // 그 경우 진단 로그가 전부 사라져 원인 파악이 어려우므로 폴백으로 알려둠.
             if (_logger == null)
@@ -431,10 +421,8 @@ namespace Wonjeong.Core
 
         private void OnDestroy()
         {
-            if (_isOriginal)
-            {
-                _isInstantiated = false;
-            }
+            SingletonGuard<ShutdownScheduler>.Release(_isOriginal);
+            if (!_isOriginal) return;
         }
     }
 }

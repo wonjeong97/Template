@@ -21,7 +21,6 @@ namespace Wonjeong.UI
 {
     public class UIManager : MonoBehaviour
     {
-        private static bool _isInstantiated;
         private bool _isOriginal;
 
         private readonly Dictionary<string, string> _fontAddresses = new Dictionary<string, string>();
@@ -42,10 +41,10 @@ namespace Wonjeong.UI
 
         private readonly Dictionary<string, Sprite> _cachedSprites = new Dictionary<string, Sprite>();
 
-        // 진행 중인 스프라이트 로드를 공유하여 중복 디코드와 텍스처 누수를 방지함.
-        // 같은 이미지를 같은 프레임에 두 번 요청하면 둘 다 캐시를 놓쳐 Texture2D를 각각 생성하고,
-        // _cachedSprites에는 나중 것만 남아 먼저 만들어진 텍스처가 회수 대상에서 빠짐.
-        // 공유 소스로 Task를 쓰는 이유는 UniTask가 완료 전 다중 await를 지원하지 않기 때문임.
+        // 진행 중인 로드를 공유하는 소스로 UniTask 대신 Task를 사용함.
+        // UniTask는 완료 전에 여러 소비자가 await하면 continuation이 중복 등록되어
+        // InvalidOperationException("Already continuation registered")이 발생함.
+        // Task는 다중 awaiter를 기본 지원함. (AppSettingsProvider와 동일한 이유)
         private readonly Dictionary<string, Task<Sprite>> _activeSpriteLoads =
             new Dictionary<string, Task<Sprite>>();
 
@@ -77,19 +76,9 @@ namespace Wonjeong.UI
         /// </summary>
         private void Awake()
         {
-            if (!_isInstantiated)
+            if (SingletonGuard<UIManager>.CheckDuplicate(this, out _isOriginal))
             {
-                _isInstantiated = true;
-                _isOriginal = true;
-
-                if (transform.parent == null)
-                {
-                    DontDestroyOnLoad(gameObject);
-                }
-            }
-            else
-            {
-                Destroy(gameObject);
+                return;
             }
         }
 
@@ -99,6 +88,7 @@ namespace Wonjeong.UI
         /// </summary>
         private void Start()
         {
+            if (!_isOriginal) return;
             // 주입 없이 컴포넌트만 붙인 경우 원인을 알기 어려운 NullReferenceException이 발생하므로
             // 무엇을 빠뜨렸는지 알려주고 중단함.
             if (_settingsProvider == null)
@@ -289,32 +279,31 @@ namespace Wonjeong.UI
         /// </summary>
         private void ApplyPendingFonts(string key, Font loadedFont)
         {
-            if (!_pendingLabels.TryGetValue(key, out HashSet<Text> waitingSet)) return;
-
-            foreach (Text txt in waitingSet)
-            {
-                if (txt)
-                {
-                    txt.font = loadedFont;
-                }
-            }
-
-            _pendingLabels.Remove(key);
+            ApplyPendingFontsGeneric(key, loadedFont, _pendingLabels, (txt, font) => txt.font = font);
         }
 
         private void ApplyPendingTMPFonts(string key, TMP_FontAsset loadedFont)
         {
-            if (!_pendingTMPLabels.TryGetValue(key, out HashSet<TMP_Text> waitingSet)) return;
+            ApplyPendingFontsGeneric(key, loadedFont, _pendingTMPLabels, (txt, font) => txt.font = font);
+        }
 
-            foreach (TMP_Text txt in waitingSet)
+        private void ApplyPendingFontsGeneric<TComponent, TFontAsset>(
+            string key,
+            TFontAsset loadedFont,
+            Dictionary<string, HashSet<TComponent>> pendingDict,
+            Action<TComponent, TFontAsset> assignAction) where TComponent : Component
+        {
+            if (!pendingDict.TryGetValue(key, out HashSet<TComponent> waitingSet)) return;
+
+            foreach (TComponent comp in waitingSet)
             {
-                if (txt)
+                if (comp)
                 {
-                    txt.font = loadedFont;
+                    assignAction(comp, loadedFont);
                 }
             }
 
-            _pendingTMPLabels.Remove(key);
+            pendingDict.Remove(key);
         }
 
         #region Set Methods (Configuration)
@@ -581,34 +570,39 @@ namespace Wonjeong.UI
         /// </summary>
         private void AssignOrQueueFont(Text txt, string fontName)
         {
-            if (string.IsNullOrEmpty(fontName)) return;
-
-            if (_loadedFonts.TryGetValue(fontName, out Font fontAsset))
-            {
-                txt.font = fontAsset;
-                return;
-            }
-
-            QueuePendingFont(txt, fontName);
+            AssignOrQueueFontGeneric(txt, fontName, _loadedFonts, _pendingLabels, (t, f) => t.font = f);
         }
 
         private void AssignOrQueueTMPFont(TMP_Text txt, string fontName)
         {
+            AssignOrQueueFontGeneric(txt, fontName, _loadedTMPFonts, _pendingTMPLabels, (t, f) => t.font = f);
+        }
+
+        private void AssignOrQueueFontGeneric<TComponent, TFontAsset>(
+            TComponent component,
+            string fontName,
+            Dictionary<string, TFontAsset> loadedFonts,
+            Dictionary<string, HashSet<TComponent>> pendingDict,
+            Action<TComponent, TFontAsset> assignAction) where TComponent : Component
+        {
             if (string.IsNullOrEmpty(fontName)) return;
 
-            if (_loadedTMPFonts.TryGetValue(fontName, out TMP_FontAsset fontAsset))
+            if (loadedFonts.TryGetValue(fontName, out TFontAsset fontAsset))
             {
-                txt.font = fontAsset;
+                assignAction(component, fontAsset);
                 return;
             }
 
-            QueuePendingTMPFont(txt, fontName);
+            QueuePendingGeneric(component, fontName, pendingDict);
         }
 
         /// <summary>
         /// 비동기 로딩 중인 폰트를 대기하는 리스트에 텍스트 컴포넌트를 추가함.
         /// </summary>
-        private void QueuePendingFont(Text txt, string fontName)
+        private void QueuePendingGeneric<TComponent>(
+            TComponent component,
+            string fontName,
+            Dictionary<string, HashSet<TComponent>> pendingDict) where TComponent : Component
         {
             // 설정 로드가 끝나기 전에는 키의 유효성을 판단할 수 없음.
             // 여기서 걸러내면 이후 폰트가 로드되어도 ApplyPendingFonts가 이 텍스트를 찾지 못해
@@ -621,29 +615,13 @@ namespace Wonjeong.UI
                 return;
             }
 
-            if (!_pendingLabels.ContainsKey(fontName))
+            if (!pendingDict.TryGetValue(fontName, out HashSet<TComponent> set))
             {
-                _pendingLabels[fontName] = new HashSet<Text>();
+                set = new HashSet<TComponent>();
+                pendingDict[fontName] = set;
             }
 
-            _pendingLabels[fontName].Add(txt);
-        }
-
-        private void QueuePendingTMPFont(TMP_Text txt, string fontName)
-        {
-            if (_isSettingsLoaded && !_fontAddresses.ContainsKey(fontName))
-            {
-                if (_logger != null)
-                    _logger.ZLogWarning($"[UIManager] Unknown font key: {fontName}");
-                return;
-            }
-
-            if (!_pendingTMPLabels.ContainsKey(fontName))
-            {
-                _pendingTMPLabels[fontName] = new HashSet<TMP_Text>();
-            }
-
-            _pendingTMPLabels[fontName].Add(txt);
+            set.Add(component);
         }
 
         /// <summary>
@@ -805,10 +783,8 @@ namespace Wonjeong.UI
         /// </summary>
         private void OnDestroy()
         {
-            if (_isOriginal)
-            {
-                _isInstantiated = false;
-            }
+            SingletonGuard<UIManager>.Release(_isOriginal);
+            if (!_isOriginal) return;
 
             foreach (AsyncOperationHandle handle in _fontHandles)
             {

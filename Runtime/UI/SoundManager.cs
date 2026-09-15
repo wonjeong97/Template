@@ -18,7 +18,6 @@ namespace Wonjeong.UI
 {
     public class SoundManager : MonoBehaviour
     {
-        private static bool _isInstantiated;
         private bool _isOriginal;
 
         private AudioSource _bgmSource;
@@ -67,21 +66,12 @@ namespace Wonjeong.UI
         /// </summary>
         private void Awake()
         {
-            if (!_isInstantiated)
+            if (SingletonGuard<SoundManager>.CheckDuplicate(this, out _isOriginal))
             {
-                _isInstantiated = true;
-                _isOriginal = true;
+                return;
+            }
 
-                if (transform.parent == null)
-                {
-                    DontDestroyOnLoad(gameObject);
-                }
-                InitSources();
-            }
-            else
-            {
-                Destroy(gameObject);
-            }
+            InitSources();
         }
 
         /// <summary>
@@ -89,6 +79,7 @@ namespace Wonjeong.UI
         /// </summary>
         private void Start()
         {
+            if (!_isOriginal) return;
             // 주입 없이 컴포넌트만 붙인 경우 원인을 알기 어려운 NullReferenceException이 발생하므로
             // 무엇을 빠뜨렸는지 알려주고 중단함.
             if (_settingsProvider == null)
@@ -197,13 +188,18 @@ namespace Wonjeong.UI
             if (_bgmSource != null)
             {
                 _bgmSource.mute = _isMuted;
-                if (!string.IsNullOrEmpty(_currentBGMKey) && _soundSettings.TryGetValue(_currentBGMKey, out SoundSetting setting))
+
+                // DOTween 페이드(FadeOutBGM 등) 진행 중에는 볼륨 직접 할당을 스킵하여 충돌 및 볼륨 튐 방지
+                if (_bgmFadeCts == null && !DOTween.IsTweening(_bgmSource))
                 {
-                    _bgmSource.volume = setting.volume * _bgmVolume * _masterVolume;
-                }
-                else
-                {
-                    _bgmSource.volume = _bgmVolume * _masterVolume;
+                    if (!string.IsNullOrEmpty(_currentBGMKey) && _soundSettings.TryGetValue(_currentBGMKey, out SoundSetting setting))
+                    {
+                        _bgmSource.volume = setting.volume * _bgmVolume * _masterVolume;
+                    }
+                    else
+                    {
+                        _bgmSource.volume = _bgmVolume * _masterVolume;
+                    }
                 }
             }
 
@@ -521,10 +517,8 @@ namespace Wonjeong.UI
 
         private void OnDestroy()
         {
-            if (_isOriginal)
-            {
-                _isInstantiated = false;
-            }
+            SingletonGuard<SoundManager>.Release(_isOriginal);
+            if (!_isOriginal) return;
 
             CancelFadeRoutine();
             ClearCache();

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using UnityEngine;
 using UnityEngine.UI;
 using VContainer;
+using Wonjeong.Utils;
 using ZLogger;
 
 namespace Wonjeong.UI
@@ -16,7 +17,6 @@ namespace Wonjeong.UI
         private CanvasGroup _canvasGroup;
         private RawImage _fadeImage;
         private bool _isTransitioning;
-        private static bool _isInstantiated;
         private bool _isOriginal;
 
         private int _activeSortingOrder = 999;
@@ -33,7 +33,10 @@ namespace Wonjeong.UI
         /// <summary>
         /// 페이드 진행 중 캔버스에 적용될 sortingOrder를 설정함.
         /// </summary>
-        public void SetSortingOrder(int sortingOrder) => _activeSortingOrder = sortingOrder;
+        public void SetSortingOrder(int order)
+        {
+            _activeSortingOrder = order;
+        }
 
         private ILogger<FadeManager> _logger;
 
@@ -53,21 +56,12 @@ namespace Wonjeong.UI
         /// </summary>
         private void Awake()
         {
-            if (!_isInstantiated)
+            if (SingletonGuard<FadeManager>.CheckDuplicate(this, out _isOriginal))
             {
-                _isInstantiated = true;
-                _isOriginal = true;
+                return;
+            }
 
-                if (transform.parent == null)
-                {
-                    DontDestroyOnLoad(gameObject);
-                }
-                CreateFadeUI();
-            }
-            else
-            {
-                Destroy(gameObject);
-            }
+            CreateFadeUI();
         }
 
         /// <summary>
@@ -75,10 +69,8 @@ namespace Wonjeong.UI
         /// </summary>
         private void OnDestroy()
         {
-            if (_isOriginal)
-            {
-                _isInstantiated = false;
-            }
+            SingletonGuard<FadeManager>.Release(_isOriginal);
+            if (!_isOriginal) return;
         }
 
         /// <summary>
@@ -143,10 +135,7 @@ namespace Wonjeong.UI
                 duration = 0.5f;
             }
 
-            if (color.HasValue)
-            {
-                SetFadeColor(color.Value);
-            }
+            SetFadeColor(color ?? Color.black);
             
             using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy(), cancellationToken))
             {
@@ -176,10 +165,7 @@ namespace Wonjeong.UI
                 duration = 0.5f;
             }
 
-            if (color.HasValue)
-            {
-                SetFadeColor(color.Value);
-            }
+            SetFadeColor(color ?? Color.black);
             
             // using 블록을 통해 비동기 작업 완료 시 연동된 토큰 소스를 안전하게 메모리 해제(Dispose)함.
             using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy(), cancellationToken))
