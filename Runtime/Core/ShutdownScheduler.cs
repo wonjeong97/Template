@@ -32,6 +32,9 @@ namespace Wonjeong.Core
     /// </summary>
     public class ShutdownScheduler : MonoBehaviour
     {
+        private static bool _isInstantiated;
+        private bool _isOriginal;
+
         private const string ShutdownSettingsFileName = "ShutdownSettings.json";
 
         /// <summary>편집 도구가 파일을 만들지 못했을 때를 대비한 종료 인수 기본값.</summary>
@@ -63,12 +66,23 @@ namespace Wonjeong.Core
 
         /// <summary>
         /// 씬 전환 후에도 예약 종료 감시가 끊기지 않도록 파괴를 방지함.
+        /// 중복 생성 시 기존 인스턴스를 유지하고 새로 생성된 객체를 파괴함.
         /// </summary>
         private void Awake()
         {
-            if (transform.parent == null)
+            if (!_isInstantiated)
             {
-                DontDestroyOnLoad(gameObject);
+                _isInstantiated = true;
+                _isOriginal = true;
+
+                if (transform.parent == null)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
+            }
+            else
+            {
+                Destroy(gameObject);
             }
         }
 
@@ -412,6 +426,14 @@ namespace Wonjeong.Core
                 case DayOfWeek.Saturday: return _schedule.saturday;
                 case DayOfWeek.Sunday: return _schedule.sunday;
                 default: return null;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (_isOriginal)
+            {
+                _isInstantiated = false;
             }
         }
     }

@@ -15,6 +15,9 @@ namespace Wonjeong.Hardware
     /// </summary>
     public class ArduinoManager : MonoBehaviour
     {
+        private static bool _isInstantiated;
+        private bool _isOriginal;
+
         /// <summary>전체 포트 스캔을 반복할 기본 최대 횟수. (WebGL에서는 사용되지 않음)</summary>
         public const int DefaultMaxRetries = 10;
 
@@ -31,6 +34,12 @@ namespace Wonjeong.Hardware
         /// </summary>
         public Observable<string> OnDataReceived => _messageSubject.ObserveOnMainThread();
 
+        public Observable<Unit> OnConnected => Observable.Empty<Unit>();
+        public Observable<Unit> OnDisconnected => Observable.Empty<Unit>();
+
+        public bool AutoReconnect { get; set; } = true;
+        public int AutoReconnectIntervalMs { get; set; } = 3000;
+
         public bool IsConnected => false;
 
         /// <summary>
@@ -41,6 +50,24 @@ namespace Wonjeong.Hardware
         public void Construct(ILogger<ArduinoManager> logger)
         {
             _logger = logger;
+        }
+
+        private void Awake()
+        {
+            if (!_isInstantiated)
+            {
+                _isInstantiated = true;
+                _isOriginal = true;
+
+                if (transform.parent == null)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
+            }
+            else
+            {
+                Destroy(gameObject);
+            }
         }
 
         /// <summary>
@@ -71,6 +98,11 @@ namespace Wonjeong.Hardware
         /// </summary>
         private void OnDestroy()
         {
+            if (_isOriginal)
+            {
+                _isInstantiated = false;
+            }
+
             _messageSubject?.Dispose();
         }
     }
@@ -90,6 +122,9 @@ namespace Wonjeong.Hardware
 {
     public class ArduinoManager : MonoBehaviour
     {
+        private static bool _isInstantiated;
+        private bool _isOriginal;
+
         /// <summary>전체 포트 스캔을 반복할 기본 최대 횟수.</summary>
         public const int DefaultMaxRetries = 10;
 
@@ -107,14 +142,32 @@ namespace Wonjeong.Hardware
         private ILogger<ArduinoManager> _logger;
 
         private readonly Subject<string> _messageSubject = new Subject<string>();
-        
+        private readonly Subject<Unit> _connectedSubject = new Subject<Unit>();
+        private readonly Subject<Unit> _disconnectedSubject = new Subject<Unit>();
+
         /// <summary>
         /// 외부에서 구독할 수 있는 아두이노 수신 데이터 스트림.
         /// 백그라운드 스레드 데이터를 유니티 메인 스레드로 안전하게 전달함.
-        /// 사용 예: arduinoManager.OnDataReceived.Subscribe(msg => Debug.Log(msg));
         /// </summary>
         public Observable<string> OnDataReceived => _messageSubject.ObserveOnMainThread();
-        
+
+        /// <summary>연결 성공 시 발행되는 스트림.</summary>
+        public Observable<Unit> OnConnected => _connectedSubject.ObserveOnMainThread();
+
+        /// <summary>연결 끊김 발생 시 발행되는 스트림.</summary>
+        public Observable<Unit> OnDisconnected => _disconnectedSubject.ObserveOnMainThread();
+
+        /// <summary>연결이 끊어졌을 때 자동으로 재연결을 시도할지 여부.</summary>
+        public bool AutoReconnect { get; set; } = true;
+
+        /// <summary>자동 재연결 시도 주기(ms).</summary>
+        public int AutoReconnectIntervalMs { get; set; } = 3000;
+
+        private int _lastBaudRate;
+        private string _lastExpectedHandshake;
+        private bool _isReconnecting;
+        private CancellationTokenSource _reconnectCts;
+
         public bool IsConnected => _serialPort != null && _serialPort.IsOpen;
 
         /// <summary>
@@ -125,6 +178,24 @@ namespace Wonjeong.Hardware
         public void Construct(ILogger<ArduinoManager> logger)
         {
             _logger = logger;
+        }
+
+        private void Awake()
+        {
+            if (!_isInstantiated)
+            {
+                _isInstantiated = true;
+                _isOriginal = true;
+
+                if (transform.parent == null)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
+            }
+            else
+            {
+                Destroy(gameObject);
+            }
         }
         
         /// <summary>
@@ -140,6 +211,9 @@ namespace Wonjeong.Hardware
         public async UniTask ConnectAsync(int baudRate, string expectedHandshake,
             int maxRetries = DefaultMaxRetries, int retryDelayMs = DefaultRetryDelayMs)
         {
+            _lastBaudRate = baudRate;
+            _lastExpectedHandshake = expectedHandshake;
+
             if (IsConnected) return;
 
             if (maxRetries < 1) maxRetries = 1;
@@ -303,7 +377,8 @@ namespace Wonjeong.Hardware
                 _readThread.Start();
             }
 
-            if(_logger != null) _logger.ZLogInformation($"[ArduinoManager] Connection success: {portName}");
+            if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Connection success: {portName}");
+            _connectedSubject.OnNext(Unit.Default);
         }
         
         /// <summary>
@@ -365,16 +440,29 @@ namespace Wonjeong.Hardware
         /// <summary>
         /// 현재 열려있는 시리얼 포트를 닫고 통신 스레드를 종료함.
         /// 메인 스레드와 읽기 스레드 양쪽에서 호출되어도 안전함.
+        /// 사용자가 명시적으로 호출한 경우 자동 재연결 루틴은 중지됨.
         /// </summary>
         public void Disconnect()
         {
+            DisconnectInternal(true);
+        }
+
+        private void DisconnectInternal(bool isManual)
+        {
+            if (isManual)
+            {
+                StopAutoReconnect();
+            }
+
             Thread threadToJoin;
             SerialPort portToDispose;
+            bool wasConnected = false;
 
             lock (_connectionLock)
             {
                 if (_serialPort == null && _readThread == null) return; // 이미 정리됨
 
+                wasConnected = _serialPort != null;
                 _isRunning = false;
 
                 threadToJoin = _readThread;
@@ -404,7 +492,64 @@ namespace Wonjeong.Hardware
                 }
             }
 
-            if(_logger != null) _logger.ZLogInformation($"[ArduinoManager] Disconnected");
+            if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Disconnected");
+
+            if (wasConnected)
+            {
+                _disconnectedSubject.OnNext(Unit.Default);
+
+                if (!isManual && AutoReconnect && !string.IsNullOrEmpty(_lastExpectedHandshake) && _lastBaudRate > 0)
+                {
+                    TriggerAutoReconnect();
+                }
+            }
+        }
+
+        private void TriggerAutoReconnect()
+        {
+            if (_isReconnecting) return;
+            StopAutoReconnect();
+
+            _reconnectCts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
+            AutoReconnectLoopAsync(_reconnectCts.Token).Forget();
+        }
+
+        private void StopAutoReconnect()
+        {
+            if (_reconnectCts != null)
+            {
+                _reconnectCts.Cancel();
+                _reconnectCts.Dispose();
+                _reconnectCts = null;
+            }
+        }
+
+        private async UniTaskVoid AutoReconnectLoopAsync(CancellationToken cancellationToken)
+        {
+            _isReconnecting = true;
+            if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Auto-reconnect started.");
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested && !IsConnected)
+                {
+                    await UniTask.Delay(AutoReconnectIntervalMs, cancellationToken: cancellationToken);
+                    if (cancellationToken.IsCancellationRequested || IsConnected) break;
+
+                    if (await TryEstablishConnectionAsync(_lastBaudRate, _lastExpectedHandshake))
+                    {
+                        if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Auto-reconnect successful.");
+                        break;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                _isReconnecting = false;
+            }
         }
 
         /// <summary>
@@ -483,7 +628,7 @@ namespace Wonjeong.Hardware
             }
 
             if(_logger != null) _logger.ZLogWarning($"[ArduinoManager] Read error: {e.Message}");
-            Disconnect();
+            DisconnectInternal(false);
         }
 
         /// <summary>
@@ -492,8 +637,16 @@ namespace Wonjeong.Hardware
         /// </summary>
         private void OnDestroy()
         {
-            Disconnect();
+            if (_isOriginal)
+            {
+                _isInstantiated = false;
+            }
+
+            StopAutoReconnect();
+            DisconnectInternal(true);
             _messageSubject?.Dispose();
+            _connectedSubject?.Dispose();
+            _disconnectedSubject?.Dispose();
         }
 
         /// <summary>
@@ -502,7 +655,8 @@ namespace Wonjeong.Hardware
         /// </summary>
         private void OnApplicationQuit()
         {
-            Disconnect();
+            StopAutoReconnect();
+            DisconnectInternal(true);
         }
     }
 }

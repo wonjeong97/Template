@@ -65,6 +65,26 @@ namespace Wonjeong.Data
         }
 
         /// <summary>
+        /// 설정 파일을 다시 읽어와 캐시된 설정을 갱신함.
+        /// 런타임에 설정 파일이 변경되었을 때 재로드를 위해 사용함.
+        /// </summary>
+        public async UniTask<Settings> ReloadAsync(CancellationToken cancellationToken = default)
+        {
+            Task<Settings> loadTask;
+
+            lock (_lock)
+            {
+                _isLoadStarted = true;
+                _loadTask = JsonLoader.LoadAsync<Settings>(SettingsFileName, _cts.Token).AsTask();
+                loadTask = _loadTask;
+            }
+
+            Settings settings = await loadTask.AsUniTask().AttachExternalCancellation(cancellationToken);
+            await UniTask.SwitchToMainThread(cancellationToken);
+            return settings;
+        }
+
+        /// <summary>
         /// 컨테이너 파기 시 진행 중인 로드를 취소하고 리소스를 해제함.
         /// </summary>
         public void Dispose()

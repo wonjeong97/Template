@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using TMPro;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.Networking;
@@ -20,6 +21,9 @@ namespace Wonjeong.UI
 {
     public class UIManager : MonoBehaviour
     {
+        private static bool _isInstantiated;
+        private bool _isOriginal;
+
         private readonly Dictionary<string, string> _fontAddresses = new Dictionary<string, string>();
 
         // 설정 로드 완료 여부. 로드 전에는 폰트 키의 유효성을 판단할 수 없으므로
@@ -27,9 +31,11 @@ namespace Wonjeong.UI
         private bool _isSettingsLoaded;
 
         private readonly Dictionary<string, Font> _loadedFonts = new Dictionary<string, Font>();
+        private readonly Dictionary<string, TMP_FontAsset> _loadedTMPFonts = new Dictionary<string, TMP_FontAsset>();
         private readonly List<AsyncOperationHandle> _fontHandles = new List<AsyncOperationHandle>();
 
         private readonly Dictionary<string, HashSet<Text>> _pendingLabels = new Dictionary<string, HashSet<Text>>();
+        private readonly Dictionary<string, HashSet<TMP_Text>> _pendingTMPLabels = new Dictionary<string, HashSet<TMP_Text>>();
 
         private readonly Dictionary<string, UnityEngine.Events.UnityAction> _buttonActions =
             new Dictionary<string, UnityEngine.Events.UnityAction>();
@@ -67,12 +73,23 @@ namespace Wonjeong.UI
 
         /// <summary>
         /// 씬 전환 시 UI 매니저 파괴를 방지함.
+        /// 중복 생성 시 기존 객체를 보존하고 새로 생성된 객체를 파괴함.
         /// </summary>
         private void Awake()
         {
-            if (transform.parent == null)
+            if (!_isInstantiated)
             {
-                DontDestroyOnLoad(gameObject);
+                _isInstantiated = true;
+                _isOriginal = true;
+
+                if (transform.parent == null)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
+            }
+            else
+            {
+                Destroy(gameObject);
             }
         }
 
@@ -150,15 +167,20 @@ namespace Wonjeong.UI
         /// <summary>
         /// 설정 로드 전에 검증 없이 대기열에 등록됐던 항목 중,
         /// 실제 설정에 존재하지 않는 폰트 키를 정리하고 경고를 남김.
-        /// 로드 시점에는 유효성을 판단할 수 없으므로 판정을 이 시점으로 미룬 것임.
         /// </summary>
         private void DiscardUnknownPendingFonts()
         {
-            if (_pendingLabels.Count == 0) return;
+            DiscardUnknownFromDictionary(_pendingLabels);
+            DiscardUnknownFromDictionary(_pendingTMPLabels);
+        }
+
+        private void DiscardUnknownFromDictionary<TLabel>(Dictionary<string, HashSet<TLabel>> dict)
+        {
+            if (dict.Count == 0) return;
 
             List<string> unknownKeys = null;
 
-            foreach (KeyValuePair<string, HashSet<Text>> pair in _pendingLabels)
+            foreach (var pair in dict)
             {
                 if (_fontAddresses.ContainsKey(pair.Key)) continue;
 
@@ -170,7 +192,7 @@ namespace Wonjeong.UI
 
             foreach (string key in unknownKeys)
             {
-                _pendingLabels.Remove(key);
+                dict.Remove(key);
 
                 if (_logger != null)
                     _logger.ZLogWarning($"[UIManager] Unknown font key in settings: {key}. Pending labels discarded.");
@@ -197,7 +219,7 @@ namespace Wonjeong.UI
         }
 
         /// <summary>
-        /// Addressable 시스템을 통해 단일 폰트 에셋을 비동기 로드함.
+        /// Addressable 시스템을 통해 단일 폰트 에셋(Font 또는 TMP_FontAsset)을 비동기 로드함.
         /// </summary>
         private async UniTask LoadSingleFontAsync(string key, string address, CancellationToken cancellationToken)
         {
@@ -205,18 +227,27 @@ namespace Wonjeong.UI
 
             try
             {
-                AsyncOperationHandle<Font> handle = Addressables.LoadAssetAsync<Font>(address);
+                AsyncOperationHandle<UnityEngine.Object> handle = Addressables.LoadAssetAsync<UnityEngine.Object>(address);
                 _fontHandles.Add(handle);
 
                 // 제네릭 반환 타입(void) 에러 방지를 위해 대기와 결과 추출을 분리함.
                 await handle.ToUniTask(cancellationToken: cancellationToken);
 
-                Font loadedFont = handle.Result;
+                UnityEngine.Object loadedAsset = handle.Result;
 
-                if (loadedFont)
+                if (loadedAsset is Font loadedFont)
                 {
                     CacheFont(key, loadedFont);
                     ApplyPendingFonts(key, loadedFont);
+                }
+                else if (loadedAsset is TMP_FontAsset loadedTmpFont)
+                {
+                    CacheTMPFont(key, loadedTmpFont);
+                    ApplyPendingTMPFonts(key, loadedTmpFont);
+                }
+                else if (loadedAsset)
+                {
+                    if (_logger != null) _logger.ZLogWarning($"[UIManager] Asset loaded for {key} is neither Font nor TMP_FontAsset: {loadedAsset.GetType().Name}");
                 }
                 else
                 {
@@ -245,6 +276,14 @@ namespace Wonjeong.UI
             }
         }
 
+        private void CacheTMPFont(string key, TMP_FontAsset loadedFont)
+        {
+            if (!_loadedTMPFonts.ContainsKey(key))
+            {
+                _loadedTMPFonts.Add(key, loadedFont);
+            }
+        }
+
         /// <summary>
         /// 로드 이전에 폰트를 요청하고 대기 중이던 텍스트 컴포넌트들에 폰트를 일괄 적용함.
         /// </summary>
@@ -263,12 +302,27 @@ namespace Wonjeong.UI
             _pendingLabels.Remove(key);
         }
 
+        private void ApplyPendingTMPFonts(string key, TMP_FontAsset loadedFont)
+        {
+            if (!_pendingTMPLabels.TryGetValue(key, out HashSet<TMP_Text> waitingSet)) return;
+
+            foreach (TMP_Text txt in waitingSet)
+            {
+                if (txt)
+                {
+                    txt.font = loadedFont;
+                }
+            }
+
+            _pendingTMPLabels.Remove(key);
+        }
+
         #region Set Methods (Configuration)
 
         /// <summary>
         /// 이미지 UI 요소 속성 설정 및 비동기 텍스처 로드 적용.
         /// </summary>
-        public void SetImage(GameObject target, ImageSetting setting)
+        public void SetImage(GameObject target, ImageSetting setting, bool compress = false)
         {
             if (!target || setting == null) return;
 
@@ -289,7 +343,7 @@ namespace Wonjeong.UI
             img.color = setting.color;
             img.type = (Image.Type)setting.type;
 
-            ApplySpriteAsync(img, setting.sourceImage, this.GetCancellationTokenOnDestroy()).Forget();
+            ApplySpriteAsync(img, setting.sourceImage, this.GetCancellationTokenOnDestroy(), compress).Forget();
         }
 
         /// <summary>
@@ -314,6 +368,30 @@ namespace Wonjeong.UI
             }
 
             ApplyTextSettings(txt, setting);
+        }
+
+        /// <summary>
+        /// TextMeshPro UI 요소의 속성, 변환 및 폰트를 설정함.
+        /// </summary>
+        public void SetTMPText(GameObject target, TextSetting setting)
+        {
+            if (!target || setting == null) return;
+
+            target.name = setting.name;
+
+            if (!target.TryGetComponent(out RectTransform rt))
+            {
+                rt = target.AddComponent<RectTransform>();
+            }
+
+            ApplyTransform(rt, setting);
+
+            if (!target.TryGetComponent(out TMP_Text txt))
+            {
+                txt = target.AddComponent<TextMeshProUGUI>();
+            }
+
+            ApplyTMPTextSettings(txt, setting);
         }
 
         /// <summary>
@@ -442,9 +520,9 @@ namespace Wonjeong.UI
         /// <summary>
         /// 비동기 이미지 로드 완료 후 컴포넌트에 할당함.
         /// </summary>
-        private async UniTaskVoid ApplySpriteAsync(Image img, string sourceImage, CancellationToken cancellationToken)
+        private async UniTaskVoid ApplySpriteAsync(Image img, string sourceImage, CancellationToken cancellationToken, bool compress = false)
         {
-            Sprite sprite = await LoadSpriteAsync(sourceImage, cancellationToken);
+            Sprite sprite = await LoadSpriteAsync(sourceImage, cancellationToken, compress);
             if (sprite && img)
             {
                 img.sprite = sprite;
@@ -467,6 +545,38 @@ namespace Wonjeong.UI
         }
 
         /// <summary>
+        /// TMP_Text 컴포넌트의 텍스트, 크기, 정렬 및 폰트를 설정함.
+        /// </summary>
+        private void ApplyTMPTextSettings(TMP_Text txt, TextSetting setting)
+        {
+            if (!txt || setting == null) return;
+
+            txt.text = setting.text;
+            txt.fontSize = setting.fontSize;
+            txt.color = setting.fontColor;
+            txt.alignment = ConvertTextAlignment(setting.alignment);
+
+            AssignOrQueueTMPFont(txt, setting.fontName);
+        }
+
+        private static TextAlignmentOptions ConvertTextAlignment(TextAnchor anchor)
+        {
+            return anchor switch
+            {
+                TextAnchor.UpperLeft => TextAlignmentOptions.TopLeft,
+                TextAnchor.UpperCenter => TextAlignmentOptions.Top,
+                TextAnchor.UpperRight => TextAlignmentOptions.TopRight,
+                TextAnchor.MiddleLeft => TextAlignmentOptions.Left,
+                TextAnchor.MiddleCenter => TextAlignmentOptions.Center,
+                TextAnchor.MiddleRight => TextAlignmentOptions.Right,
+                TextAnchor.LowerLeft => TextAlignmentOptions.BottomLeft,
+                TextAnchor.LowerCenter => TextAlignmentOptions.Bottom,
+                TextAnchor.LowerRight => TextAlignmentOptions.BottomRight,
+                _ => TextAlignmentOptions.Center
+            };
+        }
+
+        /// <summary>
         /// 로드된 폰트가 있으면 즉시 적용하고, 없다면 대기열에 등록함.
         /// </summary>
         private void AssignOrQueueFont(Text txt, string fontName)
@@ -480,6 +590,19 @@ namespace Wonjeong.UI
             }
 
             QueuePendingFont(txt, fontName);
+        }
+
+        private void AssignOrQueueTMPFont(TMP_Text txt, string fontName)
+        {
+            if (string.IsNullOrEmpty(fontName)) return;
+
+            if (_loadedTMPFonts.TryGetValue(fontName, out TMP_FontAsset fontAsset))
+            {
+                txt.font = fontAsset;
+                return;
+            }
+
+            QueuePendingTMPFont(txt, fontName);
         }
 
         /// <summary>
@@ -506,6 +629,23 @@ namespace Wonjeong.UI
             _pendingLabels[fontName].Add(txt);
         }
 
+        private void QueuePendingTMPFont(TMP_Text txt, string fontName)
+        {
+            if (_isSettingsLoaded && !_fontAddresses.ContainsKey(fontName))
+            {
+                if (_logger != null)
+                    _logger.ZLogWarning($"[UIManager] Unknown font key: {fontName}");
+                return;
+            }
+
+            if (!_pendingTMPLabels.ContainsKey(fontName))
+            {
+                _pendingTMPLabels[fontName] = new HashSet<TMP_Text>();
+            }
+
+            _pendingTMPLabels[fontName].Add(txt);
+        }
+
         /// <summary>
         /// UI 요소의 기본 RectTransform 속성을 적용함.
         /// </summary>
@@ -524,25 +664,26 @@ namespace Wonjeong.UI
         /// URL 기반 플랫폼(WebGL, Android)에서는 UnityWebRequest, 그 외에는 파일 I/O를 사용함.
         /// 메모리 최적화를 위해 이미 로드된 이미지는 캐싱하여 재사용함.
         /// </summary>
-        private async UniTask<Sprite> LoadSpriteAsync(string fileName, CancellationToken cancellationToken)
+        private async UniTask<Sprite> LoadSpriteAsync(string fileName, CancellationToken cancellationToken, bool compress = false)
         {
             if (string.IsNullOrEmpty(fileName)) return null;
 
             string path = Path.Combine(Application.streamingAssetsPath, fileName).Replace("\\", "/");
+            string cacheKey = compress ? $"{path}#compressed" : path;
 
-            if (_cachedSprites.TryGetValue(path, out Sprite cachedSprite))
+            if (_cachedSprites.TryGetValue(cacheKey, out Sprite cachedSprite))
             {
                 return cachedSprite;
             }
 
             // 동일 이미지의 로드가 이미 진행 중이면 새 I/O를 발생시키지 않고 그 결과를 함께 기다림.
-            if (_activeSpriteLoads.TryGetValue(path, out Task<Sprite> ongoingLoad))
+            if (_activeSpriteLoads.TryGetValue(cacheKey, out Task<Sprite> ongoingLoad))
             {
                 return await ongoingLoad;
             }
 
-            Task<Sprite> loadTask = DecodeSpriteAsync(path, cancellationToken).AsTask();
-            _activeSpriteLoads[path] = loadTask;
+            Task<Sprite> loadTask = DecodeSpriteAsync(path, cancellationToken, compress).AsTask();
+            _activeSpriteLoads[cacheKey] = loadTask;
 
             try
             {
@@ -551,14 +692,14 @@ namespace Wonjeong.UI
             finally
             {
                 // 예외나 취소로 끝나도 반드시 제거함. 남겨두면 실패한 태스크가 계속 재사용됨.
-                _activeSpriteLoads.Remove(path);
+                _activeSpriteLoads.Remove(cacheKey);
             }
         }
 
         /// <summary>
         /// 실제 바이트 읽기와 스프라이트 생성을 수행함. 캐시/중복 방지는 호출자가 담당함.
         /// </summary>
-        private async UniTask<Sprite> DecodeSpriteAsync(string path, CancellationToken cancellationToken)
+        private async UniTask<Sprite> DecodeSpriteAsync(string path, CancellationToken cancellationToken, bool compress = false)
         {
             try
             {
@@ -569,11 +710,16 @@ namespace Wonjeong.UI
 
                 if (texture.LoadImage(fileData))
                 {
+                    if (compress)
+                    {
+                        texture.Compress(false);
+                    }
                     texture.Apply(false, true);
                     Sprite newSprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
                         new Vector2(0.5f, 0.5f));
 
-                    _cachedSprites[path] = newSprite;
+                    string cacheKey = compress ? $"{path}#compressed" : path;
+                    _cachedSprites[cacheKey] = newSprite;
                     return newSprite;
                 }
                 else
@@ -659,6 +805,11 @@ namespace Wonjeong.UI
         /// </summary>
         private void OnDestroy()
         {
+            if (_isOriginal)
+            {
+                _isInstantiated = false;
+            }
+
             foreach (AsyncOperationHandle handle in _fontHandles)
             {
                 if (handle.IsValid())
@@ -669,7 +820,9 @@ namespace Wonjeong.UI
 
             _fontHandles.Clear();
             _loadedFonts.Clear();
+            _loadedTMPFonts.Clear();
             _pendingLabels.Clear();
+            _pendingTMPLabels.Clear();
             _fontAddresses.Clear();
             _activeSpriteLoads.Clear();
 

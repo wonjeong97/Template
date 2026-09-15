@@ -16,6 +16,24 @@ namespace Wonjeong.UI
         private CanvasGroup _canvasGroup;
         private RawImage _fadeImage;
         private bool _isTransitioning;
+        private static bool _isInstantiated;
+        private bool _isOriginal;
+
+        private int _activeSortingOrder = 999;
+
+        /// <summary>
+        /// 페이드 진행 중 캔버스에 적용될 sortingOrder. 기본값 999.
+        /// </summary>
+        public int SortingOrder
+        {
+            get => _activeSortingOrder;
+            set => _activeSortingOrder = value;
+        }
+
+        /// <summary>
+        /// 페이드 진행 중 캔버스에 적용될 sortingOrder를 설정함.
+        /// </summary>
+        public void SetSortingOrder(int sortingOrder) => _activeSortingOrder = sortingOrder;
 
         private ILogger<FadeManager> _logger;
 
@@ -31,14 +49,36 @@ namespace Wonjeong.UI
 
         /// <summary>
         /// 씬 전환 시 페이드 UI 상태 유지를 위해 파괴를 방지하고 초기화함.
+        /// 중복 생성 시 기존 객체를 보존하고 새로 생성된 객체를 파괴함.
         /// </summary>
         private void Awake()
         {
-            if (transform.parent == null)
+            if (!_isInstantiated)
             {
-                DontDestroyOnLoad(gameObject);
+                _isInstantiated = true;
+                _isOriginal = true;
+
+                if (transform.parent == null)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
+                CreateFadeUI();
             }
-            CreateFadeUI(); 
+            else
+            {
+                Destroy(gameObject);
+            }
+        }
+
+        /// <summary>
+        /// 원본 객체 파괴 시 정적 플래그를 해제하여 다음 번 생성이 가능하게 함.
+        /// </summary>
+        private void OnDestroy()
+        {
+            if (_isOriginal)
+            {
+                _isInstantiated = false;
+            }
         }
 
         /// <summary>
@@ -82,9 +122,9 @@ namespace Wonjeong.UI
         }
 
         /// <summary>
-        /// 화면을 점진적으로 어둡게 처리함.
+        /// 화면을 점진적으로 어둡게(또는 지정된 색상으로) 처리함.
         /// </summary>
-        public async UniTask FadeOutAsync(float duration, CancellationToken cancellationToken = default)
+        public async UniTask FadeOutAsync(float duration, Color? color = null, CancellationToken cancellationToken = default)
         {
             // 진행 중이면 요청을 무시함. 호출자는 await가 끝나면 페이드가 완료된 줄 알기 때문에,
             // 무음으로 넘기면 "화면이 검은 채로 멈췄다" 같은 증상의 원인을 추적할 수 없음.
@@ -102,6 +142,11 @@ namespace Wonjeong.UI
                 if (_logger != null) _logger.ZLogWarning($"[FadeManager] FadeOut duration must be positive. Using default 0.5f.");
                 duration = 0.5f;
             }
+
+            if (color.HasValue)
+            {
+                SetFadeColor(color.Value);
+            }
             
             using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy(), cancellationToken))
             {
@@ -110,9 +155,9 @@ namespace Wonjeong.UI
         }
 
         /// <summary>
-        /// 화면을 점진적으로 밝게 처리함.
+        /// 화면을 점진적으로 밝게(투명하게) 처리함.
         /// </summary>
-        public async UniTask FadeInAsync(float duration, CancellationToken cancellationToken = default)
+        public async UniTask FadeInAsync(float duration, Color? color = null, CancellationToken cancellationToken = default)
         {
             // FadeOut과 동일한 이유로 무시 사유를 남김.
             // 특히 FadeIn이 무시되면 화면이 검은 상태로 남아 증상이 심각함.
@@ -130,11 +175,27 @@ namespace Wonjeong.UI
                 if (_logger != null) _logger.ZLogWarning($"[FadeManager] FadeIn duration must be positive. Using default 0.5f.");
                 duration = 0.5f;
             }
+
+            if (color.HasValue)
+            {
+                SetFadeColor(color.Value);
+            }
             
             // using 블록을 통해 비동기 작업 완료 시 연동된 토큰 소스를 안전하게 메모리 해제(Dispose)함.
             using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy(), cancellationToken))
             {
                 await FadeAsync(1f, 0f, duration, false, cts.Token);
+            }
+        }
+
+        /// <summary>
+        /// 페이드 이미지의 RGB 색상을 변경함 (기존 알파값은 유지).
+        /// </summary>
+        private void SetFadeColor(Color color)
+        {
+            if (_fadeImage)
+            {
+                _fadeImage.color = new Color(color.r, color.g, color.b, _fadeImage.color.a);
             }
         }
 
@@ -145,7 +206,7 @@ namespace Wonjeong.UI
         {
             _isTransitioning = true;
 
-            _fadeCanvas.sortingOrder = 999;
+            _fadeCanvas.sortingOrder = _activeSortingOrder;
             _fadeImage.raycastTarget = true;
 
             try

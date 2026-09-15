@@ -18,10 +18,24 @@ namespace Wonjeong.UI
 {
     public class SoundManager : MonoBehaviour
     {
+        private static bool _isInstantiated;
+        private bool _isOriginal;
+
         private AudioSource _bgmSource;
         private AudioSource _sfxSource;
 
         private CancellationTokenSource _bgmFadeCts;
+
+        private float _masterVolume = 1.0f;
+        private float _bgmVolume = 1.0f;
+        private float _sfxVolume = 1.0f;
+        private bool _isMuted;
+        private string _currentBGMKey;
+
+        public float MasterVolume => _masterVolume;
+        public float BGMVolume => _bgmVolume;
+        public float SFXVolume => _sfxVolume;
+        public bool IsMuted => _isMuted;
 
         private readonly Dictionary<string, SoundSetting> _soundSettings = new Dictionary<string, SoundSetting>();
         private readonly Dictionary<string, AudioClip> _clipCache = new Dictionary<string, AudioClip>();
@@ -49,14 +63,25 @@ namespace Wonjeong.UI
 
         /// <summary>
         /// 씬 전환 시 사운드 끊김을 방지하고 오디오 소스를 구성함.
+        /// 중복 생성 시 기존 인스턴스를 유지하고 새로 생성된 객체를 파괴함.
         /// </summary>
         private void Awake()
         {
-            if (transform.parent == null)
+            if (!_isInstantiated)
             {
-                DontDestroyOnLoad(gameObject);
+                _isInstantiated = true;
+                _isOriginal = true;
+
+                if (transform.parent == null)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
+                InitSources();
             }
-            InitSources();
+            else
+            {
+                Destroy(gameObject);
+            }
         }
 
         /// <summary>
@@ -125,6 +150,70 @@ namespace Wonjeong.UI
         #region Public Methods (Play / Stop / Fade)
 
         /// <summary>
+        /// 마스터 볼륨을 설정함 (0.0 ~ 1.0).
+        /// </summary>
+        public void SetMasterVolume(float volume)
+        {
+            _masterVolume = Mathf.Clamp01(volume);
+            UpdateAudioSourceVolumes();
+        }
+
+        /// <summary>
+        /// BGM 볼륨을 설정함 (0.0 ~ 1.0).
+        /// </summary>
+        public void SetBGMVolume(float volume)
+        {
+            _bgmVolume = Mathf.Clamp01(volume);
+            UpdateAudioSourceVolumes();
+        }
+
+        /// <summary>
+        /// SFX 볼륨을 설정함 (0.0 ~ 1.0).
+        /// </summary>
+        public void SetSFXVolume(float volume)
+        {
+            _sfxVolume = Mathf.Clamp01(volume);
+        }
+
+        /// <summary>
+        /// 음소거 여부를 설정함.
+        /// </summary>
+        public void SetMute(bool mute)
+        {
+            _isMuted = mute;
+            UpdateAudioSourceVolumes();
+        }
+
+        /// <summary>
+        /// 음소거 상태를 토글함.
+        /// </summary>
+        public void ToggleMute()
+        {
+            SetMute(!_isMuted);
+        }
+
+        private void UpdateAudioSourceVolumes()
+        {
+            if (_bgmSource != null)
+            {
+                _bgmSource.mute = _isMuted;
+                if (!string.IsNullOrEmpty(_currentBGMKey) && _soundSettings.TryGetValue(_currentBGMKey, out SoundSetting setting))
+                {
+                    _bgmSource.volume = setting.volume * _bgmVolume * _masterVolume;
+                }
+                else
+                {
+                    _bgmSource.volume = _bgmVolume * _masterVolume;
+                }
+            }
+
+            if (_sfxSource != null)
+            {
+                _sfxSource.mute = _isMuted;
+            }
+        }
+
+        /// <summary>
         /// 지정된 키의 배경음을 비동기로 재생함.
         /// 진행 중인 페이드 효과가 있다면 강제 취소하여 오작동을 방지함.
         /// </summary>
@@ -132,6 +221,7 @@ namespace Wonjeong.UI
         {
             if (!_soundSettings.TryGetValue(key, out SoundSetting setting)) return;
 
+            _currentBGMKey = key;
             CancelFadeRoutine();
             LoadAndPlayAsync(setting, _bgmSource, true, this.GetCancellationTokenOnDestroy()).Forget();
         }
@@ -151,6 +241,7 @@ namespace Wonjeong.UI
         /// </summary>
         public void StopBGM()
         {
+            _currentBGMKey = null;
             CancelFadeRoutine();
             if (_bgmSource) _bgmSource.Stop();
         }
@@ -171,6 +262,7 @@ namespace Wonjeong.UI
         {
             if (!_bgmSource || !_bgmSource.isPlaying) return;
 
+            _currentBGMKey = null;
             CancelFadeRoutine();
             _bgmFadeCts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
 
@@ -378,13 +470,16 @@ namespace Wonjeong.UI
                 return;
             }
 
+            source.mute = _isMuted;
+
             if (isBGM)
             {
                 PlayBGMClip(clip, setting, source);
             }
             else
             {
-                source.PlayOneShot(clip, setting.volume);
+                float finalVolume = setting.volume * _sfxVolume * _masterVolume;
+                source.PlayOneShot(clip, finalVolume);
             }
         }
 
@@ -393,14 +488,17 @@ namespace Wonjeong.UI
         /// </summary>
         private void PlayBGMClip(AudioClip clip, SoundSetting setting, AudioSource source)
         {
+            float finalVolume = setting.volume * _bgmVolume * _masterVolume;
+            source.mute = _isMuted;
+
             if (source.clip == clip && source.isPlaying)
             {
-                source.volume = setting.volume;
+                source.volume = finalVolume;
                 return;
             }
 
             source.clip = clip;
-            source.volume = setting.volume;
+            source.volume = finalVolume;
             source.Play();
         }
 
@@ -423,6 +521,11 @@ namespace Wonjeong.UI
 
         private void OnDestroy()
         {
+            if (_isOriginal)
+            {
+                _isInstantiated = false;
+            }
+
             CancelFadeRoutine();
             ClearCache();
         }

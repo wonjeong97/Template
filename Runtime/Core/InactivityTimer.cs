@@ -24,6 +24,9 @@ namespace Wonjeong.Core
     /// </summary>
     public class InactivityTimer : MonoBehaviour
     {
+        private static bool _isInstantiated;
+        private bool _isOriginal;
+
         private IPublisher<InactivityTimeoutEvent> _publisher;
 
         private bool _isEnabled;
@@ -56,12 +59,23 @@ namespace Wonjeong.Core
 
         /// <summary>
         /// 씬 전환 후에도 비활동 상태를 계속 추적할 수 있도록 파괴를 방지함.
+        /// 중복 생성 시 기존 인스턴스를 유지하고 새로 생성된 객체를 파괴함.
         /// </summary>
         private void Awake()
         {
-            if (transform.parent == null)
+            if (!_isInstantiated)
             {
-                DontDestroyOnLoad(gameObject);
+                _isInstantiated = true;
+                _isOriginal = true;
+
+                if (transform.parent == null)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
+            }
+            else
+            {
+                Destroy(gameObject);
             }
         }
 
@@ -198,6 +212,14 @@ namespace Wonjeong.Core
         {
             _isPaused = false;
             ResetTimer();
+        }
+
+        private void OnDestroy()
+        {
+            if (_isOriginal)
+            {
+                _isInstantiated = false;
+            }
         }
     }
 }

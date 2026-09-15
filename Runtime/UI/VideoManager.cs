@@ -15,6 +15,9 @@ namespace Wonjeong.UI
 {
     public class VideoManager : MonoBehaviour
     {
+        private static bool _isInstantiated;
+        private bool _isOriginal;
+
         private readonly List<RenderTexture> _activeRenderTextures = new List<RenderTexture>();
         private ILogger<VideoManager> _logger;
 
@@ -30,12 +33,23 @@ namespace Wonjeong.UI
 
         /// <summary>
         /// 씬 전환 시 비디오 매니저 파괴를 방지함.
+        /// 중복 생성 시 기존 인스턴스를 유지하고 새로 생성된 객체를 파괴함.
         /// </summary>
         private void Awake()
         {
-            if (transform.parent == null)
+            if (!_isInstantiated)
             {
-                DontDestroyOnLoad(gameObject);
+                _isInstantiated = true;
+                _isOriginal = true;
+
+                if (transform.parent == null)
+                {
+                    DontDestroyOnLoad(gameObject);
+                }
+            }
+            else
+            {
+                Destroy(gameObject);
             }
         }
 
@@ -203,12 +217,26 @@ namespace Wonjeong.UI
         {
             int released = 0;
 
+#if UNITY_2023_1_OR_NEWER
+            VideoPlayer[] players = FindObjectsByType<VideoPlayer>(FindObjectsSortMode.None);
+#else
+            VideoPlayer[] players = FindObjectsOfType<VideoPlayer>();
+#endif
+            HashSet<RenderTexture> activeTargets = new HashSet<RenderTexture>();
+            foreach (VideoPlayer player in players)
+            {
+                if (player && player.targetTexture)
+                {
+                    activeTargets.Add(player.targetTexture);
+                }
+            }
+
             for (int i = _activeRenderTextures.Count - 1; i >= 0; i--)
             {
                 RenderTexture rt = _activeRenderTextures[i];
 
                 // 이미 파괴됐거나, 이 텍스처를 targetTexture로 쓰는 VideoPlayer가 없으면 고아로 판정함.
-                if (rt && IsReferencedByActiveVideoPlayer(rt)) continue;
+                if (rt && activeTargets.Contains(rt)) continue;
 
                 if (rt)
                 {
@@ -224,26 +252,16 @@ namespace Wonjeong.UI
         }
 
         /// <summary>
-        /// 살아 있는 VideoPlayer 중 해당 렌더 텍스처를 사용하는 것이 있는지 검사함.
-        /// </summary>
-        private static bool IsReferencedByActiveVideoPlayer(RenderTexture rt)
-        {
-            VideoPlayer[] players = FindObjectsOfType<VideoPlayer>();
-
-            foreach (VideoPlayer player in players)
-            {
-                if (player && player.targetTexture == rt) return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
         /// 생성된 모든 렌더 텍스처 메모리를 완전 해제함.
         /// VRAM 누수 방지 목적.
         /// </summary>
         private void OnDestroy()
         {
+            if (_isOriginal)
+            {
+                _isInstantiated = false;
+            }
+
             foreach (RenderTexture rt in _activeRenderTextures)
             {
                 if (rt)

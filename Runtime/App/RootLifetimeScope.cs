@@ -65,8 +65,17 @@ namespace Wonjeong.App
             ConfigureLogRetention(builder);
             ConfigureMessagePipe(builder);
             ConfigureSettings(builder);
+            ConfigureNetwork(builder);
             ConfigureCoreComponents(builder);
             ConfigureOptionalComponents(builder);
+        }
+
+        /// <summary>
+        /// 실시간 네트워크 모니터링 서비스를 등록함.
+        /// </summary>
+        protected virtual void ConfigureNetwork(IContainerBuilder builder)
+        {
+            builder.RegisterEntryPoint<NetworkStatusService>(Lifetime.Singleton).AsSelf();
         }
 
         /// <summary>
