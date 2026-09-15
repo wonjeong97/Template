@@ -1,7 +1,7 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
-## [26.9.15_2] - 2026-09-15
+## [26.9.15-2] - 2026-09-15
 
 ### Added
 - **`SingletonGuard<T>` 싱글톤 중복 방어 및 수명주기 관리 유틸리티 추가(`Runtime/Utils`):** 매니저 계층 8종에서 반복되던 중복 방지 보일러플레이트를 단일 제네릭 유틸리티로 일원화. 중복 생성된 인스턴스 발생 시 즉시 `enabled = false` 처리하여 파괴 프레임 동안 `Start()`/`Update()`가 실행되는 것을 차단하고 `DestroyUtil.SafeDestroy`로 안전하게 파괴함. 에디터 Domain Reload 비활성화 환경을 고려한 `_instance` 기반 자가 복구(Self-healing) 메커니즘 및 단위 테스트(`SingletonGuardTests`) 6건 추가.
