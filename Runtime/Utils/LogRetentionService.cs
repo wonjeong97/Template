@@ -65,10 +65,11 @@ namespace Wonjeong.Utils
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                CleanupOldLogs(_logDirectory, _retentionDays);
-
                 try
                 {
+                    // 메인 스레드 블로킹 및 프레임 드랍(Hitch)을 방지하기 위해 백그라운드 스레드에서 파일 I/O를 수행함.
+                    await UniTask.RunOnThreadPool(() => CleanupOldLogs(_logDirectory, _retentionDays), cancellationToken: cancellationToken);
+
                     // 게임 시간(timeScale)과 무관한 실제 경과 시간 기준으로 대기함.
                     await UniTask.Delay(CleanupInterval, DelayType.Realtime, PlayerLoopTiming.Update, cancellationToken);
                 }
@@ -96,17 +97,43 @@ namespace Wonjeong.Utils
 
                 DateTime threshold = DateTime.Now.AddDays(-retentionDays);
 
+                // 1. 회전 파일(GameLog_*.txt) 정리
                 foreach (string file in Directory.GetFiles(logDirectory, $"{LogFilePrefix}_*.txt"))
                 {
-                    if (File.GetLastWriteTime(file) < threshold)
-                    {
-                        File.Delete(file);
-                    }
+                    TryDeleteIfExpired(file, threshold);
+                }
+
+                // 2. 회전 로깅 도입 이전 레거시 단일 로그 파일(GameLog.txt) 정리
+                // 구버전에서 장기 구동으로 비대해진 기존 로그가 업데이트 후 영구 방치되는 것을 방지함.
+                string legacyFile = Path.Combine(logDirectory, $"{LogFilePrefix}.txt");
+                if (File.Exists(legacyFile))
+                {
+                    TryDeleteIfExpired(legacyFile, threshold);
                 }
             }
             catch (Exception e)
             {
                 Debug.LogWarning($"[LogRetentionService] 오래된 로그 정리 실패: {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 파일의 마지막 기록 시각이 보관 기준을 넘긴 경우 삭제를 시도함.
+        /// 특정 파일이 다른 프로세스(뷰어, 백업 등)에 잠겨 실패하더라도
+        /// 전체 정리 루프가 중단되지 않도록 파일 단위로 예외를 격리함.
+        /// </summary>
+        private static void TryDeleteIfExpired(string filePath, DateTime threshold)
+        {
+            try
+            {
+                if (File.GetLastWriteTime(filePath) < threshold)
+                {
+                    File.Delete(filePath);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[LogRetentionService] 로그 파일 삭제 실패 ({filePath}): {e.Message}");
             }
         }
 

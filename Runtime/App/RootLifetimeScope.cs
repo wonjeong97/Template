@@ -209,13 +209,13 @@ namespace Wonjeong.App
         /// 빌드 환경의 파일 로그가 위치하는 디렉터리. ConfigureLogging(회전 설정)과
         /// ConfigureLogRetention(정리 대상 지정)이 동일 경로를 참조하도록 단일 소스로 둠.
         /// </summary>
-        private static string LogDirectory => Path.Combine(Application.persistentDataPath, "Logs");
+        protected static string LogDirectory => Path.Combine(Application.persistentDataPath, "Logs");
 
         /// <summary>개별 로그 파일 용량 상한(KB). 초과 시 같은 날짜 안에서 시퀀스로 분할됨.</summary>
-        private const int LogRollingSizeKB = 10 * 1024; // 10 MB
+        protected virtual int LogRollingSizeKB => 10 * 1024; // 10 MB
 
         /// <summary>로그 파일 보관 기간(일). 이보다 오래된 GameLog 파일은 정리 대상.</summary>
-        private const int LogRetentionDays = 30;
+        protected virtual int LogRetentionDays => 30;
 
         /// <summary>
         /// 오래된 로그 파일을 주기적으로 정리하는 LogRetentionService를 VContainer 엔트리포인트로
