@@ -63,24 +63,39 @@ namespace Wonjeong.Network
 
             for (int attempt = 1; attempt <= maxAttemptCount; attempt++)
             {
-                using UnityWebRequest request = UnityWebRequest.Get(url);
-                await request.SendWebRequest().WithCancellation(cancellationToken);
+                string errorMessage = null;
 
-                if (request.result == UnityWebRequest.Result.Success)
+                try
                 {
-                    if (logger != null) logger.ZLogInformation($"[ApiRetryUtil] Send succeeded ({attempt}/{maxAttemptCount}): {logLabel}");
-                    return true;
+                    using UnityWebRequest request = UnityWebRequest.Get(url);
+                    await request.SendWebRequest().WithCancellation(cancellationToken);
+
+                    if (request.result == UnityWebRequest.Result.Success)
+                    {
+                        if (logger != null) logger.ZLogInformation($"[ApiRetryUtil] Send succeeded ({attempt}/{maxAttemptCount}): {logLabel}");
+                        return true;
+                    }
+
+                    errorMessage = request.error;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    errorMessage = ex.Message;
                 }
 
                 bool isLastAttempt = attempt == maxAttemptCount;
 
                 if (isLastAttempt)
                 {
-                    if (logger != null) logger.ZLogError($"[ApiRetryUtil] Send failed ({attempt}/{maxAttemptCount}, giving up): {logLabel}, {request.error}");
+                    if (logger != null) logger.ZLogError($"[ApiRetryUtil] Send failed ({attempt}/{maxAttemptCount}, giving up): {logLabel}, {errorMessage}");
                 }
                 else
                 {
-                    if (logger != null) logger.ZLogWarning($"[ApiRetryUtil] Send failed ({attempt}/{maxAttemptCount}), retrying in {retryDelaySeconds}s: {logLabel}, {request.error}");
+                    if (logger != null) logger.ZLogWarning($"[ApiRetryUtil] Send failed ({attempt}/{maxAttemptCount}), retrying in {retryDelaySeconds}s: {logLabel}, {errorMessage}");
                     // 재시도 대기는 Time.timeScale과 무관해야 함. 일시정지(timeScale=0) 중에도
                     // 네트워크 재시도는 계속 진행되어야 하며, 그렇지 않으면 재시도 루프가
                     // 무한정 멈추는 소프트락이 발생함(FadeManager에서 겪었던 것과 동일한 문제).

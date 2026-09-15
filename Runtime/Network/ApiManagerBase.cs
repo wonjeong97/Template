@@ -53,6 +53,8 @@ namespace Wonjeong.Network
         private const string ExternalApiReturnOkMessage = "Return OK";
         private const string ExternalApiReturnFailMessage = "Return fail";
 
+        private bool _isOriginal;
+
         // 종료 요청을 한 번 보류하고 로그를 보낸 뒤 다시 종료를 진행하기 위한 상태.
         private bool _isQuitConfirmed;
         private bool _isSendingExitLog;
@@ -103,12 +105,17 @@ namespace Wonjeong.Network
         /// <summary>
         /// 다른 선택 매니저(FadeManager/SoundManager/UIManager/VideoManager)와 동일하게,
         /// 씬 전환으로 재생성되어 시작 로그가 중복 전송되지 않도록 파괴를 방지함.
+        /// 중복 생성 시 기존 인스턴스를 유지하고 새로 생성된 객체를 파괴함.
+        /// <para>
+        /// 파생 클래스에서 override할 경우 반드시 base.Awake()를 호출할 것.
+        /// 빠뜨리면 중복 생성 방어 로직이 누락되어 시작 로그가 중복 전송될 수 있음.
+        /// </para>
         /// </summary>
         protected virtual void Awake()
         {
-            if (transform.parent == null)
+            if (SingletonGuard<ApiManagerBase>.CheckDuplicate(this, out _isOriginal))
             {
-                DontDestroyOnLoad(gameObject);
+                return;
             }
         }
 
@@ -121,6 +128,8 @@ namespace Wonjeong.Network
         /// </summary>
         protected virtual void OnEnable()
         {
+            if (!_isOriginal) return;
+
             Application.wantsToQuit += OnWantsToQuit;
             _inactivityTimeoutSubscription = _inactivityTimeoutSubscriber?.Subscribe(_ => OnInactivityTimeout());
             _moveIdleSubscription = _moveIdleSubscriber?.Subscribe(_ => OnMoveIdle());
@@ -258,6 +267,8 @@ namespace Wonjeong.Network
         /// </summary>
         protected virtual void Start()
         {
+            if (!_isOriginal) return;
+
             SendStartupLogAsync(this.GetCancellationTokenOnDestroy()).Forget();
         }
 
@@ -498,6 +509,11 @@ namespace Wonjeong.Network
             {
                 if (Logger != null) Logger.ZLogError($"[ApiManagerBase] Exception while sending log ({message}): {e.Message}");
             }
+        }
+
+        protected virtual void OnDestroy()
+        {
+            SingletonGuard<ApiManagerBase>.Release(_isOriginal);
         }
     }
 }

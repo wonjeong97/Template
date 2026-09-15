@@ -9,6 +9,15 @@ using UnityEngine.Networking;
 namespace Wonjeong.Utils
 {
     /// <summary>
+    /// JSON 파일 저장 및 로드 위치.
+    /// </summary>
+    public enum JsonStorageLocation
+    {
+        StreamingAssets,
+        PersistentData
+    }
+
+    /// <summary>
     /// JSON 직렬화 및 파일 입출력을 담당하는 정적 유틸리티 클래스.
     /// 모든 데이터 파일 I/O 스트림의 최적화를 수행함.
     /// WebGL/Android처럼 StreamingAssets가 URL인 플랫폼에서는 UnityWebRequest로 로드함.
@@ -16,12 +25,17 @@ namespace Wonjeong.Utils
     public static class JsonLoader
     {
         /// <summary>
-        /// StreamingAssets 기준 전체 경로를 생성함.
+        /// 지정된 저장 위치 기준 전체 경로를 생성함 (.json 확장자 자동 부착).
         /// </summary>
-        private static string GetPath(string fileName)
+        private static string GetPath(string fileName, JsonStorageLocation location = JsonStorageLocation.StreamingAssets)
         {
-            string fullFileName = fileName.EndsWith(".json") ? fileName : $"{fileName}.json";
-            return Path.Combine(Application.streamingAssetsPath, fullFileName).Replace("\\", "/");
+            string fullFileName = fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? fileName : $"{fileName}.json";
+            string basePath = location switch
+            {
+                JsonStorageLocation.PersistentData => Application.persistentDataPath,
+                _ => Application.streamingAssetsPath
+            };
+            return Path.Combine(basePath, fullFileName).Replace("\\", "/");
         }
 
         /// <summary>
@@ -32,13 +46,16 @@ namespace Wonjeong.Utils
             return path.Contains("://");
         }
 
+        public static UniTask<T> LoadAsync<T>(string fileName, CancellationToken cancellationToken = default) where T : new()
+            => LoadAsync<T>(fileName, JsonStorageLocation.StreamingAssets, cancellationToken);
+
         /// <summary>
-        /// StreamingAssets에서 JSON 파일을 비동기적으로 읽어옴.
+        /// 지정된 저장 위치에서 JSON 파일을 비동기적으로 읽어옴.
         /// URL 기반 플랫폼(WebGL, Android)에서는 UnityWebRequest, 그 외에는 파일 I/O를 사용함.
         /// </summary>
-        public static async UniTask<T> LoadAsync<T>(string fileName, CancellationToken cancellationToken = default) where T : new()
+        public static async UniTask<T> LoadAsync<T>(string fileName, JsonStorageLocation location, CancellationToken cancellationToken = default) where T : new()
         {
-            string path = GetPath(fileName);
+            string path = GetPath(fileName, location);
 
             try
             {
@@ -70,16 +87,19 @@ namespace Wonjeong.Utils
             return new T();
         }
 
+        public static T Load<T>(string fileName) where T : new()
+            => Load<T>(fileName, JsonStorageLocation.StreamingAssets);
+
         /// <summary>
-        /// StreamingAssets에서 JSON 파일을 동기적으로 읽어옴.
+        /// 지정된 저장 위치에서 JSON 파일을 동기적으로 읽어옴.
         /// WebGL/Android처럼 직접 파일 접근이 불가능한 URL 기반 플랫폼에서는 동기 I/O 자체가
         /// 불가능하므로 지원하지 않으며, 호출 시 에러를 로그로 남기고 기본값을 반환함.
         /// 메인 스레드를 블로킹하므로 비동기 컨텍스트를 쓸 수 없는 초기화 극초반이나
-        /// 에디터 전용 툴링 코드에서만 사용하고, 런타임 로직은 <see cref="LoadAsync{T}"/>를 쓸 것.
+        /// 에디터 전용 툴링 코드에서만 사용하고, 런타임 로직은 <see cref="LoadAsync{T}(string, JsonStorageLocation, CancellationToken)"/>를 쓸 것.
         /// </summary>
-        public static T Load<T>(string fileName) where T : new()
+        public static T Load<T>(string fileName, JsonStorageLocation location) where T : new()
         {
-            string path = GetPath(fileName);
+            string path = GetPath(fileName, location);
 
             if (IsRemotePath(path))
             {
@@ -127,13 +147,16 @@ namespace Wonjeong.Utils
             }
         }
 
+        public static UniTask SaveAsync<T>(string fileName, T data, CancellationToken cancellationToken = default)
+            => SaveAsync<T>(fileName, data, JsonStorageLocation.StreamingAssets, cancellationToken);
+
         /// <summary>
-        /// 데이터를 JSON 형식으로 비동기 저장함.
+        /// 데이터를 JSON 형식으로 비동기 저장함 (.json 확장자 자동 부착).
         /// StreamingAssets가 읽기 전용인 플랫폼(WebGL, Android)에서는 저장이 불가능함.
         /// </summary>
-        public static async UniTask SaveAsync<T>(string fileName, T data, CancellationToken cancellationToken = default)
+        public static async UniTask SaveAsync<T>(string fileName, T data, JsonStorageLocation location, CancellationToken cancellationToken = default)
         {
-            string path = Path.Combine(Application.streamingAssetsPath, fileName).Replace("\\", "/");
+            string path = GetPath(fileName, location);
 
             if (IsRemotePath(path))
             {
@@ -143,6 +166,12 @@ namespace Wonjeong.Utils
 
             try
             {
+                string dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
                 string json = JsonUtility.ToJson(data, true);
                 await File.WriteAllTextAsync(path, json, cancellationToken);
             }
@@ -152,15 +181,18 @@ namespace Wonjeong.Utils
             }
         }
 
+        public static void Save<T>(string fileName, T data)
+            => Save<T>(fileName, data, JsonStorageLocation.StreamingAssets);
+
         /// <summary>
-        /// 데이터를 JSON 형식으로 동기적으로 저장함.
+        /// 데이터를 JSON 형식으로 동기적으로 저장함 (.json 확장자 자동 부착).
         /// StreamingAssets가 읽기 전용인 플랫폼(WebGL, Android)에서는 저장이 불가능함.
-        /// 메인 스레드를 블로킹하므로 <see cref="SaveAsync{T}"/>를 쓸 수 없는 제한적인
+        /// 메인 스레드를 블로킹하므로 <see cref="SaveAsync{T}(string, T, JsonStorageLocation, CancellationToken)"/>를 쓸 수 없는 제한적인
         /// 상황(에디터 전용 툴링 등)에서만 사용할 것.
         /// </summary>
-        public static void Save<T>(string fileName, T data)
+        public static void Save<T>(string fileName, T data, JsonStorageLocation location)
         {
-            string path = Path.Combine(Application.streamingAssetsPath, fileName).Replace("\\", "/");
+            string path = GetPath(fileName, location);
 
             if (IsRemotePath(path))
             {
@@ -170,6 +202,12 @@ namespace Wonjeong.Utils
 
             try
             {
+                string dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
                 string json = JsonUtility.ToJson(data, true);
                 File.WriteAllText(path, json);
             }

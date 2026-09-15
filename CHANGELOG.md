@@ -1,6 +1,27 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.15_2] - 2026-09-15
+
+### Added
+- **`SingletonGuard<T>` 싱글톤 중복 방어 및 수명주기 관리 유틸리티 추가(`Runtime/Utils`):** 매니저 계층 8종에서 반복되던 중복 방지 보일러플레이트를 단일 제네릭 유틸리티로 일원화. 중복 생성된 인스턴스 발생 시 즉시 `enabled = false` 처리하여 파괴 프레임 동안 `Start()`/`Update()`가 실행되는 것을 차단하고 `DestroyUtil.SafeDestroy`로 안전하게 파괴함. 에디터 Domain Reload 비활성화 환경을 고려한 `_instance` 기반 자가 복구(Self-healing) 메커니즘 및 단위 테스트(`SingletonGuardTests`) 6건 추가.
+- **`NetworkStatusService` 실시간 네트워크 모니터링 서비스 추가(`Runtime/Network`):** R3 기반의 네트워크 도달성 변경(`OnReachabilityChanged`), 연결 끊김(`OnNetworkLost`), 연결 복구(`OnNetworkRestored`) 스트림 제공. 오프라인 독립형 키오스크 환경에서 시작 시 불필요한 끊김 알림이 발생하지 않도록 초기 오프라인 상태 감지 및 `_hasEverConnected` 이력 방어 로직 적용. 서비스 `Dispose` 시 안전한 `OnCompleted` 발행 보장. `RootLifetimeScope.ConfigureNetwork`를 통해 VContainer 싱글톤 엔트리포인트로 등록.
+- **`ArduinoManager` 연결 끊김 감지 및 자동 재연결(`AutoReconnect`) 지원(`Runtime/Hardware`):** `OnConnected`, `OnDisconnected` R3 스트림 추가. 시리얼 읽기 예외(케이블 분리 등) 발생 시 예외 격리(try-catch) 및 메인 스레드 마샬링 디스패치를 통해 안전하게 `AutoReconnectIntervalMs` 주기로 백그라운드 재연결 자동 수행.
+- **`UIManager` TextMeshPro(`SetTMPText`) 및 텍스처 VRAM 압축(`compress`) 옵션 지원(`Runtime/UI`):** `SetTMPText` 메서드 추가 및 `TMP_FontAsset` 비동기 프리로드/적용 지원. `SetImage`/`LoadSpriteAsync`/`DecodeSpriteAsync`에 `bool compress = false` 매개변수를 추가하여 런타임 이미지 디코드 시 VRAM 압축 옵션 제공.
+- **`SoundManager` 볼륨 제어 및 음소거 지원(`Runtime/UI`):** `MasterVolume`, `BGMVolume`, `SFXVolume`, `IsMuted`, `SetMasterVolume`, `SetBGMVolume`, `SetSFXVolume`, `SetMute`, `ToggleMute` API 추가. BGM 및 SFX 재생 시 세부 볼륨 배율 및 음소거 상태 즉시 반영. DOTween BGM 페이드 진행 중 볼륨 덮어쓰기 충돌 방어 적용.
+- **`FadeManager` 페이드 색상 커스텀 및 SortingOrder 설정 지원(`Runtime/UI`):** `FadeInAsync`/`FadeOutAsync`에 `Color? color = null` 지원(호출 시 색상 생략 시 검은색 기본값 자동 복귀). Canvas 렌더링 우선순위를 제어할 수 있는 `SortingOrder` 프로퍼티 추가.
+- **`AppSettingsProvider.ReloadAsync` 추가(`Runtime/Data`):** 런타임에 `Settings.json` 파일이 변경되었을 때 설정을 비동기로 다시 읽고 캐시를 원자적으로 갱신하는 기능 제공.
+- **`GameManagerBase.OnSettingsLoaded` 가상 훅 추가(`Runtime/Core`):** 설정 로드가 완료된 시점에 파생 클래스에서 추가 초기화를 수행할 수 있는 확장 가상 메서드 제공.
+- **`JsonLoader`의 `JsonStorageLocation` enum 추가 및 `persistentDataPath` 지원(`Runtime/Utils`):** `StreamingAssets` 및 `PersistentData` 위치를 지원하여 런타임 쓰기 가능 경로로의 저장 및 로드 유연성 확보.
+
+### Changed
+- **매니저 계층 8종의 `DontDestroyOnLoad` 중복 생성 방어 일원화:** `FadeManager`, `UIManager`, `SoundManager`, `VideoManager`, `InactivityTimer`, `ShutdownScheduler`, `ApiManagerBase`, `ArduinoManager`에 `SingletonGuard<T>`를 일원화 적용. 중복 인스턴스가 파괴 대기 중 같은 프레임에서 `Start()` 등을 실행해 생기는 부작용(시작 로그 중복 전송 등)을 방어하고, `DestroyUtil.SafeDestroy`를 호출해 에디터/테스트 모드 파괴 일관성 확보.
+- **`UIManager` 폰트 큐잉 및 대기열 로직 제네릭화:** `Text`와 `TMP_Text`의 폰트 대기열/적용 로직을 `AssignOrQueueFontGeneric` 및 `QueuePendingGeneric`, `ApplyPendingFontsGeneric`으로 통합하여 코드 중복 제거.
+- **`GameManagerBase<T>` 순수 DI 전환 및 제네릭 제거:** `GameManagerBase`로 제네릭을 제거하여 순수 DI 패턴으로 전환하고, 기존 프로젝트 코드 호환성을 위해 `[Obsolete] GameManagerBase<T>` 클래스 유지.
+- **`VideoManager.ReleaseOrphanedRenderTextures()` 성능 최적화:** 루프 내부에서 $O(N \times M)$으로 반복되던 씬 전수 검색을 루프 밖 1회 $O(N + M)$ 검색으로 최적화하여 씬 전환 시 병목 해소.
+- **`ApiRetryUtil` 웹 요청 루프 내 예외 격리:** `UnityWebRequest` 실행 구간을 try-catch로 감싸 네트워크 예외(DNS 실패, 소켓 오류 등) 발생 시에도 재시도 루프가 조기 중단되지 않고 지연 대기 후 정상 재시도하도록 개선.
+- **`JsonLoader`의 `.json` 확장자 자동 부착:** `Save`/`SaveAsync`에서 `.json` 확장자 누락 시 자동으로 부착하여 `Load`와의 동작 일관성 확보.
+
 ## [26.9.15] - 2026-09-15
 
 ### Added

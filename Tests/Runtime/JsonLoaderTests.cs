@@ -96,5 +96,57 @@ namespace Wonjeong.Tests
 
             Assert.DoesNotThrow(() => JsonLoader.Save("http://fake-host/remote.json", new JsonLoaderTestData()));
         }
+
+        /// <summary>
+        /// .json 확장자 없이 저장해도 자동으로 .json이 부착되어야 함.
+        /// </summary>
+        [Test]
+        public void 확장자_없이_저장해도_json_확장자가_자동으로_부착된다()
+        {
+            string fileNameWithoutExt = "JsonLoaderTests_noext";
+            string expectedPath = Path.Combine(Application.streamingAssetsPath, "JsonLoaderTests_noext.json").Replace("\\", "/");
+
+            try
+            {
+                JsonLoaderTestData data = new JsonLoaderTestData { name = "no_ext", value = 99 };
+                JsonLoader.Save(fileNameWithoutExt, data);
+
+                Assert.IsTrue(File.Exists(expectedPath), "Save가 .json 확장자를 붙여 파일을 생성해야 함");
+
+                JsonLoaderTestData loaded = JsonLoader.Load<JsonLoaderTestData>(fileNameWithoutExt);
+                Assert.AreEqual("no_ext", loaded.name);
+                Assert.AreEqual(99, loaded.value);
+            }
+            finally
+            {
+                if (File.Exists(expectedPath)) File.Delete(expectedPath);
+            }
+        }
+
+        /// <summary>
+        /// PersistentData 위치를 지정하면 persistentDataPath에 저장되고 읽혀야 함.
+        /// </summary>
+        [Test]
+        public void PersistentData_위치에_정상적으로_저장되고_로드된다()
+        {
+            string fileName = "JsonLoaderTests_persistent";
+            string expectedPath = Path.Combine(Application.persistentDataPath, "JsonLoaderTests_persistent.json").Replace("\\", "/");
+
+            try
+            {
+                JsonLoaderTestData data = new JsonLoaderTestData { name = "persistent", value = 777 };
+                JsonLoader.Save(fileName, data, JsonStorageLocation.PersistentData);
+
+                Assert.IsTrue(File.Exists(expectedPath), "PersistentData 경로에 파일이 생성되어야 함");
+
+                JsonLoaderTestData loaded = JsonLoader.Load<JsonLoaderTestData>(fileName, JsonStorageLocation.PersistentData);
+                Assert.AreEqual("persistent", loaded.name);
+                Assert.AreEqual(777, loaded.value);
+            }
+            finally
+            {
+                if (File.Exists(expectedPath)) File.Delete(expectedPath);
+            }
+        }
     }
 }

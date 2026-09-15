@@ -7,7 +7,8 @@
         "UniTask",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
-        "ZLogger.Unity"
+        "ZLogger.Unity",
+        "R3.Unity"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -17,7 +18,8 @@
         "nunit.framework.dll",
         "Microsoft.Extensions.Logging.Abstractions.dll",
         "Microsoft.Extensions.Logging.dll",
-        "ZLogger.dll"
+        "ZLogger.dll",
+        "R3.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [

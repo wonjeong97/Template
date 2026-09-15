@@ -12,7 +12,7 @@ using ZLogger;
 namespace Wonjeong.Core
 {
     /// <summary> 게임 매니저 베이스 클래스. </summary>
-    public abstract class GameManagerBase<T> : MonoBehaviour where T : GameManagerBase<T>
+    public abstract class GameManagerBase : MonoBehaviour
     {
         [SerializeField] private Reporter.Reporter reporter;
         [SerializeField] private GameObject inspectorContainer;
@@ -20,7 +20,7 @@ namespace Wonjeong.Core
         protected Settings settings;
         
         private IPublisher<InspectorEvent> _publisher;
-        private ILogger<GameManagerBase<T>> _logger;
+        private ILogger<GameManagerBase> _logger;
         private AppSettingsProvider _settingsProvider;
 
         private TemplateInputActions _inputActions;
@@ -34,7 +34,7 @@ namespace Wonjeong.Core
         /// 의존성 주입 및 Input Action 초기화.
         /// </summary>
         [Inject]
-        public void Construct(IPublisher<InspectorEvent> publisher, ILogger<GameManagerBase<T>> logger,
+        public void Construct(IPublisher<InspectorEvent> publisher, ILogger<GameManagerBase> logger,
             AppSettingsProvider settingsProvider)
         {
             _publisher = publisher;
@@ -169,12 +169,21 @@ namespace Wonjeong.Core
                 else
                 {
                     ApplyFrameRateSettings();
+                    OnSettingsLoaded(settings);
                 }
             }
             catch (OperationCanceledException)
             {
                 // 오브젝트 파괴로 인한 정상적인 취소
             }
+        }
+
+        /// <summary>
+        /// Settings.json 로드가 완료되었을 때 호출되는 가상 훅 메서드.
+        /// 파생 클래스에서 로드된 설정을 바탕으로 추가 초기화를 수행할 때 재정의함.
+        /// </summary>
+        protected virtual void OnSettingsLoaded(Settings loadedSettings)
+        {
         }
 
         /// <summary>
@@ -242,5 +251,14 @@ namespace Wonjeong.Core
         {
             if (_logger != null) _logger.ZLogInformation($"[GameManagerBase] Scene loaded: {scene.name} (mode: {mode})");
         }
+    }
+
+    /// <summary>
+    /// 이전 버전과의 호환성을 위한 제네릭 베이스 클래스.
+    /// 새로운 코드에서는 제네릭이 없는 <see cref="GameManagerBase"/>를 상속받아 사용하는 것을 권장함.
+    /// </summary>
+    [Obsolete("GameManagerBase<T> is deprecated. Use non-generic GameManagerBase instead.")]
+    public abstract class GameManagerBase<T> : GameManagerBase where T : GameManagerBase<T>
+    {
     }
 }

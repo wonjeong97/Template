@@ -32,6 +32,8 @@ namespace Wonjeong.Core
     /// </summary>
     public class ShutdownScheduler : MonoBehaviour
     {
+        private bool _isOriginal;
+
         private const string ShutdownSettingsFileName = "ShutdownSettings.json";
 
         /// <summary>편집 도구가 파일을 만들지 못했을 때를 대비한 종료 인수 기본값.</summary>
@@ -63,12 +65,13 @@ namespace Wonjeong.Core
 
         /// <summary>
         /// 씬 전환 후에도 예약 종료 감시가 끊기지 않도록 파괴를 방지함.
+        /// 중복 생성 시 기존 인스턴스를 유지하고 새로 생성된 객체를 파괴함.
         /// </summary>
         private void Awake()
         {
-            if (transform.parent == null)
+            if (SingletonGuard<ShutdownScheduler>.CheckDuplicate(this, out _isOriginal))
             {
-                DontDestroyOnLoad(gameObject);
+                return;
             }
         }
 
@@ -77,6 +80,7 @@ namespace Wonjeong.Core
         /// </summary>
         private void Start()
         {
+            if (!_isOriginal) return;
             // 이 매니저는 로거 외에 주입받는 의존성이 없어 주입이 없어도 동작 자체는 가능하지만,
             // 그 경우 진단 로그가 전부 사라져 원인 파악이 어려우므로 폴백으로 알려둠.
             if (_logger == null)
@@ -413,6 +417,12 @@ namespace Wonjeong.Core
                 case DayOfWeek.Sunday: return _schedule.sunday;
                 default: return null;
             }
+        }
+
+        private void OnDestroy()
+        {
+            SingletonGuard<ShutdownScheduler>.Release(_isOriginal);
+            if (!_isOriginal) return;
         }
     }
 }
