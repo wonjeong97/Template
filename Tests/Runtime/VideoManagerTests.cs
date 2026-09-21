@@ -4,9 +4,9 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
-using Wonjeong.UI;
+using HuliacDev.UI;
 
-namespace Wonjeong.Tests
+namespace HuliacDev.Tests
 {
     /// <summary>
     /// VideoManager의 RenderTexture 수명 관리 검증.

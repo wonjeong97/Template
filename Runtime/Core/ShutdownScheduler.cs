@@ -6,16 +6,16 @@ using MessagePipe;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
 using VContainer;
-using Wonjeong.App;
-using Wonjeong.Data;
-using Wonjeong.Utils;
+using HuliacDev.App;
+using HuliacDev.Data;
+using HuliacDev.Utils;
 using ZLogger;
 
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
-namespace Wonjeong.Core
+namespace HuliacDev.Core
 {
     /// <summary>
     /// StreamingAssets의 ShutdownSettings.json을 읽어, 예정된 시각이 되면 Windows shutdown

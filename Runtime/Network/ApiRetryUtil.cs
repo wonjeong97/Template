@@ -6,7 +6,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using ZLogger;
 
-namespace Wonjeong.Network
+namespace HuliacDev.Network
 {
     /// <summary>
     /// GET 요청을 공통 정책과 함께 전송하는 재사용 가능한 정적 유틸리티.

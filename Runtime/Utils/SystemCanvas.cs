@@ -4,7 +4,7 @@ using UnityEngine.UI; // GraphicRaycaster 사용을 위해 추가
 using VContainer;
 using ZLogger;
 
-namespace Wonjeong.Utils
+namespace HuliacDev.Utils
 {
     public class SystemCanvas : MonoBehaviour
     {

@@ -4,9 +4,9 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using Wonjeong.Utils;
+using HuliacDev.Utils;
 
-namespace Wonjeong.Tests
+namespace HuliacDev.Tests
 {
     [Serializable]
     public class JsonLoaderTestData

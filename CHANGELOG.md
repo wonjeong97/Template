@@ -1,6 +1,12 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.21-4] - 2026-09-21
+
+### Changed
+- **패키지 이름 변경: Wonjeong Template → HuliacDev Template:** `package.json`의 `name`(`com.wonjeong.template` → `com.huliacdev.template`, UPM 규약상 소문자만 허용되어 소문자로 정규화함)과 `displayName`을 변경함. C# 루트 네임스페이스도 `Wonjeong.*` → `HuliacDev.*`로 전면 변경(모든 Runtime/Editor/Tests 코드의 `namespace`/`using`, asmdef 3종의 `name`/`rootNamespace`/`references`, 벤더링된 `Reporter` 코드의 네임스페이스 포함 — `GameManagerBase`가 이를 네임스페이스 상대 참조로 쓰고 있어 함께 바꾸지 않으면 컴파일이 깨짐). asmdef 파일명도 `Wonjeong.Template(.Tests/.Editor).asmdef` → `HuliacDev.Template(.Tests/.Editor).asmdef`로 변경(내부 GUID는 `.meta` 파일과 함께 그대로 보존해 기존 참조가 깨지지 않도록 함). README의 설치/테스트 노출 예시도 새 패키지 ID로 갱신함. **저작권 고지(`LICENSE.md`)와 `package.json`의 `author`(실제 작성자 개인명·이메일)는 브랜드명이 아니므로 변경하지 않음.** 과거 CHANGELOG 항목들도 당시 기록이므로 그대로 둠.
+- **Breaking:** 이 패키지를 참조하는 모든 소비 프로젝트에서 `manifest.json`의 `com.wonjeong.template` 항목(및 `testables`)을 `com.huliacdev.template`로 수동으로 바꿔야 하고, 이 패키지를 상속/참조하던 프로젝트 코드의 `using Wonjeong.*;`도 `using HuliacDev.*;`로 바꿔야 함. `Template_Dev`는 함께 갱신함.
+
 ## [26.9.21-2] - 2026-09-21
 
 ### Changed

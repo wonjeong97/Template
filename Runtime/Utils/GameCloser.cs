@@ -5,14 +5,14 @@ using Microsoft.Extensions.Logging;
 using UnityEngine;
 using UnityEngine.UI;
 using VContainer;
-using Wonjeong.Data;
+using HuliacDev.Data;
 using ZLogger;
 
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
-namespace Wonjeong.Utils
+namespace HuliacDev.Utils
 {
     /// <summary>
     /// 지정된 UI 요소(주로 투명 버튼)를 연속 클릭하여 앱을 강제 종료하는 유틸리티 클래스.

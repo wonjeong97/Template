@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Wonjeong.App
+namespace HuliacDev.App
 {
     /// <summary>
     /// 로그 타입별 스택 트레이스 정책을 전역으로 설정함.

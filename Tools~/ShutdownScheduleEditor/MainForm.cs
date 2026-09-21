@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace Wonjeong.Tools.ShutdownScheduleEditor;
+namespace HuliacDev.Tools.ShutdownScheduleEditor;
 
 /// <summary>
 /// StreamingAssets의 ShutdownSettings.json(요일별 기본 스케줄 + 특정 날짜 재정의)을 편집하는 도구.

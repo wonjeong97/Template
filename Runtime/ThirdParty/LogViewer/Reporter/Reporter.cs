@@ -73,7 +73,7 @@ public class Images
 //or your finger (touch and drag) on the screen to show all these logs
 //no coding is required 
 
-namespace Wonjeong.Reporter
+namespace HuliacDev.Reporter
 {
     public class Reporter : MonoBehaviour
     {

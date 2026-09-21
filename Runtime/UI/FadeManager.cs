@@ -6,10 +6,10 @@ using Microsoft.Extensions.Logging;
 using UnityEngine;
 using UnityEngine.UI;
 using VContainer;
-using Wonjeong.Utils;
+using HuliacDev.Utils;
 using ZLogger;
 
-namespace Wonjeong.UI
+namespace HuliacDev.UI
 {
     public class FadeManager : MonoBehaviour
     {

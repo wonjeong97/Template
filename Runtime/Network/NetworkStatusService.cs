@@ -5,7 +5,7 @@ using UnityEngine;
 using VContainer.Unity;
 using ZLogger;
 
-namespace Wonjeong.Network
+namespace HuliacDev.Network
 {
     /// <summary>
     /// 실시간 네트워크 연결 상태를 모니터링하는 서비스.

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Wonjeong.Tools.ShutdownScheduleEditor;
+namespace HuliacDev.Tools.ShutdownScheduleEditor;
 
 internal static class Program
 {

@@ -1,4 +1,4 @@
-# Wonjeong Template
+# HuliacDev Template
 
 전시/키오스크형 Unity 앱을 위한 기본 템플릿 패키지입니다.
 `Settings.json` 하나로 UI 레이아웃·사운드·종료 조건을 제어하므로, 빌드 후에도 코드 수정 없이 기획 변경에 대응할 수 있습니다.
@@ -82,7 +82,7 @@ Package Manager → **Add package from git URL** 로 이 저장소 주소를 입
 로컬 개발 중이라면 `manifest.json`에 파일 참조로 걸어도 됩니다.
 
 ```json
-"com.wonjeong.template": "file:C:/Projects/Template"
+"com.huliacdev.template": "file:C:/Projects/Template"
 ```
 
 ### 5. VContainer 소스 제너레이터 (선택, 권장)
@@ -113,14 +113,14 @@ UPM 패키지에는 제너레이터가 포함되어 있지 않으므로, 기본 
 
 **적용 범위**
 
-`Assets/` 아래에 두면 `Assembly-CSharp`뿐 아니라 **이 패키지 어셈블리(`Wonjeong.Template`)에도 적용**됩니다. 패키지 안에 DLL을 넣을 필요는 없습니다.
+`Assets/` 아래에 두면 `Assembly-CSharp`뿐 아니라 **이 패키지 어셈블리(`HuliacDev.Template`)에도 적용**됩니다. 패키지 안에 DLL을 넣을 필요는 없습니다.
 
 **확인 방법**
 
 리플렉션 폴백이 남아 있는지 코드로 확인할 수 있습니다.
 
 ```csharp
-var injector = VContainer.Internal.InjectorCache.GetOrBuild(typeof(Wonjeong.UI.UIManager));
+var injector = VContainer.Internal.InjectorCache.GetOrBuild(typeof(HuliacDev.UI.UIManager));
 Debug.Log(injector.GetType().Name);
 // 생성됨    -> UIManagerGeneratedInjector
 // 폴백 중   -> ReflectionInjector
@@ -141,7 +141,7 @@ Debug.Log(injector.GetType().Name);
 Test Runner는 기본적으로 `Assets/` 안의 테스트만 스캔합니다. 패키지 테스트를 보려면 프로젝트의 `Packages/manifest.json`에 다음을 추가해야 합니다.
 
 ```json
-"testables": [ "com.wonjeong.template" ]
+"testables": [ "com.huliacdev.template" ]
 ```
 
 > 이걸 빠뜨리면 `AppSettingsProviderTests`가 Test Runner 창에 **아예 나타나지 않습니다.** 테스트가 없는 것처럼 보여 원인을 찾기 어려우니 주의하세요.
@@ -247,7 +247,7 @@ Runtime/
 
 > **참고:** `JsonUtility`는 Unity의 네이티브 직렬화 백엔드를 쓰므로 관리 코드 리플렉션이 아닙니다.
 > 다만 런타임 타입 주도 방식이라 IL2CPP 코드 스트리핑에 취약합니다. 빌드에서 설정이 비어 나온다면
-> `link.xml`이나 `[Preserve]`로 `Wonjeong.Data` 타입을 보존하세요.
+> `link.xml`이나 `[Preserve]`로 `HuliacDev.Data` 타입을 보존하세요.
 
 > **ZLogger 사용 시 주의:** 보간 문자열 핸들러가 `ref struct`라 널 조건부 연산자(`?.`)와 충돌합니다.
 > `_logger?.ZLogInformation(...)`이 아니라 `if (_logger != null) _logger.ZLogInformation(...)` 형태로 작성하세요.
@@ -276,7 +276,7 @@ public class GameManager : GameManagerBase
 
 ### InactivityTimer (비활동 타이머)
 
-`Settings.json`의 `useInactivityTimer`/`resetTime`에 따라 일정 시간 입력이 없으면 `Wonjeong.App.InactivityTimeoutEvent`(MessagePipe 메시지)를 발행합니다. "최초 화면"이 별도 씬인지, 같은 씬의 첫 패널인지는 프로젝트마다 다르므로, 실제로 되돌아가는 로직(씬 로드, 패널 전환 등)은 이 이벤트를 `ISubscriber<InactivityTimeoutEvent>`로 구독해 프로젝트가 직접 구현합니다.
+`Settings.json`의 `useInactivityTimer`/`resetTime`에 따라 일정 시간 입력이 없으면 `HuliacDev.App.InactivityTimeoutEvent`(MessagePipe 메시지)를 발행합니다. "최초 화면"이 별도 씬인지, 같은 씬의 첫 패널인지는 프로젝트마다 다르므로, 실제로 되돌아가는 로직(씬 로드, 패널 전환 등)은 이 이벤트를 `ISubscriber<InactivityTimeoutEvent>`로 구독해 프로젝트가 직접 구현합니다.
 
 다른 선택 매니저와 동일하게, 씬에 `InactivityTimer` 컴포넌트를 두면(배치 자체가 사용 선언) `RootLifetimeScope`가 자동으로 찾아 등록합니다. VContainer로 런타임 생성하는 경우도 동작 방식은 동일하며, 두 경우 모두 이벤트 연결은 코드로만 가능합니다(런타임 스폰 특성상 인스펙터 연결은 지원하지 않음).
 
