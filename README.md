@@ -322,7 +322,8 @@ void OnVideoFinished() => _inactivityTimer?.Resume();
 
 ```csharp
 // 방법 1: 래퍼 메서드로 자동 전송 (호출 전 "Call API ~", 성공 시 "Return OK",
-// 예외 발생 시 "Return fail: {예외 메시지}" — 예외 메시지는 자동으로 채워짐)
+// 예외 발생 시 "Return fail: {예외 메시지}" — 예외 메시지는 자동으로 채워지며,
+// 메시지에 URL 쿼리 스트링이 있으면 API 키/토큰 유출 방지를 위해 제거 후 전송됨)
 var response = await _apiManager.ExecuteWithExternalApiLoggingAsync(
     "https://api.wavespeed.ai/v1/task?user=123",
     async () => await CallWavespeedAsync());
