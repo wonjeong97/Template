@@ -1,6 +1,13 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.21-2] - 2026-09-21
+
+### Changed
+- **`LogRetentionService` ZLogger 전환 및 로그 영어 통일:** 다른 모든 매니저와 달리 `Debug.LogWarning`을 직접 호출하고 메시지도 한국어로 남아있던 것을, `ILogger<LogRetentionService>` 주입(`RootLifetimeScope.ConfigureLogRetention`에서 팩토리로 전달)과 `ZLogWarning` 호출로 바꾸고 메시지를 영어로 통일함. 로거가 없는 경우(직접 `new`한 테스트 등)를 대비해 기존처럼 `Debug.LogWarning` 폴백은 유지함.
+- **`GameManagerBase`, `SystemCanvas`를 `SingletonGuard<T>`로 통일:** 26.9.15-2에서 매니저 8종(FadeManager/UIManager/SoundManager/VideoManager/InactivityTimer/ShutdownScheduler/ApiManagerBase/ArduinoManager)을 `SingletonGuard<T>`로 일원화할 때 누락됐던 이 두 클래스도 동일하게 전환함. 특히 `GameManagerBase`는 기존에 `Start()`를 `_isOriginal`로 가드하지 않아, 중복 생성된 인스턴스가 `Destroy()` 예약 후 같은 프레임에 `Start()`가 실행되어 `LoadSettingsAsync` 등이 중복 수행될 여지가 있었음. `SingletonGuard`가 중복 인스턴스를 즉시 `enabled = false`로 만들어 `Start()` 자체가 실행되지 않으므로 이 문제도 함께 해소됨.
+- **싱글톤 가드 중복 코드 정리:** `InactivityTimer`, `ShutdownScheduler`, `FadeManager`의 `OnDestroy()`에 `SingletonGuard.Release(...)` 뒤에 남아있던 `if (!_isOriginal) return;`(뒤에 아무 코드도 없어 아무 동작도 하지 않던 죽은 코드)를 제거함.
+
 ## [26.9.15-2] - 2026-09-15
 
 ### Added

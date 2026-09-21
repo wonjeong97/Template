@@ -2,8 +2,10 @@ using System;
 using System.IO;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using UnityEngine;
 using VContainer.Unity;
+using ZLogger;
 
 namespace Wonjeong.Utils
 {
@@ -36,14 +38,17 @@ namespace Wonjeong.Utils
 
         private readonly string _logDirectory;
         private readonly int _retentionDays;
+        private readonly ILogger<LogRetentionService> _logger;
         private CancellationTokenSource _cts;
 
         /// <param name="logDirectory">로그 파일이 위치한 디렉터리.</param>
         /// <param name="retentionDays">보관 기간(일). 마지막 기록 시각이 이보다 오래된 파일을 삭제함.</param>
-        public LogRetentionService(string logDirectory, int retentionDays)
+        /// <param name="logger">정리 결과·실패를 남길 로거. null이면 Debug.Log로 대체 출력함.</param>
+        public LogRetentionService(string logDirectory, int retentionDays, ILogger<LogRetentionService> logger = null)
         {
             _logDirectory = logDirectory;
             _retentionDays = retentionDays;
+            _logger = logger;
         }
 
         /// <summary>
@@ -68,7 +73,7 @@ namespace Wonjeong.Utils
                 try
                 {
                     // 메인 스레드 블로킹 및 프레임 드랍(Hitch)을 방지하기 위해 백그라운드 스레드에서 파일 I/O를 수행함.
-                    await UniTask.RunOnThreadPool(() => CleanupOldLogs(_logDirectory, _retentionDays), cancellationToken: cancellationToken);
+                    await UniTask.RunOnThreadPool(() => CleanupOldLogs(_logDirectory, _retentionDays, _logger), cancellationToken: cancellationToken);
 
                     // 게임 시간(timeScale)과 무관한 실제 경과 시간 기준으로 대기함.
                     await UniTask.Delay(CleanupInterval, DelayType.Realtime, PlayerLoopTiming.Update, cancellationToken);
@@ -89,7 +94,7 @@ namespace Wonjeong.Utils
         /// 컨테이너 없이도 임시 디렉터리를 대상으로 단위 테스트가 가능하게 함.
         /// </para>
         /// </summary>
-        public static void CleanupOldLogs(string logDirectory, int retentionDays)
+        public static void CleanupOldLogs(string logDirectory, int retentionDays, ILogger<LogRetentionService> logger = null)
         {
             try
             {
@@ -100,7 +105,7 @@ namespace Wonjeong.Utils
                 // 1. 회전 파일(GameLog_*.txt) 정리
                 foreach (string file in Directory.GetFiles(logDirectory, $"{LogFilePrefix}_*.txt"))
                 {
-                    TryDeleteIfExpired(file, threshold);
+                    TryDeleteIfExpired(file, threshold, logger);
                 }
 
                 // 2. 회전 로깅 도입 이전 레거시 단일 로그 파일(GameLog.txt) 정리
@@ -108,12 +113,13 @@ namespace Wonjeong.Utils
                 string legacyFile = Path.Combine(logDirectory, $"{LogFilePrefix}.txt");
                 if (File.Exists(legacyFile))
                 {
-                    TryDeleteIfExpired(legacyFile, threshold);
+                    TryDeleteIfExpired(legacyFile, threshold, logger);
                 }
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"[LogRetentionService] 오래된 로그 정리 실패: {e.Message}");
+                if (logger != null) logger.ZLogWarning($"[LogRetentionService] Failed to clean up old logs: {e.Message}");
+                else Debug.LogWarning($"[LogRetentionService] Failed to clean up old logs: {e.Message}");
             }
         }
 
@@ -122,7 +128,7 @@ namespace Wonjeong.Utils
         /// 특정 파일이 다른 프로세스(뷰어, 백업 등)에 잠겨 실패하더라도
         /// 전체 정리 루프가 중단되지 않도록 파일 단위로 예외를 격리함.
         /// </summary>
-        private static void TryDeleteIfExpired(string filePath, DateTime threshold)
+        private static void TryDeleteIfExpired(string filePath, DateTime threshold, ILogger<LogRetentionService> logger)
         {
             try
             {
@@ -133,7 +139,8 @@ namespace Wonjeong.Utils
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"[LogRetentionService] 로그 파일 삭제 실패 ({filePath}): {e.Message}");
+                if (logger != null) logger.ZLogWarning($"[LogRetentionService] Failed to delete log file ({filePath}): {e.Message}");
+                else Debug.LogWarning($"[LogRetentionService] Failed to delete log file ({filePath}): {e.Message}");
             }
         }
 

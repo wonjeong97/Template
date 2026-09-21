@@ -236,7 +236,7 @@ namespace Wonjeong.App
         {
 #if !UNITY_EDITOR && !UNITY_WEBGL
             builder.RegisterEntryPoint<LogRetentionService>(
-                _ => new LogRetentionService(LogDirectory, LogRetentionDays),
+                resolver => new LogRetentionService(LogDirectory, LogRetentionDays, resolver.Resolve<ILogger<LogRetentionService>>()),
                 Lifetime.Singleton);
 #endif
         }

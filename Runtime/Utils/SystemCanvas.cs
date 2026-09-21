@@ -8,9 +8,6 @@ namespace Wonjeong.Utils
 {
     public class SystemCanvas : MonoBehaviour
     {
-        // 씬 중복 로드 시 캔버스가 여러 개 생기는 것을 막기 위한 내부 플래그
-        private static bool _isInstantiated;
-        
         // 중복 생성되어 파괴되는 객체가 정적 플래그를 건드리는 것을 막기 위한 인스턴스 확인 변수
         private bool _isOriginal;
 
@@ -28,20 +25,12 @@ namespace Wonjeong.Utils
 
         private void Awake()
         {
-            if (!_isInstantiated)
+            if (SingletonGuard<SystemCanvas>.CheckDuplicate(this, out _isOriginal))
             {
-                _isInstantiated = true;
-                _isOriginal = true; // 내가 최초의 원본임을 기억함
-                if (transform.parent == null)
-                {
-                    DontDestroyOnLoad(gameObject);
-                }
-                InitializeCanvas();
+                return;
             }
-            else
-            {
-                Destroy(gameObject);
-            }
+
+            InitializeCanvas();
         }
 
         /// <summary>
@@ -49,10 +38,7 @@ namespace Wonjeong.Utils
         /// </summary>
         private void OnDestroy()
         {
-            if (_isOriginal)
-            {
-                _isInstantiated = false;
-            }
+            SingletonGuard<SystemCanvas>.Release(_isOriginal);
         }
 
         /// <summary>
