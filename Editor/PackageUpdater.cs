@@ -7,19 +7,43 @@ using UnityEngine;
 namespace Wonjeong.Editor
 {
     /// <summary>
-    /// 프로젝트에 설치된 UPM 패키지를 일괄 최신화하는 에디터 유틸리티.
+    /// 이 템플릿 스택이 직접 의존하는 패키지만 골라 최신화하는 에디터 유틸리티.
+    /// 예전에는 설치된 UPM 패키지 전부를 대상으로 삼아, 프로젝트별로 버전을 고정해둔
+    /// 패키지(Addressables, Input System, URP 등)까지 의도치 않게 끌어올리는 문제가 있었음.
+    /// 그래서 <see cref="TargetPackageNames"/>에 명시된 패키지(이 스택이 실제로 관리하는 것들과
+    /// 템플릿 자신)만 대상으로 좁힘.
+    /// <para>
     /// Git 패키지는 동일 URL로 재추가해 최신 커밋으로 갱신하고, 레지스트리 패키지는
     /// 현재 에디터와 호환되는 최신 버전(versions.latestCompatible)으로만 올린다.
+    /// </para>
     /// </summary>
     public static class PackageUpdater
     {
+        /// <summary>
+        /// 업데이트 대상 패키지 이름(manifest.json의 키) 목록. 여기 없는 패키지는 설치돼 있어도
+        /// 건드리지 않음. 새 스택 패키지가 추가되면 이 목록에도 추가할 것.
+        /// </summary>
+        static readonly HashSet<string> TargetPackageNames = new HashSet<string>
+        {
+            "com.coplaydev.unity-mcp",          // MCP for Unity
+            "com.cysharp.messagepipe",          // MessagePipe
+            "com.cysharp.messagepipe.vcontainer", // MessagePipe.VContainer
+            "com.cysharp.r3",                   // R3
+            "com.cysharp.unitask",              // UniTask
+            "com.cysharp.zlogger",              // ZLogger(.Unity)
+            "jp.hadashikick.vcontainer",        // VContainer
+            "com.github-glitchenzo.nugetforunity", // NugetForUnity
+            "com.cysharp.zstring",              // ZString
+            "com.wonjeong.template",            // 현재 템플릿
+        };
+
         static ListRequest _listRequest;
         static Queue<string> _updateQueue;
         static AddRequest _addRequest;
         static int _total;
         static int _done;
 
-        [MenuItem("Tools/Update All Packages")]
+        [MenuItem("Tools/Update Stack Packages")]
         static void Run()
         {
             // offlineMode: false → 레지스트리에서 최신 버전 정보 조회
@@ -44,6 +68,9 @@ namespace Wonjeong.Editor
 
             foreach (var pkg in _listRequest.Result)
             {
+                if (!TargetPackageNames.Contains(pkg.name))
+                    continue;
+
                 if (pkg.source == PackageSource.BuiltIn || pkg.source == PackageSource.Embedded)
                     continue;
 
@@ -69,7 +96,7 @@ namespace Wonjeong.Editor
             if (_updateQueue.Count == 0)
             {
                 EditorUtility.ClearProgressBar();
-                Debug.Log("[PackageUpdater] 모든 패키지가 최신 상태입니다.");
+                Debug.Log("[PackageUpdater] 대상 스택 패키지가 모두 최신 상태입니다.");
                 return;
             }
 
