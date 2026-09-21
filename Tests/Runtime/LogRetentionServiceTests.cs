@@ -1,9 +1,9 @@
 using System;
 using System.IO;
 using NUnit.Framework;
-using Wonjeong.Utils;
+using HuliacDev.Utils;
 
-namespace Wonjeong.Tests
+namespace HuliacDev.Tests
 {
     /// <summary>
     /// LogRetentionService.CleanupOldLogs의 순수 정리 로직을 검증함.

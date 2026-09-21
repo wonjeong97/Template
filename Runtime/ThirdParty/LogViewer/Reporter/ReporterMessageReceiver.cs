@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections;
 
-namespace Wonjeong.Reporter
+namespace HuliacDev.Reporter
 {
     public class ReporterMessageReceiver : MonoBehaviour
     {

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Wonjeong.Utils
+namespace HuliacDev.Utils
 {
     /// <summary>
     /// 오브젝트 파괴 시 실행 컨텍스트(플레이 모드/에디터)에 따라 알맞은 파괴 API를 선택하는 유틸리티.

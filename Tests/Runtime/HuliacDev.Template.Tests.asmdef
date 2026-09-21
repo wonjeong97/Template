@@ -1,8 +1,8 @@
 {
-    "name": "Wonjeong.Template.Tests",
-    "rootNamespace": "Wonjeong.Tests",
+    "name": "HuliacDev.Template.Tests",
+    "rootNamespace": "HuliacDev.Tests",
     "references": [
-        "Wonjeong.Template",
+        "HuliacDev.Template",
         "MessagePipe",
         "UniTask",
         "UnityEngine.TestRunner",

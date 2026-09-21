@@ -1,6 +1,6 @@
 {
-    "name": "Wonjeong.Template.Editor",
-    "rootNamespace": "Wonjeong.Editor",
+    "name": "HuliacDev.Template.Editor",
+    "rootNamespace": "HuliacDev.Editor",
     "references": [],
     "includePlatforms": [
         "Editor"

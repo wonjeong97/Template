@@ -7,10 +7,10 @@ using MessagePipe;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using Wonjeong.App;
-using Wonjeong.Core;
+using HuliacDev.App;
+using HuliacDev.Core;
 
-namespace Wonjeong.Tests
+namespace HuliacDev.Tests
 {
     /// <summary>
     /// InactivityTimer의 타임아웃 발동/미발동 조건 검증.

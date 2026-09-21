@@ -5,9 +5,9 @@ using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using Wonjeong.Data;
+using HuliacDev.Data;
 
-namespace Wonjeong.Tests
+namespace HuliacDev.Tests
 {
     /// <summary>
     /// AppSettingsProvider의 공유/동시성 동작 검증.

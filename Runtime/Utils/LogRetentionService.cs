@@ -7,7 +7,7 @@ using UnityEngine;
 using VContainer.Unity;
 using ZLogger;
 
-namespace Wonjeong.Utils
+namespace HuliacDev.Utils
 {
     /// <summary>
     /// 보관 기간을 초과한 오래된 로그 파일을 주기적으로 삭제하는 서비스.

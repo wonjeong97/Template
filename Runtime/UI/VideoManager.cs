@@ -8,10 +8,10 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
 using VContainer;
-using Wonjeong.Utils;
+using HuliacDev.Utils;
 using ZLogger;
 
-namespace Wonjeong.UI
+namespace HuliacDev.UI
 {
     public class VideoManager : MonoBehaviour
     {

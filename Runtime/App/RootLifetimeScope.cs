@@ -5,17 +5,17 @@ using Microsoft.Extensions.Logging;
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
-using Wonjeong.Core;
-using Wonjeong.Data;
-using Wonjeong.Hardware;
-using Wonjeong.Network;
-using Wonjeong.UI;
-using Wonjeong.Utils;
+using HuliacDev.Core;
+using HuliacDev.Data;
+using HuliacDev.Hardware;
+using HuliacDev.Network;
+using HuliacDev.UI;
+using HuliacDev.Utils;
 using ZLogger;
 using ZLogger.Providers;
 using ZLogger.Unity;
 
-namespace Wonjeong.App
+namespace HuliacDev.App
 {
     public struct InspectorEvent { }
 

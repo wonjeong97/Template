@@ -10,11 +10,11 @@ using Microsoft.Extensions.Logging;
 using UnityEngine;
 using UnityEngine.Networking;
 using VContainer;
-using Wonjeong.Data;
-using Wonjeong.Utils;
+using HuliacDev.Data;
+using HuliacDev.Utils;
 using ZLogger;
 
-namespace Wonjeong.UI
+namespace HuliacDev.UI
 {
     public class SoundManager : MonoBehaviour
     {

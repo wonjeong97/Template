@@ -1,4 +1,4 @@
-namespace Wonjeong.Utils
+namespace HuliacDev.Utils
 {
     /// <summary>
     /// 앱 종료를 요청한 주체를 기록해두는 정적 상태.

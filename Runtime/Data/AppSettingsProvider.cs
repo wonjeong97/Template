@@ -2,9 +2,9 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
-using Wonjeong.Utils;
+using HuliacDev.Utils;
 
-namespace Wonjeong.Data
+namespace HuliacDev.Data
 {
     /// <summary>
     /// Settings.json을 단 한 번만 로드하여 모든 소비자에게 공유하는 싱글톤 제공자.

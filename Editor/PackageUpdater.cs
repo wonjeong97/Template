@@ -4,7 +4,7 @@ using UnityEditor.PackageManager;
 using UnityEditor.PackageManager.Requests;
 using UnityEngine;
 
-namespace Wonjeong.Editor
+namespace HuliacDev.Editor
 {
     /// <summary>
     /// 프로젝트에 설치된 UPM 패키지를 일괄 최신화하는 에디터 유틸리티.
