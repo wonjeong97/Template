@@ -422,7 +422,6 @@ namespace Wonjeong.Core
         private void OnDestroy()
         {
             SingletonGuard<ShutdownScheduler>.Release(_isOriginal);
-            if (!_isOriginal) return;
         }
     }
 }

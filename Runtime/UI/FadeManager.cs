@@ -70,7 +70,6 @@ namespace Wonjeong.UI
         private void OnDestroy()
         {
             SingletonGuard<FadeManager>.Release(_isOriginal);
-            if (!_isOriginal) return;
         }
 
         /// <summary>

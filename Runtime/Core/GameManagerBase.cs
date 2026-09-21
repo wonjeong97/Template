@@ -7,6 +7,7 @@ using UnityEngine.SceneManagement;
 using VContainer;
 using Wonjeong.App;
 using Wonjeong.Data;
+using Wonjeong.Utils;
 using ZLogger;
 
 namespace Wonjeong.Core
@@ -24,8 +25,6 @@ namespace Wonjeong.Core
         private AppSettingsProvider _settingsProvider;
 
         private TemplateInputActions _inputActions;
-        
-        private static bool _isInstantiated;
 
         // 중복 생성되어 파괴되는 객체가 정적 플래그를 건드리는 것을 막기 위한 인스턴스 확인 변수
         private bool _isOriginal;
@@ -60,20 +59,9 @@ namespace Wonjeong.Core
         /// </summary>
         protected virtual void Awake()
         {
-            if (!_isInstantiated)
+            if (SingletonGuard<GameManagerBase>.CheckDuplicate(this, out _isOriginal))
             {
-                _isInstantiated = true;
-                _isOriginal = true; // 내가 최초의 원본임을 기억함
-
-                if (transform.parent == null)
-                {
-                    DontDestroyOnLoad(gameObject);
-                }
-            }
-            else
-            {
-                // 이미 인스턴스가 존재하면 새로 로드된 중복 객체를 즉시 파괴
-                Destroy(gameObject);
+                return;
             }
         }
 
@@ -95,10 +83,7 @@ namespace Wonjeong.Core
         /// </summary>
         protected virtual void OnDestroy()
         {
-            if (_isOriginal)
-            {
-                _isInstantiated = false;
-            }
+            SingletonGuard<GameManagerBase>.Release(_isOriginal);
 
             if (_inputActions != null)
             {

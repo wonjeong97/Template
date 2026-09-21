@@ -208,7 +208,6 @@ namespace Wonjeong.Core
         private void OnDestroy()
         {
             SingletonGuard<InactivityTimer>.Release(_isOriginal);
-            if (!_isOriginal) return;
         }
     }
 }
