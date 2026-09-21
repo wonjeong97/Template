@@ -318,22 +318,25 @@ void OnVideoFinished() => _inactivityTimer?.Resume();
 
 프로젝트 내에서 외부 API를 호출할 때 사내 로깅 서버(`Settings.json`의 `apiUrl`)로 호출 및 반환 상태를 전송해야 하는 경우 세 가지 방식 중 상황에 맞춰 사용할 수 있습니다.
 - **호출 규격:** `Call API {http://apiaddress+parameter}`
-- **반환 규격:** `Return OK` (성공) / `Return fail` (실패)
+- **반환 규격:** `Return OK` (성공) / `Return fail` 또는 `Return fail: {실패 사유}` (실패, 사유를 알 수 있을 때만 덧붙음)
 
 ```csharp
-// 방법 1: 래퍼 메서드로 자동 전송 (호출 전 "Call API ~", 성공 시 "Return OK", 예외 발생 시 "Return fail")
+// 방법 1: 래퍼 메서드로 자동 전송 (호출 전 "Call API ~", 성공 시 "Return OK",
+// 예외 발생 시 "Return fail: {예외 메시지}" — 예외 메시지는 자동으로 채워지며,
+// 메시지에 URL 쿼리 스트링이 있으면 API 키/토큰 유출 방지를 위해 제거 후 전송됨)
 var response = await _apiManager.ExecuteWithExternalApiLoggingAsync(
     "https://api.wavespeed.ai/v1/task?user=123",
     async () => await CallWavespeedAsync());
 
-// 방법 2: ApiManagerBase 직접 호출
+// 방법 2: ApiManagerBase 직접 호출 (실패 사유는 두 번째 인자로 직접 전달)
 await _apiManager.SendExternalApiCallLogAsync("https://api.openai.com/v1/chat/completions");
-bool success = await CallGptAsync();
-await _apiManager.SendExternalApiReturnLogAsync(success);
+(bool success, string errorReason) = await CallGptAsync();
+await _apiManager.SendExternalApiReturnLogAsync(success, errorReason);
 
 // 방법 3: MessagePipe 이벤트 발행 (ApiManagerBase를 직접 참조하지 않는 경우)
 _externalApiCallPublisher.Publish(new ExternalApiCallEvent("https://api.openai.com/v1/chat/completions"));
 _externalApiReturnPublisher.Publish(new ExternalApiReturnEvent(true));
+_externalApiReturnPublisher.Publish(new ExternalApiReturnEvent(false, "HTTP 500"));
 ```
 
 ### 단축키 (기본 제공)

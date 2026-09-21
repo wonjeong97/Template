@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using MessagePipe;
@@ -29,7 +30,8 @@ namespace Wonjeong.Network
     /// 메시지 값만 이어붙여 GET 요청을 보냄. 메시지 규칙: 시작 "start"/"start (restart)",
     /// 종료 "end (by User/GameCloser/Shutdown Scheduler)", idle 진입 "move_idle"/
     /// "move_idle_timeout", 외부 API 호출 "Call API {url}", 외부 API 응답 "Return OK"/
-    /// "Return fail". 유니티가 멈춰 작업 스케줄러가 대신 끈 경우("end_kill (by Task
+    /// "Return fail"(실패 사유를 알 수 있으면 "Return fail: {reason}"). 유니티가 멈춰
+    /// 작업 스케줄러가 대신 끈 경우("end_kill (by Task
     /// Scheduler)")는 이 클래스가 아니라 Tools~/ShutdownScheduleEditor의 가드 스크립트가 별도로 보냄.
     /// </para>
     /// </summary>
@@ -52,6 +54,13 @@ namespace Wonjeong.Network
         private const string ExternalApiCallPrefix = "Call API ";
         private const string ExternalApiReturnOkMessage = "Return OK";
         private const string ExternalApiReturnFailMessage = "Return fail";
+
+        /// <summary>
+        /// 예외 메시지를 실패 사유로 자동 전송하기 전에 URL 쿼리 스트링(?뒤)을 제거하기 위한 패턴.
+        /// 실패한 요청의 URL이 예외 메시지에 그대로 포함되는 경우가 있는데, 쿼리 스트링에는 API 키·
+        /// 토큰 등이 담기는 경우가 많아 그대로 사내 로그 서버로 전송하면 유출될 수 있음(SanitizeFailReason 참고).
+        /// </summary>
+        private static readonly Regex FailReasonQueryStringPattern = new Regex(@"\?[^\s""')]*", RegexOptions.Compiled);
 
         private bool _isOriginal;
 
@@ -134,7 +143,7 @@ namespace Wonjeong.Network
             _inactivityTimeoutSubscription = _inactivityTimeoutSubscriber?.Subscribe(_ => OnInactivityTimeout());
             _moveIdleSubscription = _moveIdleSubscriber?.Subscribe(_ => OnMoveIdle());
             _externalApiCallSubscription = _externalApiCallSubscriber?.Subscribe(e => OnExternalApiCall(e.RequestUrl));
-            _externalApiReturnSubscription = _externalApiReturnSubscriber?.Subscribe(e => OnExternalApiReturn(e.IsSuccess));
+            _externalApiReturnSubscription = _externalApiReturnSubscriber?.Subscribe(e => OnExternalApiReturn(e.IsSuccess, e.FailReason));
         }
 
         /// <summary>
@@ -356,12 +365,13 @@ namespace Wonjeong.Network
 
         /// <summary>
         /// 외부 API 반환 이벤트(<see cref="ExternalApiReturnEvent"/>) 수신 시 호출되는 가상 핸들러.
-        /// 기본 동작은 <see cref="SendExternalApiReturnLogAsync"/>를 호출하여 "Return OK" 또는 "Return fail" 로그를 전송함.
+        /// 기본 동작은 <see cref="SendExternalApiReturnLogAsync"/>를 호출하여 "Return OK" 또는
+        /// "Return fail"(<paramref name="failReason"/>이 있으면 "Return fail: {failReason}") 로그를 전송함.
         /// 조건에 따라 로그 전송 방식을 커스텀해야 하는 경우 파생 클래스에서 override할 것.
         /// </summary>
-        protected virtual void OnExternalApiReturn(bool isSuccess)
+        protected virtual void OnExternalApiReturn(bool isSuccess, string failReason = null)
         {
-            SendExternalApiReturnLogAsync(isSuccess).Forget();
+            SendExternalApiReturnLogAsync(isSuccess, failReason).Forget();
         }
 
         /// <summary>
@@ -399,13 +409,40 @@ namespace Wonjeong.Network
         }
 
         /// <summary>
-        /// 외부 API(wavespeed, gpt 등) 호출 결과 로그("Return OK" 또는 "Return fail")를 서버에 전송함.
+        /// 외부 API(wavespeed, gpt 등) 호출 결과 로그를 서버에 전송함. 성공 시 "Return OK",
+        /// 실패 시 "Return fail"(<paramref name="failReason"/>이 있으면 "Return fail: {failReason}")을 전송함.
         /// 직접 호출하거나 <see cref="ExternalApiReturnEvent"/>를 발행하면 자동으로 호출됨.
         /// </summary>
-        public UniTask SendExternalApiReturnLogAsync(bool isSuccess, CancellationToken cancellationToken = default)
+        public UniTask SendExternalApiReturnLogAsync(bool isSuccess, string failReason = null, CancellationToken cancellationToken = default)
         {
-            string message = isSuccess ? ExternalApiReturnOkMessage : ExternalApiReturnFailMessage;
-            return SendSimpleLogAsync(message, cancellationToken);
+            return SendSimpleLogAsync(BuildReturnMessage(isSuccess, failReason), cancellationToken);
+        }
+
+        /// <summary>
+        /// "Return OK" 또는 "Return fail"(사유가 있으면 "Return fail: {failReason}") 메시지를 조립함.
+        /// </summary>
+        private static string BuildReturnMessage(bool isSuccess, string failReason)
+        {
+            if (isSuccess) return ExternalApiReturnOkMessage;
+            if (string.IsNullOrEmpty(failReason)) return ExternalApiReturnFailMessage;
+            return $"{ExternalApiReturnFailMessage}: {failReason}";
+        }
+
+        /// <summary>
+        /// 예외 메시지를 실패 사유로 자동 전송하기 전에 URL 쿼리 스트링을 제거함. 실패한 요청의 URL이
+        /// 예외 메시지에 그대로 담기는 HTTP 클라이언트가 있는데, 쿼리 스트링에는 API 키·토큰 등이
+        /// 담기는 경우가 많아 그대로 사내 로그 서버로 전송하면 유출될 수 있음.
+        /// <para>
+        /// 호출자가 <see cref="SendExternalApiReturnLogAsync"/>/<see cref="SendExternalApiReturnFailLogAsync"/>에
+        /// 직접 넘기는 failReason에는 적용하지 않음. 그 값은 호출자가 내용을 직접 통제하므로 여기서
+        /// 임의로 잘라내면 오히려 의도한 정보가 가려질 수 있음. 이 메서드는 예외에서 자동으로
+        /// 캡처되는 <see cref="ExecuteWithExternalApiLoggingAsync{T}"/> 경로에만 적용함.
+        /// </para>
+        /// </summary>
+        private static string SanitizeFailReason(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return message;
+            return FailReasonQueryStringPattern.Replace(message, "?[REDACTED]");
         }
 
         /// <summary>
@@ -413,21 +450,23 @@ namespace Wonjeong.Network
         /// </summary>
         public UniTask SendExternalApiReturnSuccessLogAsync(CancellationToken cancellationToken = default)
         {
-            return SendExternalApiReturnLogAsync(true, cancellationToken);
+            return SendExternalApiReturnLogAsync(true, null, cancellationToken);
         }
 
         /// <summary>
-        /// 외부 API 호출 실패 로그("Return fail")를 서버에 전송함.
+        /// 외부 API 호출 실패 로그("Return fail", <paramref name="failReason"/>이 있으면
+        /// "Return fail: {failReason}")를 서버에 전송함.
         /// </summary>
-        public UniTask SendExternalApiReturnFailLogAsync(CancellationToken cancellationToken = default)
+        public UniTask SendExternalApiReturnFailLogAsync(string failReason = null, CancellationToken cancellationToken = default)
         {
-            return SendExternalApiReturnLogAsync(false, cancellationToken);
+            return SendExternalApiReturnLogAsync(false, failReason, cancellationToken);
         }
 
         /// <summary>
         /// 외부 API 호출 전후로 서버에 Call/Return 로그를 자동 전송하며 비동기 작업을 수행하는 헬퍼 메서드.
-        /// 시작 시 "Call API {requestUrl}"을 전송하고, 성공 시 "Return OK", 예외 발생 시 "Return fail"을 전송함
-        /// (발생한 예외는 로그 전송 후 다시 throw됨).
+        /// 시작 시 "Call API {requestUrl}"을 전송하고, 성공 시 "Return OK", 예외 발생 시
+        /// "Return fail: {예외 메시지}"를 전송함(발생한 예외는 로그 전송 후 다시 throw됨).
+        /// 예외 메시지에 URL 쿼리 스트링이 포함돼 있으면 <see cref="SanitizeFailReason"/>이 제거한 뒤 전송함.
         /// </summary>
         public async UniTask<T> ExecuteWithExternalApiLoggingAsync<T>(string requestUrl, Func<UniTask<T>> apiAction, CancellationToken cancellationToken = default)
         {
@@ -440,21 +479,22 @@ namespace Wonjeong.Network
             try
             {
                 T result = await apiAction();
-                await SendExternalApiReturnLogAsync(true, cancellationToken);
+                await SendExternalApiReturnLogAsync(true, null, cancellationToken);
                 return result;
             }
-            catch
+            catch (Exception ex)
             {
                 // apiAction 실행 도중 전달된 토큰이 취소되었더라도 Return fail 로그가 유실되지 않도록 CancellationToken.None으로 전송함.
-                await SendExternalApiReturnLogAsync(false, CancellationToken.None);
+                await SendExternalApiReturnLogAsync(false, SanitizeFailReason(ex.Message), CancellationToken.None);
                 throw;
             }
         }
 
         /// <summary>
         /// 반환값이 없는 외부 API 호출 전후로 서버에 Call/Return 로그를 자동 전송하며 비동기 작업을 수행하는 헬퍼 메서드.
-        /// 시작 시 "Call API {requestUrl}"을 전송하고, 성공 시 "Return OK", 예외 발생 시 "Return fail"을 전송함
-        /// (발생한 예외는 로그 전송 후 다시 throw됨).
+        /// 시작 시 "Call API {requestUrl}"을 전송하고, 성공 시 "Return OK", 예외 발생 시
+        /// "Return fail: {예외 메시지}"를 전송함(발생한 예외는 로그 전송 후 다시 throw됨).
+        /// 예외 메시지에 URL 쿼리 스트링이 포함돼 있으면 <see cref="SanitizeFailReason"/>이 제거한 뒤 전송함.
         /// </summary>
         public async UniTask ExecuteWithExternalApiLoggingAsync(string requestUrl, Func<UniTask> apiAction, CancellationToken cancellationToken = default)
         {
@@ -467,12 +507,12 @@ namespace Wonjeong.Network
             try
             {
                 await apiAction();
-                await SendExternalApiReturnLogAsync(true, cancellationToken);
+                await SendExternalApiReturnLogAsync(true, null, cancellationToken);
             }
-            catch
+            catch (Exception ex)
             {
                 // apiAction 실행 도중 전달된 토큰이 취소되었더라도 Return fail 로그가 유실되지 않도록 CancellationToken.None으로 전송함.
-                await SendExternalApiReturnLogAsync(false, CancellationToken.None);
+                await SendExternalApiReturnLogAsync(false, SanitizeFailReason(ex.Message), CancellationToken.None);
                 throw;
             }
         }

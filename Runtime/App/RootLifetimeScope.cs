@@ -47,9 +47,17 @@ namespace Wonjeong.App
     {
         public bool IsSuccess { get; }
 
-        public ExternalApiReturnEvent(bool isSuccess)
+        /// <summary>
+        /// 실패 사유(예: 예외 메시지, HTTP 상태 코드). 서버로 보내는 로그 메시지에
+        /// "Return fail: {FailReason}" 형태로 덧붙기 위한 값이며, 성공 시나 사유를 모를
+        /// 때는 null/빈 문자열이어도 무방함(이 경우 "Return fail"만 전송됨).
+        /// </summary>
+        public string FailReason { get; }
+
+        public ExternalApiReturnEvent(bool isSuccess, string failReason = null)
         {
             IsSuccess = isSuccess;
+            FailReason = failReason;
         }
     }
 
