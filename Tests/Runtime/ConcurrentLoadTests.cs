@@ -7,9 +7,9 @@ using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using Wonjeong.UI;
+using HuliacDev.UI;
 
-namespace Wonjeong.Tests
+namespace HuliacDev.Tests
 {
     /// <summary>
     /// 진행 중인 로드를 공유하는 경로가 동시 요청에서 안전한지 검증.

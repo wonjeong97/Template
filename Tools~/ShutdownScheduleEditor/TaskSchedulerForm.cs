@@ -1,4 +1,4 @@
-namespace Wonjeong.Tools.ShutdownScheduleEditor;
+namespace HuliacDev.Tools.ShutdownScheduleEditor;
 
 /// <summary>
 /// 백업용 작업 스케줄러 항목을 등록·제거하는 대화 상자.

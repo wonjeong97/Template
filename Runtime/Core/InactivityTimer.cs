@@ -7,12 +7,12 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using VContainer;
-using Wonjeong.App;
-using Wonjeong.Data;
-using Wonjeong.Utils;
+using HuliacDev.App;
+using HuliacDev.Data;
+using HuliacDev.Utils;
 using ZLogger;
 
-namespace Wonjeong.Core
+namespace HuliacDev.Core
 {
     /// <summary>
     /// 일정 시간 동안 입력이 없으면 InactivityTimeoutEvent를 발행하는 범용 비활동 타이머.

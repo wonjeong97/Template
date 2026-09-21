@@ -1,10 +1,16 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
-## [26.9.21-3] - 2026-09-21
+## [26.9.21-5] - 2026-09-21
 
 ### Changed
-- **`PackageUpdater`(Tools/Update Stack Packages) 업데이트 대상을 스택 패키지로 한정:** 기존 `Tools/Update All Packages`는 설치된 UPM 패키지를 전부 대상으로 삼아, 프로젝트별로 버전을 고정해둔 패키지(Addressables, Input System, URP 등)까지 의도치 않게 끌어올리는 문제가 있었음. `PackageUpdater.TargetPackageNames` 화이트리스트를 추가해 MCP for Unity, MessagePipe, MessagePipe.VContainer, R3, UniTask, ZLogger, VContainer, NugetForUnity, ZString, 그리고 템플릿 자신(`com.wonjeong.template`)만 대상으로 좁힘. 메뉴 이름도 실제 동작을 반영해 `Tools/Update Stack Packages`로 변경함.
+- **`PackageUpdater`(Tools/Update Stack Packages) 업데이트 대상을 스택 패키지로 한정:** 기존 `Tools/Update All Packages`는 설치된 UPM 패키지를 전부 대상으로 삼아, 프로젝트별로 버전을 고정해둔 패키지(Addressables, Input System, URP 등)까지 의도치 않게 끌어올리는 문제가 있었음. `PackageUpdater.TargetPackageNames` 화이트리스트를 추가해 MCP for Unity, MessagePipe, MessagePipe.VContainer, R3, UniTask, ZLogger, VContainer, NugetForUnity, ZString, 그리고 템플릿 자신(`com.huliacdev.template`)만 대상으로 좁힘. 메뉴 이름도 실제 동작을 반영해 `Tools/Update Stack Packages`로 변경함.
+
+## [26.9.21-4] - 2026-09-21
+
+### Changed
+- **패키지 이름 변경: Wonjeong Template → HuliacDev Template:** `package.json`의 `name`(`com.wonjeong.template` → `com.huliacdev.template`, UPM 규약상 소문자만 허용되어 소문자로 정규화함)과 `displayName`을 변경함. C# 루트 네임스페이스도 `Wonjeong.*` → `HuliacDev.*`로 전면 변경(모든 Runtime/Editor/Tests 코드의 `namespace`/`using`, asmdef 3종의 `name`/`rootNamespace`/`references`, 벤더링된 `Reporter` 코드의 네임스페이스 포함 — `GameManagerBase`가 이를 네임스페이스 상대 참조로 쓰고 있어 함께 바꾸지 않으면 컴파일이 깨짐). asmdef 파일명도 `Wonjeong.Template(.Tests/.Editor).asmdef` → `HuliacDev.Template(.Tests/.Editor).asmdef`로 변경(내부 GUID는 `.meta` 파일과 함께 그대로 보존해 기존 참조가 깨지지 않도록 함). README의 설치/테스트 노출 예시도 새 패키지 ID로 갱신함. **저작권 고지(`LICENSE.md`)와 `package.json`의 `author`(실제 작성자 개인명·이메일)는 브랜드명이 아니므로 변경하지 않음.** 과거 CHANGELOG 항목들도 당시 기록이므로 그대로 둠.
+- **Breaking:** 이 패키지를 참조하는 모든 소비 프로젝트에서 `manifest.json`의 `com.wonjeong.template` 항목(및 `testables`)을 `com.huliacdev.template`로 수동으로 바꿔야 하고, 이 패키지를 상속/참조하던 프로젝트 코드의 `using Wonjeong.*;`도 `using HuliacDev.*;`로 바꿔야 함. `Template_Dev`는 함께 갱신함.
 
 ## [26.9.21-2] - 2026-09-21
 

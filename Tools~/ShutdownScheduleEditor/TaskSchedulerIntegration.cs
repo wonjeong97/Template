@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Wonjeong.Tools.ShutdownScheduleEditor;
+namespace HuliacDev.Tools.ShutdownScheduleEditor;
 
 /// <summary>
 /// 유니티가 멈춰서 스스로 종료하지 못한 경우를 대비해, 예정 시각 +N분에 PC를 끄는

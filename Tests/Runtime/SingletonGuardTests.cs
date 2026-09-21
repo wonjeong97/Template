@@ -1,8 +1,8 @@
 using NUnit.Framework;
 using UnityEngine;
-using Wonjeong.Utils;
+using HuliacDev.Utils;
 
-namespace Wonjeong.Tests
+namespace HuliacDev.Tests
 {
     [TestFixture]
     public class SingletonGuardTests

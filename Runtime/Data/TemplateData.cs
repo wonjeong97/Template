@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Wonjeong.Data
+namespace HuliacDev.Data
 {
     [Serializable]
     public class UISettingBase

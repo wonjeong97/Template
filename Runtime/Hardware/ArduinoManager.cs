@@ -4,10 +4,10 @@ using Microsoft.Extensions.Logging;
 using R3;
 using UnityEngine;
 using VContainer;
-using Wonjeong.Utils;
+using HuliacDev.Utils;
 using ZLogger;
 
-namespace Wonjeong.Hardware
+namespace HuliacDev.Hardware
 {
     /// <summary>
     /// WebGL 스텁 구현.
@@ -104,10 +104,10 @@ using Microsoft.Extensions.Logging;
 using R3;
 using UnityEngine;
 using VContainer;
-using Wonjeong.Utils;
+using HuliacDev.Utils;
 using ZLogger;
 
-namespace Wonjeong.Hardware
+namespace HuliacDev.Hardware
 {
     public class ArduinoManager : MonoBehaviour
     {

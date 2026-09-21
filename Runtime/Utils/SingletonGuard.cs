@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Wonjeong.Utils
+namespace HuliacDev.Utils
 {
     /// <summary>
     /// 씬 전환(DontDestroyOnLoad) 시 싱글톤 매니저의 중복 생성을 감지하고

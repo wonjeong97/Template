@@ -5,7 +5,7 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-namespace Wonjeong.Reporter
+namespace HuliacDev.Reporter
 {
     public class ReporterEditor : Editor
     {

@@ -8,7 +8,7 @@ using UnityEditor.PackageManager;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
-namespace Wonjeong.Editor
+namespace HuliacDev.Editor
 {
     /// <summary>
     /// Tools~/ShutdownScheduleEditor(독립 .NET WinForms 프로젝트)를 로컬에서 원클릭으로
@@ -80,9 +80,9 @@ namespace Wonjeong.Editor
         }
 
         /// <summary>
-        /// 이 스크립트가 속한 패키지(com.wonjeong.template)의 실제 설치 경로를 찾아
+        /// 이 스크립트가 속한 패키지(com.huliacdev.template)의 실제 설치 경로를 찾아
         /// Tools~/ShutdownScheduleEditor의 절대 경로를 구성함. Git 소스로 설치되면
-        /// Library/PackageCache/com.wonjeong.template@&lt;커밋해시&gt;/ 형태라 해시가 패키지
+        /// Library/PackageCache/com.huliacdev.template@&lt;커밋해시&gt;/ 형태라 해시가 패키지
         /// 갱신마다 바뀌므로, 경로를 하드코딩하지 않고 PackageInfo로 조회함.
         /// </summary>
         static string FindToolDirectory()

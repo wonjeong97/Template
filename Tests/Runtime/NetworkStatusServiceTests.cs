@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using R3;
 using UnityEngine;
-using Wonjeong.Network;
+using HuliacDev.Network;
 
-namespace Wonjeong.Tests
+namespace HuliacDev.Tests
 {
     public class NetworkStatusServiceTests
     {

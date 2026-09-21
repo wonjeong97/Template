@@ -13,11 +13,11 @@ using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.UI;
 using UnityEngine.Video;
 using VContainer;
-using Wonjeong.Data;
-using Wonjeong.Utils;
+using HuliacDev.Data;
+using HuliacDev.Utils;
 using ZLogger;
 
-namespace Wonjeong.UI
+namespace HuliacDev.UI
 {
     public class UIManager : MonoBehaviour
     {

@@ -6,16 +6,16 @@ using MessagePipe;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
 using VContainer;
-using Wonjeong.App;
-using Wonjeong.Data;
-using Wonjeong.Utils;
+using HuliacDev.App;
+using HuliacDev.Data;
+using HuliacDev.Utils;
 using ZLogger;
 
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
-namespace Wonjeong.Network
+namespace HuliacDev.Network
 {
     /// <summary>
     /// 프로그램 시작·종료·idle 화면 진입 로그를 서버에 전송하는 매니저의 기반 클래스.

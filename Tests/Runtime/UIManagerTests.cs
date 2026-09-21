@@ -8,11 +8,11 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
-using Wonjeong.Data;
-using Wonjeong.UI;
+using HuliacDev.Data;
+using HuliacDev.UI;
 using ZLogger.Unity;
 
-namespace Wonjeong.Tests
+namespace HuliacDev.Tests
 {
     /// <summary>
     /// UIManager의 폰트 대기열 및 UI 설정 적용 검증.

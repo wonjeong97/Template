@@ -4,9 +4,9 @@ using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using Wonjeong.UI;
+using HuliacDev.UI;
 
-namespace Wonjeong.Tests
+namespace HuliacDev.Tests
 {
     /// <summary>
     /// FadeManager가 Time.timeScale에 영향받지 않고 완료되는지 검증.

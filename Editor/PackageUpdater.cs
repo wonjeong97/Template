@@ -4,7 +4,7 @@ using UnityEditor.PackageManager;
 using UnityEditor.PackageManager.Requests;
 using UnityEngine;
 
-namespace Wonjeong.Editor
+namespace HuliacDev.Editor
 {
     /// <summary>
     /// 이 템플릿 스택이 직접 의존하는 패키지만 골라 최신화하는 에디터 유틸리티.
@@ -34,7 +34,7 @@ namespace Wonjeong.Editor
             "jp.hadashikick.vcontainer",        // VContainer
             "com.github-glitchenzo.nugetforunity", // NugetForUnity
             "com.cysharp.zstring",              // ZString
-            "com.wonjeong.template",            // 현재 템플릿
+            "com.huliacdev.template",           // 현재 템플릿
         };
 
         static ListRequest _listRequest;

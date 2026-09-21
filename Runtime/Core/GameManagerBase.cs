@@ -5,12 +5,12 @@ using Microsoft.Extensions.Logging;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using VContainer;
-using Wonjeong.App;
-using Wonjeong.Data;
-using Wonjeong.Utils;
+using HuliacDev.App;
+using HuliacDev.Data;
+using HuliacDev.Utils;
 using ZLogger;
 
-namespace Wonjeong.Core
+namespace HuliacDev.Core
 {
     /// <summary> 게임 매니저 베이스 클래스. </summary>
     public abstract class GameManagerBase : MonoBehaviour
