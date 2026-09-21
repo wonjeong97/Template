@@ -150,7 +150,7 @@ Test Runner는 기본적으로 `Assets/` 안의 테스트만 스캔합니다. �
 
 ```
 SampleScene
-├─ GameManager        : GameManagerBase<T>를 상속한 프로젝트 고유 클래스
+├─ GameManager        : GameManagerBase를 상속한 프로젝트 고유 클래스
 ├─ TestLifetimeScope  : RootLifetimeScope를 상속한 씬 스코프
 ├─ SystemCanvas       : SystemCanvas
 │   └─ (하위) GameCloser  : Button + Image + GameCloser
