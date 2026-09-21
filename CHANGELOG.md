@@ -1,6 +1,11 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.21] - 2026-09-21
+
+### Changed
+- **`ApiManagerBase` 외부 API 실패 로그에 실패 사유 포함 지원:** `SendExternalApiReturnLogAsync`/`SendExternalApiReturnFailLogAsync`/`OnExternalApiReturn`에 `string failReason = null` 매개변수를 추가하고, `ExternalApiReturnEvent`에도 `FailReason` 프로퍼티를 추가함. 실패 사유가 있으면 "Return fail: {failReason}" 형태로, 없으면 기존과 동일하게 "Return fail"만 전송됨. `ExecuteWithExternalApiLoggingAsync`(제네릭/비제네릭)는 `catch`에서 잡은 예외의 `Message`를 자동으로 실패 사유에 채워 전송함(기존에는 예외 정보 없이 "Return fail"만 전송했음). **Breaking:** `SendExternalApiReturnLogAsync`/`SendExternalApiReturnFailLogAsync`를 `cancellationToken`을 위치 인자로 직접 넘겨 호출하던 코드는 매개변수 순서 변경(신규 `failReason`이 그 자리에 삽입됨)으로 다시 컴파일해야 함.
+
 ## [26.9.15-2] - 2026-09-15
 
 ### Added
