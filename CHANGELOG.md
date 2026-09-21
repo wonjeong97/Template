@@ -1,6 +1,11 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.21-6] - 2026-09-21
+
+### Removed
+- **`[Obsolete] GameManagerBase<T>` 제네릭 호환 클래스 제거:** 비제네릭 `GameManagerBase`로 전환된 뒤 하위 호환을 위해 남겨뒀던 제네릭 베이스 클래스를 삭제함. **Breaking:** 아직 `class GameManager : GameManagerBase<GameManager>` 형태로 이 클래스를 상속하는 소비 프로젝트가 있다면 컴파일이 깨지므로, `: GameManagerBase`(비제네릭)로 상속부를 먼저 고쳐야 함. README의 씬 구성 예시도 비제네릭 `GameManagerBase` 기준으로 갱신함.
+
 ## [26.9.21-5] - 2026-09-21
 
 ### Changed

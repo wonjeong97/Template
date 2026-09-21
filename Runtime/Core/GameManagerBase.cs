@@ -237,13 +237,4 @@ namespace HuliacDev.Core
             if (_logger != null) _logger.ZLogInformation($"[GameManagerBase] Scene loaded: {scene.name} (mode: {mode})");
         }
     }
-
-    /// <summary>
-    /// 이전 버전과의 호환성을 위한 제네릭 베이스 클래스.
-    /// 새로운 코드에서는 제네릭이 없는 <see cref="GameManagerBase"/>를 상속받아 사용하는 것을 권장함.
-    /// </summary>
-    [Obsolete("GameManagerBase<T> is deprecated. Use non-generic GameManagerBase instead.")]
-    public abstract class GameManagerBase<T> : GameManagerBase where T : GameManagerBase<T>
-    {
-    }
 }
