@@ -1,6 +1,11 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.21-5] - 2026-09-21
+
+### Changed
+- **`PackageUpdater`(Tools/Update Stack Packages) 업데이트 대상을 스택 패키지로 한정:** 기존 `Tools/Update All Packages`는 설치된 UPM 패키지를 전부 대상으로 삼아, 프로젝트별로 버전을 고정해둔 패키지(Addressables, Input System, URP 등)까지 의도치 않게 끌어올리는 문제가 있었음. `PackageUpdater.TargetPackageNames` 화이트리스트를 추가해 MCP for Unity, MessagePipe, MessagePipe.VContainer, R3, UniTask, ZLogger, VContainer, NugetForUnity, ZString, 그리고 템플릿 자신(`com.huliacdev.template`)만 대상으로 좁힘. 메뉴 이름도 실제 동작을 반영해 `Tools/Update Stack Packages`로 변경함.
+
 ## [26.9.21-4] - 2026-09-21
 
 ### Changed
