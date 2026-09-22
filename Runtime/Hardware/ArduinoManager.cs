@@ -493,7 +493,7 @@ namespace HuliacDev.Hardware
             try
             {
                 await UniTask.SwitchToMainThread();
-                if (this == null || !isActiveAndEnabled) return;
+                if (!this || !isActiveAndEnabled) return;
                 if (_isReconnecting) return;
                 StopAutoReconnect();
 

@@ -185,7 +185,7 @@ namespace HuliacDev.UI
 
         private void UpdateAudioSourceVolumes()
         {
-            if (_bgmSource != null)
+            if (_bgmSource)
             {
                 _bgmSource.mute = _isMuted;
 
@@ -203,7 +203,7 @@ namespace HuliacDev.UI
                 }
             }
 
-            if (_sfxSource != null)
+            if (_sfxSource)
             {
                 _sfxSource.mute = _isMuted;
             }

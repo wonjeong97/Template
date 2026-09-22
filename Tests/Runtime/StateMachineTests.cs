@@ -1,5 +1,6 @@
-using System;
+using System.Collections.Generic;
 using NUnit.Framework;
+using R3;
 using HuliacDev.Core;
 
 namespace HuliacDev.Tests
@@ -39,125 +40,119 @@ namespace HuliacDev.Tests
             }
         }
 
-        private enum TestStateType
-        {
-            Idle,
-            Move,
-            Attack
-        }
-
         [Test]
-        public void 상태머신_초기상태_전이시_Enter가_호출된다()
+        public void 초기상태를_생성자로_넘기면_Enter가_호출된다()
         {
-            var sm = new StateMachine<TestStateType>();
-            var idle = new TestState();
-
-            sm.AddState(TestStateType.Idle, idle);
-            sm.ChangeState(TestStateType.Idle);
+            TestState idle = new TestState();
+            StateMachine sm = new StateMachine(idle);
 
             Assert.AreEqual(1, idle.EnterCount);
-            Assert.AreEqual(TestStateType.Idle, sm.CurrentStateType);
             Assert.AreSame(idle, sm.CurrentState);
+
+            sm.Dispose();
         }
 
         [Test]
         public void 상태_전이시_이전상태_Exit와_새상태_Enter가_순차적으로_호출된다()
         {
-            var sm = new StateMachine<TestStateType>();
-            var idle = new TestState();
-            var move = new TestState();
+            TestState idle = new TestState();
+            TestState move = new TestState();
+            StateMachine sm = new StateMachine(idle);
 
-            sm.AddState(TestStateType.Idle, idle);
-            sm.AddState(TestStateType.Move, move);
-
-            sm.ChangeState(TestStateType.Idle);
-            sm.ChangeState(TestStateType.Move);
+            sm.ChangeState(move);
 
             Assert.AreEqual(1, idle.ExitCount);
             Assert.AreEqual(1, move.EnterCount);
-            Assert.AreEqual(TestStateType.Move, sm.CurrentStateType);
+            Assert.AreSame(move, sm.CurrentState);
+            Assert.AreSame(idle, sm.PreviousState);
+
+            sm.Dispose();
         }
 
         [Test]
         public void 동일상태로_중복전이시_무시된다()
         {
-            var sm = new StateMachine<TestStateType>();
-            var idle = new TestState();
+            TestState idle = new TestState();
+            StateMachine sm = new StateMachine(idle);
 
-            sm.AddState(TestStateType.Idle, idle);
-            sm.ChangeState(TestStateType.Idle);
-            sm.ChangeState(TestStateType.Idle);
+            sm.ChangeState(idle);
 
             Assert.AreEqual(1, idle.EnterCount);
             Assert.AreEqual(0, idle.ExitCount);
+
+            sm.Dispose();
+        }
+
+        [Test]
+        public void null로_전이하면_무시된다()
+        {
+            TestState idle = new TestState();
+            StateMachine sm = new StateMachine(idle);
+
+            sm.ChangeState(null);
+
+            Assert.AreSame(idle, sm.CurrentState);
+            Assert.AreEqual(0, idle.ExitCount);
+
+            sm.Dispose();
         }
 
         [Test]
         public void Update호출시_현재상태의_Update만_수행된다()
         {
-            var sm = new StateMachine<TestStateType>();
-            var idle = new TestState();
-            var move = new TestState();
+            TestState idle = new TestState();
+            TestState move = new TestState();
+            StateMachine sm = new StateMachine(idle);
 
-            sm.AddState(TestStateType.Idle, idle);
-            sm.AddState(TestStateType.Move, move);
-
-            sm.ChangeState(TestStateType.Idle);
             sm.Update();
             sm.Update();
 
             Assert.AreEqual(2, idle.UpdateCount);
             Assert.AreEqual(0, move.UpdateCount);
+
+            sm.Dispose();
         }
 
         [Test]
         public void 컨텍스트_기반_상태머신은_컨텍스트를_정상_전달한다()
         {
             const string context = "PlayerEntity";
-            var sm = new StateMachine<TestStateType, string>(context);
-            var idle = new ContextTestState();
-
-            sm.AddState(TestStateType.Idle, idle);
-            sm.ChangeState(TestStateType.Idle);
+            ContextTestState idle = new ContextTestState();
+            StateMachine<string> sm = new StateMachine<string>(context, idle);
 
             Assert.AreEqual(1, idle.EnterCount);
             Assert.AreEqual(context, idle.LastContextReceived);
+
+            sm.Dispose();
         }
 
         [Test]
-        public void 등록되지_않은_상태_전이시_예외가_발생한다()
+        public void 상태변경_스트림을_정상_수신한다()
         {
-            var sm = new StateMachine<TestStateType>();
-            Assert.Throws<ArgumentException>(() => sm.ChangeState(TestStateType.Attack));
-        }
+            TestState idle = new TestState();
+            TestState move = new TestState();
+            StateMachine sm = new StateMachine();
 
-        [Test]
-        public void 상태변경_이벤트_발행을_정상_수신한다()
-        {
-            var sm = new StateMachine<TestStateType>();
-            var idle = new TestState();
-            var move = new TestState();
+            List<(IState Previous, IState Current)> transitions = new List<(IState, IState)>();
 
-            sm.AddState(TestStateType.Idle, idle);
-            sm.AddState(TestStateType.Move, move);
-
-            (TestStateType prev, TestStateType next) lastTransition = default;
-            int eventCount = 0;
-
-            sm.StateChanged.Subscribe(transition =>
+            using (sm.StateChanged.Subscribe(transition => transitions.Add(transition)))
             {
-                lastTransition = transition;
-                eventCount++;
-            });
+                sm.ChangeState(idle);
+                Assert.AreEqual(1, transitions.Count);
+                Assert.IsNull(transitions[0].Previous);
+                Assert.AreSame(idle, transitions[0].Current);
 
-            sm.ChangeState(TestStateType.Idle);
-            Assert.AreEqual(1, eventCount);
-            Assert.AreEqual(TestStateType.Idle, lastTransition.next);
+                sm.ChangeState(move);
+                Assert.AreEqual(2, transitions.Count);
+                Assert.AreSame(idle, transitions[1].Previous);
+                Assert.AreSame(move, transitions[1].Current);
 
-            sm.ChangeState(TestStateType.Move);
-            Assert.AreEqual(2, eventCount);
-            Assert.AreEqual(TestStateType.Idle, lastTransition.prev);
-            Assert.AreEqual(TestStateType.Move, lastTransition.next);
+                // 동일 상태 재진입은 발행되지 않아야 함
+                sm.ChangeState(move);
+                Assert.AreEqual(2, transitions.Count);
+            }
+
+            sm.Dispose();
         }
     }
 }

@@ -68,19 +68,21 @@ namespace HuliacDev.Network
                 try
                 {
                     using UnityWebRequest request = UnityWebRequest.Get(url);
-                    await request.SendWebRequest().WithCancellation(cancellationToken);
 
-                    if (request.result == UnityWebRequest.Result.Success)
-                    {
-                        if (logger != null) logger.ZLogInformation($"[ApiRetryUtil] Send succeeded ({attempt}/{maxAttemptCount}): {logLabel}");
-                        return true;
-                    }
+                    // ToUniTask는 result가 Success가 아니면 UnityWebRequestException을 던지므로
+                    // 여기까지 도달했다는 것 자체가 성공을 뜻한다.
+                    await request.SendWebRequest().ToUniTask(cancellationToken: cancellationToken);
 
-                    errorMessage = request.error;
+                    if (logger != null) logger.ZLogInformation($"[ApiRetryUtil] Send succeeded ({attempt}/{maxAttemptCount}): {logLabel}");
+                    return true;
                 }
                 catch (OperationCanceledException)
                 {
                     throw;
+                }
+                catch (UnityWebRequestException e)
+                {
+                    errorMessage = e.Error;
                 }
                 catch (Exception ex)
                 {

@@ -134,11 +134,15 @@ namespace HuliacDev.Utils
         {
             using (UnityWebRequest request = UnityWebRequest.Get(path))
             {
-                await request.SendWebRequest().WithCancellation(cancellationToken);
-
-                if (request.result != UnityWebRequest.Result.Success)
+                try
                 {
-                    Debug.LogWarning(ZString.Concat("[JsonLoader] Failed to fetch JSON: ", path, ". Error: ", request.error));
+                    // ToUniTask는 result가 Success가 아니면 결과를 반환하는 대신
+                    // UnityWebRequestException을 던지므로, 실패는 예외로 잡아 처리한다.
+                    await request.SendWebRequest().ToUniTask(cancellationToken: cancellationToken);
+                }
+                catch (UnityWebRequestException e)
+                {
+                    Debug.LogWarning(ZString.Concat("[JsonLoader] Failed to fetch JSON: ", path, ". Error: ", e.Error));
                     return new T();
                 }
 

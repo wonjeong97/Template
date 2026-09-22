@@ -136,7 +136,7 @@ namespace HuliacDev.App
         {
             foreach (GameObject root in gameObject.scene.GetRootGameObjects())
             {
-                if (root.GetComponentInChildren<T>(true) != null)
+                if (root.GetComponentInChildren<T>(true))
                 {
                     builder.RegisterComponentInHierarchy<T>();
                     return true;

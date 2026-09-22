@@ -170,7 +170,7 @@ namespace HuliacDev.UI
 
             List<string> unknownKeys = null;
 
-            foreach (var pair in dict)
+            foreach (KeyValuePair<string, HashSet<TLabel>> pair in dict)
             {
                 if (_fontAddresses.ContainsKey(pair.Key)) continue;
 
@@ -729,11 +729,15 @@ namespace HuliacDev.UI
             {
                 using (UnityWebRequest request = UnityWebRequest.Get(path))
                 {
-                    await request.SendWebRequest().WithCancellation(cancellationToken);
-
-                    if (request.result != UnityWebRequest.Result.Success)
+                    try
                     {
-                        if (_logger != null) _logger.ZLogWarning($"[UIManager] Image not found: {path} / {request.error}");
+                        // ToUniTask는 result가 Success가 아니면 결과를 반환하는 대신
+                        // UnityWebRequestException을 던지므로, 실패는 예외로 잡아 처리한다.
+                        await request.SendWebRequest().ToUniTask(cancellationToken: cancellationToken);
+                    }
+                    catch (UnityWebRequestException e)
+                    {
+                        if (_logger != null) _logger.ZLogWarning($"[UIManager] Image not found: {path} / {e.Error}");
                         return null;
                     }
 

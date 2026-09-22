@@ -1,10 +1,20 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.22-3] - 2026-09-22
+
+### Fixed
+- **`JsonLoader`, `UIManager`의 웹 요청 실패 처리가 동작하지 않던 문제 수정(`Runtime/Utils`, `Runtime/UI`):** `SendWebRequest().WithCancellation(...)`은 결과가 `Success`가 아니면 `UnityWebRequestException`을 던지므로, 뒤따르던 `request.result` 검사와 그 안의 경고 로그·폴백 반환이 도달 불가능한 코드였음. 그 결과 `JsonLoader`는 "Failed to fetch JSON" 경고 대신 바깥 catch의 "Failed to parse JSON async"가 찍혀 원인을 오인하게 했고, `UIManager.ReadSpriteBytesAsync`는 "Image not found" 경고와 `null` 반환 경로가 죽어 예외가 호출부로 그대로 전파됐음. `SoundManager`가 이미 같은 문제를 겪고 예외 처리로 고쳤던 패턴에 맞춰 `catch (UnityWebRequestException)`으로 통일함.
+
+### Changed
+- **`NetworkStatusService` 도달성 상태를 R3 `ReactiveProperty`로 전환(`Runtime/Network`):** 도달성은 이벤트가 아니라 상태이므로 `Subject` 대신 `ReactiveProperty`로 보유하도록 바꿈. 늦게 구독한 소비자도 구독 즉시 현재 네트워크 상태를 받게 되어, 구독 시점에 따라 상태를 모르던 공백이 사라짐. **Breaking:** `OnReachabilityChanged`(`Observable<NetworkReachability>`)가 `Reachability`(`ReadOnlyReactiveProperty<NetworkReachability>`)로 교체됨. 소비 프로젝트는 해당 참조를 `Reachability`로 바꿔야 하며, 구독 시 초기값이 한 번 더 발행되는 점을 고려해야 함. `CurrentReachability`와 `IsConnected`는 그대로 동작함. `OnNetworkLost`/`OnNetworkRestored`는 실제 이벤트이므로 `Subject`를 유지함.
+- **`UnityWebRequest` 대기 방식을 `ToUniTask`로 통일(`Runtime/Utils`, `Runtime/UI`, `Runtime/Network`):** `WithCancellation`과 혼용하던 것을 `ToUniTask(cancellationToken: ...)` 하나로 맞춰 DOTween 대기 규약과 동일한 관용구만 남김. `ApiRetryUtil`은 실패를 `UnityWebRequestException`으로 받아 `e.Error`를 재시도 로그에 남기도록 정리함.
+- **코딩 규칙 정합성 일괄 정리(`Runtime`, `Tests`):** `var` 사용 제거(런타임 1곳, 테스트 25곳), Unity 오브젝트 null 검사를 암시적 bool로 통일(`SoundManager`의 `AudioSource` 2곳, `RootLifetimeScope`, `ArduinoManager`), `NetworkStatusService`의 메서드 summary 주석 보강. 템플릿 코드가 파생 프로젝트의 참조 예시가 되므로 규칙 위반을 남기지 않기 위함.
+
 ## [26.9.22-2] - 2026-09-22
 
 ### Added
-- **`IState`, `StateMachine` FSM 유틸리티 추가(`Runtime/Core`):** `IState`, `IState<TContext>` 인터페이스와 GC Allocation 없는 상태 머신 `StateMachine<TState>`, `StateMachine<TState, TContext>` 구현. 상태 진입(`Enter`), 갱신(`Update`), 탈퇴(`Exit`) 및 R3 기반의 상태 변경 스트림(`StateChanged`) 제공. 단위 테스트(`StateMachineTests`) 7건 추가.
+- **`IState`, `StateMachine` FSM 유틸리티 추가(`Runtime/Core`):** `IState`, `IState<TContext>` 인터페이스와 GC Allocation 없는 상태 머신 `StateMachine`, `StateMachine<TContext>` 구현. 상태 진입(`Enter`), 갱신(`Update`), 탈퇴(`Exit`) 생명주기와 동일 상태 재진입 무시, 그리고 R3 기반의 상태 변경 스트림(`StateChanged`, `(Previous, Current)` 발행)을 제공함. 상태 전환은 미리 만들어 둔 인스턴스를 `ChangeState(state)`로 직접 넘기는 방식이라 전환마다 딕셔너리 조회나 힙 할당이 없음. 스트림 해제를 위해 `IDisposable`을 구현함. 단위 테스트(`StateMachineTests`) 7건 추가.
 - **`PacketUtility` 고정 바이트 패킹 유틸리티 추가(`Runtime/Network`):** 하드웨어 센서, 시리얼 통신, 네트워크 소켓용 `[StructLayout(LayoutKind.Sequential, Pack = 1)]` 구조체와 바이트 버퍼 간의 직렬화/역직렬화 지원. 메모리 재사용을 위한 버퍼 오프셋 기반 API 제공. 단위 테스트(`PacketUtilityTests`) 4건 추가.
 
 ### Changed

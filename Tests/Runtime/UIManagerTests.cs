@@ -268,7 +268,7 @@ namespace HuliacDev.Tests
         private ICollection<string> GetPendingKeys()
         {
             FieldInfo field = typeof(UIManager).GetField("_pendingLabels", Nonpublic);
-            var dict = (Dictionary<string, HashSet<Text>>)field.GetValue(_uiManager);
+            Dictionary<string, HashSet<Text>> dict = (Dictionary<string, HashSet<Text>>)field.GetValue(_uiManager);
             return dict.Keys;
         }
 
@@ -285,7 +285,7 @@ namespace HuliacDev.Tests
         private static void SetSoundSetting(SoundManager soundManager, string key, string clipPath)
         {
             FieldInfo field = typeof(SoundManager).GetField("_soundSettings", Nonpublic);
-            var settings = (Dictionary<string, SoundSetting>)field.GetValue(soundManager);
+            Dictionary<string, SoundSetting> settings = (Dictionary<string, SoundSetting>)field.GetValue(soundManager);
             settings[key] = new SoundSetting { key = key, clipPath = clipPath, volume = 1f };
         }
 

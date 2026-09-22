@@ -154,7 +154,7 @@ namespace HuliacDev.Tests
         {
             FieldInfo field = typeof(VideoManager).GetField("_activeRenderTextures",
                 BindingFlags.NonPublic | BindingFlags.Instance);
-            var list = (ICollection<RenderTexture>)field.GetValue(_videoManager);
+            ICollection<RenderTexture> list = (ICollection<RenderTexture>)field.GetValue(_videoManager);
             return list.Count;
         }
     }

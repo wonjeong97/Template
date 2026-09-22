@@ -27,7 +27,7 @@ namespace HuliacDev.Tests
         [Test]
         public void 구조체_직렬화_후_역직렬화시_데이터가_손실없이_일치한다()
         {
-            var original = new TestSensorPacket
+            TestSensorPacket original = new TestSensorPacket
             {
                 Header = 0xAA,
                 SensorId = 1234,
@@ -49,7 +49,7 @@ namespace HuliacDev.Tests
         [Test]
         public void 기존_버퍼_오프셋을_활용한_직렬화_역직렬화가_정상_동작한다()
         {
-            var packet = new TestSensorPacket
+            TestSensorPacket packet = new TestSensorPacket
             {
                 Header = 0x02,
                 SensorId = 500,
