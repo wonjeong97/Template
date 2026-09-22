@@ -1,6 +1,11 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.22] - 2026-09-22
+
+### Fixed
+- **`NetworkStatusService` DI 등록 실패로 컨테이너 빌드 전체가 막히던 버그 수정:** `RootLifetimeScope.ConfigureNetwork`가 `builder.RegisterEntryPoint<NetworkStatusService>(Lifetime.Singleton).AsSelf()`로만 등록해, 생성자의 `float checkIntervalSeconds = 1.0f` 매개변수를 해석하지 못해 `VContainerException: No such registration of type: System.Single`이 발생했음. 이 프로젝트가 쓰는 VContainer 1.19.0은 생성자 주입 시 C# 기본값(optional parameter)을 지원하지 않아, `float`가 컨테이너에 등록돼 있지 않으면 기본값이 있어도 무조건 해석 실패함. 컨테이너 빌드 자체가 막혀 `GameManagerBase`/`GameCloser`/`ApiManagerBase`/`InactivityTimer` 등 나머지 컴포넌트까지 "Dependencies were not injected" 경고가 연쇄로 발생했음. `.WithParameter(1.0f)`를 추가해 값을 명시적으로 전달하도록 수정함.
+
 ## [26.9.21-6] - 2026-09-21
 
 ### Removed

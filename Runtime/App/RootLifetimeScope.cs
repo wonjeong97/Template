@@ -83,7 +83,7 @@ namespace HuliacDev.App
         /// </summary>
         protected virtual void ConfigureNetwork(IContainerBuilder builder)
         {
-            builder.RegisterEntryPoint<NetworkStatusService>(Lifetime.Singleton).AsSelf();
+            builder.RegisterEntryPoint<NetworkStatusService>(Lifetime.Singleton).WithParameter(1.0f).AsSelf();
         }
 
         /// <summary>
