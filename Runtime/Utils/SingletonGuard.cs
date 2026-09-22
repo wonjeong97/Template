@@ -15,7 +15,7 @@ namespace HuliacDev.Utils
         /// <summary>
         /// 현재 타입의 인스턴스가 활성 상태로 존재하는지 여부.
         /// </summary>
-        public static bool IsInstantiated => _isInstantiated && _instance != null;
+        public static bool IsInstantiated => _isInstantiated && (Object)_instance != null;
 
         /// <summary>
         /// Awake() 시점에 호출하여 중복 생성을 검사하고 방어함.
@@ -25,7 +25,7 @@ namespace HuliacDev.Utils
         public static bool CheckDuplicate(T instance, out bool isOriginal, bool dontDestroyOnLoad = true)
         {
             // 에디터 Domain Reload 비활성화 환경이거나 이전 인스턴스가 파괴된 경우(fake null) 자가 복구
-            if (!_isInstantiated || _instance == null)
+            if (!_isInstantiated || (Object)_instance == null)
             {
                 _isInstantiated = true;
                 _instance = instance;

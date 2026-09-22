@@ -1,6 +1,11 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.22-4] - 2026-09-22
+
+### Fixed
+- **`SingletonGuard<T>` 제네릭 Unity 오브젝트의 가짜 null(fake null) 감지 및 자가 복구 실패 수정(`Runtime/Utils`):** `_instance`가 제네릭 타입 `T`(`where T : MonoBehaviour`)일 때 C# 컴파일러가 `UnityEngine.Object`의 오버로드된 `==`/`!=` 연산자 대신 참조 비교(`ceq`)를 적용하여, 이전 인스턴스가 파괴되었지만 C# 참조가 남아 있는 fake null 상태를 감지하지 못하던 문제 수정. 이로 인해 에디터 Domain Reload 비활성화 환경 등에서 이전 인스턴스가 파괴된 후 새 인스턴스가 생성될 때 정상 인스턴스가 중복으로 잘못 판정되어 파괴되는 현상(매니저 증발 및 `InactivityTimerTests` 등 6건의 단위 테스트 실패)이 발생했음. `IsInstantiated`와 `CheckDuplicate`에서 `_instance`를 `(Object)`로 명시적 캐스팅하여 `UnityEngine.Object`의 수명주기 비교 연산자가 적용되도록 교정함. 단위 테스트 63건 전체 통과(기존 실패 6건 해소).
+
 ## [26.9.22-3] - 2026-09-22
 
 ### Fixed
