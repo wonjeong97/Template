@@ -23,6 +23,9 @@ namespace HuliacDev.Utils
             _logger = logger;
         }
 
+        /// <summary>
+        /// 중복 생성을 방지하고 캔버스를 초기화함.
+        /// </summary>
         private void Awake()
         {
             if (SingletonGuard<SystemCanvas>.CheckDuplicate(this, out _isOriginal))

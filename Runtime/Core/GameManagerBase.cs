@@ -67,12 +67,18 @@ namespace HuliacDev.Core
             }
         }
 
+        /// <summary>
+        /// 입력 액션을 활성화하고 씬 로드 콜백을 연결함.
+        /// </summary>
         protected virtual void OnEnable()
         {
             _inputActions?.Enable();
             SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
+        /// <summary>
+        /// 입력 액션을 비활성화하고 씬 로드 콜백을 해제함.
+        /// </summary>
         protected virtual void OnDisable()
         {
             _inputActions?.Disable();
@@ -240,11 +246,17 @@ namespace HuliacDev.Core
             }
         }
         
+        /// <summary>
+        /// 마우스 커서의 표시 여부를 토글함.
+        /// </summary>
         private void ToggleCursorVisibility()
         {
             Cursor.visible = !Cursor.visible;
         }
 
+        /// <summary>
+        /// 씬 로드가 완료될 때마다 씬 이름과 로드 모드를 기록함.
+        /// </summary>
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             if (_logger != null) _logger.ZLogInformation($"[GameManagerBase] Scene loaded: {scene.name} (mode: {mode})");

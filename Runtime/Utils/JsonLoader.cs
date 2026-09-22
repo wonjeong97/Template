@@ -29,7 +29,7 @@ namespace HuliacDev.Utils
         /// </summary>
         private static string GetPath(string fileName, JsonStorageLocation location = JsonStorageLocation.StreamingAssets)
         {
-            string fullFileName = fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? fileName : $"{fileName}.json";
+            string fullFileName = fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? fileName : ZString.Concat(fileName, ".json");
             string basePath = location switch
             {
                 JsonStorageLocation.PersistentData => Application.persistentDataPath,
@@ -46,6 +46,9 @@ namespace HuliacDev.Utils
             return path.Contains("://");
         }
 
+        /// <summary>
+        /// StreamingAssets에서 JSON 파일을 비동기로 읽어오는 기본 오버로드.
+        /// </summary>
         public static UniTask<T> LoadAsync<T>(string fileName, CancellationToken cancellationToken = default) where T : new()
             => LoadAsync<T>(fileName, JsonStorageLocation.StreamingAssets, cancellationToken);
 
@@ -87,6 +90,9 @@ namespace HuliacDev.Utils
             return new T();
         }
 
+        /// <summary>
+        /// StreamingAssets에서 JSON 파일을 동기적으로 읽어오는 기본 오버로드.
+        /// </summary>
         public static T Load<T>(string fileName) where T : new()
             => Load<T>(fileName, JsonStorageLocation.StreamingAssets);
 
@@ -151,6 +157,9 @@ namespace HuliacDev.Utils
             }
         }
 
+        /// <summary>
+        /// 데이터를 StreamingAssets에 JSON으로 비동기 저장하는 기본 오버로드.
+        /// </summary>
         public static UniTask SaveAsync<T>(string fileName, T data, CancellationToken cancellationToken = default)
             => SaveAsync<T>(fileName, data, JsonStorageLocation.StreamingAssets, cancellationToken);
 
@@ -185,6 +194,9 @@ namespace HuliacDev.Utils
             }
         }
 
+        /// <summary>
+        /// 데이터를 StreamingAssets에 JSON으로 동기 저장하는 기본 오버로드.
+        /// </summary>
         public static void Save<T>(string fileName, T data)
             => Save<T>(fileName, data, JsonStorageLocation.StreamingAssets);
 

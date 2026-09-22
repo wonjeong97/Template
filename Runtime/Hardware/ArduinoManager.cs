@@ -52,6 +52,9 @@ namespace HuliacDev.Hardware
             _logger = logger;
         }
 
+        /// <summary>
+        /// 중복 생성 시 기존 객체를 보존하고 새로 생성된 객체를 파괴함.
+        /// </summary>
         private void Awake()
         {
             if (SingletonGuard<ArduinoManager>.CheckDuplicate(this, out _isOriginal))
@@ -168,6 +171,9 @@ namespace HuliacDev.Hardware
             _logger = logger;
         }
 
+        /// <summary>
+        /// 중복 생성 시 기존 객체를 보존하고 새로 생성된 객체를 파괴함.
+        /// </summary>
         private void Awake()
         {
             if (SingletonGuard<ArduinoManager>.CheckDuplicate(this, out _isOriginal))
@@ -425,6 +431,9 @@ namespace HuliacDev.Hardware
             DisconnectInternal(true);
         }
 
+        /// <summary>
+        /// 읽기 스레드를 정지하고 시리얼 포트를 해제함. 수동 해제일 때는 자동 재연결도 함께 중단함.
+        /// </summary>
         private void DisconnectInternal(bool isManual)
         {
             if (isManual)
@@ -483,11 +492,17 @@ namespace HuliacDev.Hardware
             }
         }
 
+        /// <summary>
+        /// 백그라운드 스레드에서도 안전하게 자동 재연결 절차를 요청함.
+        /// </summary>
         private void TriggerAutoReconnect()
         {
             DispatchAutoReconnectAsync().Forget();
         }
 
+        /// <summary>
+        /// 메인 스레드로 전환한 뒤 중복 실행을 걸러내고 자동 재연결 루프를 시작함.
+        /// </summary>
         private async UniTaskVoid DispatchAutoReconnectAsync()
         {
             try
@@ -506,6 +521,9 @@ namespace HuliacDev.Hardware
             }
         }
 
+        /// <summary>
+        /// 진행 중인 자동 재연결 루프를 취소하고 토큰 소스를 정리함.
+        /// </summary>
         private void StopAutoReconnect()
         {
             if (_reconnectCts != null)
@@ -516,6 +534,9 @@ namespace HuliacDev.Hardware
             }
         }
 
+        /// <summary>
+        /// 연결에 성공하거나 취소될 때까지 일정 간격으로 재연결을 반복 시도함.
+        /// </summary>
         private async UniTaskVoid AutoReconnectLoopAsync(CancellationToken cancellationToken)
         {
             _isReconnecting = true;
@@ -609,6 +630,9 @@ namespace HuliacDev.Hardware
             }
         }
 
+        /// <summary>
+        /// 읽기 중 발생한 예외를 기록하고 연결을 해제함. 정상 종료 중이면 무시함.
+        /// </summary>
         private void HandleReadException(Exception e)
         {
             try

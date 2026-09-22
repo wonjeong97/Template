@@ -1,6 +1,7 @@
 using System;
 using System.Text.RegularExpressions;
 using System.Threading;
+using Cysharp.Text;
 using Cysharp.Threading.Tasks;
 using MessagePipe;
 using Microsoft.Extensions.Logging;
@@ -281,6 +282,9 @@ namespace HuliacDev.Network
             SendStartupLogAsync(this.GetCancellationTokenOnDestroy()).Forget();
         }
 
+        /// <summary>
+        /// 앱 시작 로그를 서버로 전송함.
+        /// </summary>
         protected virtual async UniTaskVoid SendStartupLogAsync(CancellationToken cancellationToken)
         {
             // 주입 없이 컴포넌트만 붙인 경우 원인을 알기 어려운 NullReferenceException이 발생하므로
@@ -405,7 +409,7 @@ namespace HuliacDev.Network
         /// </summary>
         public UniTask SendExternalApiCallLogAsync(string requestUrl, CancellationToken cancellationToken = default)
         {
-            return SendSimpleLogAsync($"{ExternalApiCallPrefix}{requestUrl}", cancellationToken);
+            return SendSimpleLogAsync(ZString.Concat(ExternalApiCallPrefix, requestUrl), cancellationToken);
         }
 
         /// <summary>
@@ -425,7 +429,7 @@ namespace HuliacDev.Network
         {
             if (isSuccess) return ExternalApiReturnOkMessage;
             if (string.IsNullOrEmpty(failReason)) return ExternalApiReturnFailMessage;
-            return $"{ExternalApiReturnFailMessage}: {failReason}";
+            return ZString.Concat(ExternalApiReturnFailMessage, ": ", failReason);
         }
 
         /// <summary>
@@ -551,6 +555,9 @@ namespace HuliacDev.Network
             }
         }
 
+        /// <summary>
+        /// 원본 인스턴스일 때만 싱글톤 점유를 해제함.
+        /// </summary>
         protected virtual void OnDestroy()
         {
             SingletonGuard<ApiManagerBase>.Release(_isOriginal);

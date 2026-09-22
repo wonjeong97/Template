@@ -419,6 +419,9 @@ namespace HuliacDev.Core
             }
         }
 
+        /// <summary>
+        /// 원본 인스턴스일 때만 싱글톤 점유를 해제함.
+        /// </summary>
         private void OnDestroy()
         {
             SingletonGuard<ShutdownScheduler>.Release(_isOriginal);

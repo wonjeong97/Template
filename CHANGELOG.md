@@ -9,7 +9,13 @@
 ### Changed
 - **`NetworkStatusService` 도달성 상태를 R3 `ReactiveProperty`로 전환(`Runtime/Network`):** 도달성은 이벤트가 아니라 상태이므로 `Subject` 대신 `ReactiveProperty`로 보유하도록 바꿈. 늦게 구독한 소비자도 구독 즉시 현재 네트워크 상태를 받게 되어, 구독 시점에 따라 상태를 모르던 공백이 사라짐. **Breaking:** `OnReachabilityChanged`(`Observable<NetworkReachability>`)가 `Reachability`(`ReadOnlyReactiveProperty<NetworkReachability>`)로 교체됨. 소비 프로젝트는 해당 참조를 `Reachability`로 바꿔야 하며, 구독 시 초기값이 한 번 더 발행되는 점을 고려해야 함. `CurrentReachability`와 `IsConnected`는 그대로 동작함. `OnNetworkLost`/`OnNetworkRestored`는 실제 이벤트이므로 `Subject`를 유지함.
 - **`UnityWebRequest` 대기 방식을 `ToUniTask`로 통일(`Runtime/Utils`, `Runtime/UI`, `Runtime/Network`):** `WithCancellation`과 혼용하던 것을 `ToUniTask(cancellationToken: ...)` 하나로 맞춰 DOTween 대기 규약과 동일한 관용구만 남김. `ApiRetryUtil`은 실패를 `UnityWebRequestException`으로 받아 `e.Error`를 재시도 로그에 남기도록 정리함.
-- **코딩 규칙 정합성 일괄 정리(`Runtime`, `Tests`):** `var` 사용 제거(런타임 1곳, 테스트 25곳), Unity 오브젝트 null 검사를 암시적 bool로 통일(`SoundManager`의 `AudioSource` 2곳, `RootLifetimeScope`, `ArduinoManager`), `NetworkStatusService`의 메서드 summary 주석 보강. 템플릿 코드가 파생 프로젝트의 참조 예시가 되므로 규칙 위반을 남기지 않기 위함.
+- **코딩 규칙 정합성 일괄 정리(`Runtime`, `Tests`):** `var` 사용 제거(런타임 1곳, 테스트 25곳), Unity 오브젝트 null 검사를 암시적 bool로 통일(`SoundManager`의 `AudioSource` 2곳, `RootLifetimeScope`, `ArduinoManager`). 템플릿 코드가 파생 프로젝트의 참조 예시가 되므로 규칙 위반을 남기지 않기 위함.
+- **모든 메서드에 summary 주석 보강(`Runtime` 전반, 35곳):** `Awake`/`OnEnable`/`OnDestroy` 등 생명주기 메서드와 오버로드 축약형을 포함해 누락분을 채움. `ArduinoManager` 8곳, `UIManager`·`InactivityTimer` 각 5곳, `JsonLoader`·`GameManagerBase` 각 4곳 등.
+- **반복 실행되는 문자열 조합을 `ZString`으로 전환(`Runtime/UI`, `Runtime/Utils`, `Runtime/Network`):** 스프라이트 캐시 키(`UIManager`), `.json` 확장자 보정(`JsonLoader`), 외부 API 호출·실패 로그 메시지(`ApiManagerBase`)의 문자열 보간을 `ZString.Concat`으로 교체해 호출마다 발생하던 할당을 줄임. 앱 수명당 한 번만 실행되거나 날짜 서식이 필요한 조합(로그 파일명, 시작/종료 로그)은 대상에서 제외함.
+- **`UIManager`의 인자 검증 실패 시 경고 로그 추가:** `SetImage`/`SetText`/`SetTMPText`/`SetVideo`가 `target`이나 설정이 null일 때 조용히 반환하던 것을 `SetButton`과 동일하게 경고를 남기도록 통일함. 씬 연결 누락이 콘솔에 드러나지 않아 코드를 뒤져야 하던 문제를 방지함.
+
+### Performance
+- **`UIManager` 스프라이트 캐시 키 중복 생성 제거(`Runtime/UI`):** `LoadSpriteAsync`와 `DecodeSpriteAsync`가 동일한 캐시 키 문자열을 각각 만들던 것을 호출자가 계산해 넘기도록 바꿔, 압축 스프라이트 로드마다 발생하던 문자열 할당 1회를 없앰.
 
 ## [26.9.22-2] - 2026-09-22
 
