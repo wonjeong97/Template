@@ -1,6 +1,7 @@
 using System;
 using System.Text.RegularExpressions;
 using System.Threading;
+using Cysharp.Text;
 using Cysharp.Threading.Tasks;
 using MessagePipe;
 using Microsoft.Extensions.Logging;
@@ -98,17 +99,24 @@ namespace HuliacDev.Network
         /// </summary>
         protected virtual float ExitLogTimeoutSeconds => 5f;
 
+        /// <summary>
+        /// VContainer 의존성 주입. 로거, 설정 제공자 및 이벤트 구독자를 할당함.
+        /// </summary>
         [Inject]
         public void Construct(ILogger<ApiManagerBase> logger, AppSettingsProvider settingsProvider,
             ISubscriber<InactivityTimeoutEvent> inactivityTimeoutSubscriber, ISubscriber<MoveIdleEvent> moveIdleSubscriber,
-            ISubscriber<ExternalApiCallEvent> externalApiCallSubscriber = null, ISubscriber<ExternalApiReturnEvent> externalApiReturnSubscriber = null)
+            IObjectResolver resolver)
         {
             Logger = logger;
             SettingsProvider = settingsProvider;
             _inactivityTimeoutSubscriber = inactivityTimeoutSubscriber;
             _moveIdleSubscriber = moveIdleSubscriber;
-            _externalApiCallSubscriber = externalApiCallSubscriber;
-            _externalApiReturnSubscriber = externalApiReturnSubscriber;
+
+            // 외부 API 이벤트 브로커는 ConfigureMessagePipe를 override한 프로젝트에서 빠질 수 있는
+            // 선택적 의존성이므로 ResolveOrDefault로 조회한다. 매개변수 기본값(= null)은 이 VContainer
+            // 버전이 주입 시 참조하지 않아, 미등록 시 null이 들어오는 대신 해석 예외가 난다.
+            _externalApiCallSubscriber = resolver.ResolveOrDefault<ISubscriber<ExternalApiCallEvent>>();
+            _externalApiReturnSubscriber = resolver.ResolveOrDefault<ISubscriber<ExternalApiReturnEvent>>();
         }
 
         /// <summary>
@@ -281,6 +289,9 @@ namespace HuliacDev.Network
             SendStartupLogAsync(this.GetCancellationTokenOnDestroy()).Forget();
         }
 
+        /// <summary>
+        /// 앱 시작 로그를 서버로 전송함.
+        /// </summary>
         protected virtual async UniTaskVoid SendStartupLogAsync(CancellationToken cancellationToken)
         {
             // 주입 없이 컴포넌트만 붙인 경우 원인을 알기 어려운 NullReferenceException이 발생하므로
@@ -405,7 +416,7 @@ namespace HuliacDev.Network
         /// </summary>
         public UniTask SendExternalApiCallLogAsync(string requestUrl, CancellationToken cancellationToken = default)
         {
-            return SendSimpleLogAsync($"{ExternalApiCallPrefix}{requestUrl}", cancellationToken);
+            return SendSimpleLogAsync(ZString.Concat(ExternalApiCallPrefix, requestUrl), cancellationToken);
         }
 
         /// <summary>
@@ -425,7 +436,7 @@ namespace HuliacDev.Network
         {
             if (isSuccess) return ExternalApiReturnOkMessage;
             if (string.IsNullOrEmpty(failReason)) return ExternalApiReturnFailMessage;
-            return $"{ExternalApiReturnFailMessage}: {failReason}";
+            return ZString.Concat(ExternalApiReturnFailMessage, ": ", failReason);
         }
 
         /// <summary>
@@ -551,6 +562,9 @@ namespace HuliacDev.Network
             }
         }
 
+        /// <summary>
+        /// 원본 인스턴스일 때만 싱글톤 점유를 해제함.
+        /// </summary>
         protected virtual void OnDestroy()
         {
             SingletonGuard<ApiManagerBase>.Release(_isOriginal);

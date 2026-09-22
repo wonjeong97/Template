@@ -122,7 +122,7 @@ namespace HuliacDev.Tests
             string lockedFile = CreateLogFile("GameLog_2000-01-01_000.txt", daysAgo: 60);
             string otherOldFile = CreateLogFile("GameLog_2000-01-02_000.txt", daysAgo: 60);
 
-            using (var stream = new FileStream(lockedFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            using (FileStream stream = new FileStream(lockedFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
             {
                 LogRetentionService.CleanupOldLogs(_tempDir, retentionDays: 30);
             }

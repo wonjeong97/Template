@@ -33,6 +33,9 @@ namespace HuliacDev.App
     {
         public string RequestUrl { get; }
 
+        /// <summary>
+        /// 호출할 외부 API의 요청 URL을 담아 이벤트를 생성함.
+        /// </summary>
         public ExternalApiCallEvent(string requestUrl)
         {
             RequestUrl = requestUrl;
@@ -54,6 +57,9 @@ namespace HuliacDev.App
         /// </summary>
         public string FailReason { get; }
 
+        /// <summary>
+        /// 외부 API 호출의 성공 여부와 실패 사유를 담아 이벤트를 생성함.
+        /// </summary>
         public ExternalApiReturnEvent(bool isSuccess, string failReason = null)
         {
             IsSuccess = isSuccess;
@@ -97,6 +103,7 @@ namespace HuliacDev.App
         /// </summary>
         protected virtual void ConfigureCoreComponents(IContainerBuilder builder)
         {
+            builder.Register<TemplateInputActions>(Lifetime.Singleton);
             builder.RegisterComponentInHierarchy<SystemCanvas>();
             builder.RegisterComponentInHierarchy<GameCloser>();
         }
@@ -135,7 +142,7 @@ namespace HuliacDev.App
         {
             foreach (GameObject root in gameObject.scene.GetRootGameObjects())
             {
-                if (root.GetComponentInChildren<T>(true) != null)
+                if (root.GetComponentInChildren<T>(true))
                 {
                     builder.RegisterComponentInHierarchy<T>();
                     return true;

@@ -36,11 +36,9 @@ namespace HuliacDev.Data
         /// 설정을 비동기로 반환함. 최초 호출 시에만 실제 로드가 발생하고
         /// 이후 호출은 동일한 결과를 공유함. 여러 소비자가 같은 프레임(또는 다른 스레드)에서
         /// 동시 호출해도 안전함.
+        /// 넘긴 취소 토큰은 호출자의 '대기(await)'만 취소하며, 공유 중인 로드 작업 자체는
+        /// 취소하지 않으므로 다른 소비자에게 영향을 주지 않음.
         /// </summary>
-        /// <param name="cancellationToken">
-        /// 호출자 고유의 취소 토큰. 이 토큰은 '대기(await)'만 취소하며,
-        /// 공유 중인 로드 작업 자체는 취소하지 않으므로 다른 소비자에게 영향을 주지 않음.
-        /// </param>
         public async UniTask<Settings> GetAsync(CancellationToken cancellationToken = default)
         {
             Task<Settings> loadTask;

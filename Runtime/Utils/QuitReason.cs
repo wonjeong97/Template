@@ -24,6 +24,9 @@ namespace HuliacDev.Utils
 
         public static string Current { get; private set; } = User;
 
+        /// <summary>
+        /// 종료 사유를 설정하여 이후 종료 로그에 반영되게 함.
+        /// </summary>
         public static void Set(string reason)
         {
             Current = reason;

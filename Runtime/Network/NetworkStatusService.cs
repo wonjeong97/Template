@@ -19,21 +19,26 @@ namespace HuliacDev.Network
         private readonly float _checkIntervalSeconds;
 
         private float _elapsed;
-        private NetworkReachability _lastReachability;
         private bool _hasEverConnected;
 
-        private readonly Subject<NetworkReachability> _reachabilitySubject = new Subject<NetworkReachability>();
+        // 생성 시점의 실제 도달성으로 초기화한다. NotReachable로 시작하면 Initialize() 전에
+        // 구독한 소비자가 실제 상태 직전에 NotReachable을 한 번 받는 깜빡임이 생긴다.
+        private readonly ReactiveProperty<NetworkReachability> _reachability =
+            new ReactiveProperty<NetworkReachability>(Application.internetReachability);
         private readonly Subject<Unit> _networkLostSubject = new Subject<Unit>();
         private readonly Subject<Unit> _networkRestoredSubject = new Subject<Unit>();
 
+        /// <summary>
+        /// 현재 네트워크 도달성 상태이자 그 변경 스트림.
+        /// 상태이므로 구독 즉시 현재 값을 한 번 받고, 이후 변경될 때마다 발행됨.
+        /// </summary>
+        public ReadOnlyReactiveProperty<NetworkReachability> Reachability => _reachability;
+
         /// <summary>현재 네트워크 도달성 상태.</summary>
-        public NetworkReachability CurrentReachability { get; private set; }
+        public NetworkReachability CurrentReachability => _reachability.Value;
 
         /// <summary>현재 네트워크가 연결되어 있는지 여부.</summary>
         public bool IsConnected => CurrentReachability != NetworkReachability.NotReachable;
-
-        /// <summary>네트워크 도달성 상태가 변경될 때마다 발행되는 스트림.</summary>
-        public Observable<NetworkReachability> OnReachabilityChanged => _reachabilitySubject;
 
         /// <summary>
         /// 네트워크 연결이 끊어졌을 때 발행되는 스트림.
@@ -44,17 +49,22 @@ namespace HuliacDev.Network
         /// <summary>네트워크 연결이 복구(또는 최초 연결)되었을 때 발행되는 스트림.</summary>
         public Observable<Unit> OnNetworkRestored => _networkRestoredSubject;
 
+        /// <summary>
+        /// 로거와 검사 주기를 주입받아 초기화함.
+        /// </summary>
         public NetworkStatusService(ILogger<NetworkStatusService> logger = null, float checkIntervalSeconds = 1.0f)
         {
             _logger = logger;
             _checkIntervalSeconds = Mathf.Max(0.2f, checkIntervalSeconds);
         }
 
+        /// <summary>
+        /// 시작 시점의 도달성을 읽어 초기 상태로 반영함.
+        /// </summary>
         public void Initialize()
         {
-            CurrentReachability = Application.internetReachability;
-            _lastReachability = CurrentReachability;
-            _hasEverConnected = (CurrentReachability != NetworkReachability.NotReachable);
+            _reachability.Value = Application.internetReachability;
+            _hasEverConnected = IsConnected;
 
             if (_logger != null)
             {
@@ -62,6 +72,9 @@ namespace HuliacDev.Network
             }
         }
 
+        /// <summary>
+        /// 지정된 주기마다 도달성을 확인하고 변경 시 상태와 이벤트를 발행함.
+        /// </summary>
         public void Tick()
         {
             _elapsed += Time.unscaledDeltaTime;
@@ -69,13 +82,11 @@ namespace HuliacDev.Network
             _elapsed = 0f;
 
             NetworkReachability current = Application.internetReachability;
-            if (current == _lastReachability) return;
+            NetworkReachability previous = _reachability.Value;
+            if (current == previous) return;
 
-            NetworkReachability previous = _lastReachability;
-            _lastReachability = current;
-            CurrentReachability = current;
-
-            _reachabilitySubject.OnNext(current);
+            // ReactiveProperty는 값이 실제로 바뀔 때만 구독자에게 발행함.
+            _reachability.Value = current;
 
             if (current == NetworkReachability.NotReachable)
             {
@@ -100,13 +111,15 @@ namespace HuliacDev.Network
             }
         }
 
+        /// <summary>
+        /// 컨테이너 파기 시 모든 스트림을 완료 처리하고 해제함.
+        /// </summary>
         public void Dispose()
         {
-            _reachabilitySubject?.OnCompleted();
             _networkLostSubject?.OnCompleted();
             _networkRestoredSubject?.OnCompleted();
 
-            _reachabilitySubject?.Dispose();
+            _reachability?.Dispose();
             _networkLostSubject?.Dispose();
             _networkRestoredSubject?.Dispose();
         }

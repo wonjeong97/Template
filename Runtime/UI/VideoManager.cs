@@ -198,10 +198,9 @@ namespace HuliacDev.UI
         /// <para>
         /// VideoPlayer가 파괴되어도 그 targetTexture는 이 매니저의 목록에 남으므로,
         /// 비디오 오브젝트를 동적으로 만들고 파괴하는 화면에서는 VRAM이 계속 누적됨.
-        /// 씬 전환 등 안전한 시점에 호출하여 고아가 된 텍스처를 회수함.
+        /// 씬 전환 등 안전한 시점에 호출하여 고아가 된 텍스처를 회수하고, 해제한 개수를 반환함.
         /// </para>
         /// </summary>
-        /// <returns>해제한 렌더 텍스처 개수.</returns>
         public int ReleaseOrphanedRenderTextures()
         {
             int released = 0;

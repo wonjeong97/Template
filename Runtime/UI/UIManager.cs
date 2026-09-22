@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Cysharp.Text;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TMPro;
@@ -164,13 +165,16 @@ namespace HuliacDev.UI
             DiscardUnknownFromDictionary(_pendingTMPLabels);
         }
 
+        /// <summary>
+        /// 대기열 딕셔너리에서 설정에 없는 폰트 키 항목을 제거하고 경고를 남김.
+        /// </summary>
         private void DiscardUnknownFromDictionary<TLabel>(Dictionary<string, HashSet<TLabel>> dict)
         {
             if (dict.Count == 0) return;
 
             List<string> unknownKeys = null;
 
-            foreach (var pair in dict)
+            foreach (KeyValuePair<string, HashSet<TLabel>> pair in dict)
             {
                 if (_fontAddresses.ContainsKey(pair.Key)) continue;
 
@@ -266,6 +270,9 @@ namespace HuliacDev.UI
             }
         }
 
+        /// <summary>
+        /// 로드된 TMP 폰트를 딕셔너리에 보관함.
+        /// </summary>
         private void CacheTMPFont(string key, TMP_FontAsset loadedFont)
         {
             if (!_loadedTMPFonts.ContainsKey(key))
@@ -282,11 +289,17 @@ namespace HuliacDev.UI
             ApplyPendingFontsGeneric(key, loadedFont, _pendingLabels, (txt, font) => txt.font = font);
         }
 
+        /// <summary>
+        /// 로드 이전에 TMP 폰트를 요청하고 대기 중이던 컴포넌트들에 폰트를 일괄 적용함.
+        /// </summary>
         private void ApplyPendingTMPFonts(string key, TMP_FontAsset loadedFont)
         {
             ApplyPendingFontsGeneric(key, loadedFont, _pendingTMPLabels, (txt, font) => txt.font = font);
         }
 
+        /// <summary>
+        /// 대기열에 있던 컴포넌트에 로드된 폰트를 적용하고 해당 키의 대기열을 비움.
+        /// </summary>
         private void ApplyPendingFontsGeneric<TComponent, TFontAsset>(
             string key,
             TFontAsset loadedFont,
@@ -313,7 +326,17 @@ namespace HuliacDev.UI
         /// </summary>
         public void SetImage(GameObject target, ImageSetting setting, bool compress = false)
         {
-            if (!target || setting == null) return;
+            if (!target)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target GameObject is null. Cannot set image: {(setting != null ? setting.name : "(no setting)")}");
+                return;
+            }
+
+            if (setting == null)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] ImageSetting is null. Cannot set image on: {target.name}");
+                return;
+            }
 
             target.name = setting.name;
 
@@ -340,7 +363,17 @@ namespace HuliacDev.UI
         /// </summary>
         public void SetText(GameObject target, TextSetting setting)
         {
-            if (!target || setting == null) return;
+            if (!target)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target GameObject is null. Cannot set text: {(setting != null ? setting.name : "(no setting)")}");
+                return;
+            }
+
+            if (setting == null)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] TextSetting is null. Cannot set text on: {target.name}");
+                return;
+            }
 
             target.name = setting.name;
 
@@ -364,7 +397,17 @@ namespace HuliacDev.UI
         /// </summary>
         public void SetTMPText(GameObject target, TextSetting setting)
         {
-            if (!target || setting == null) return;
+            if (!target)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target GameObject is null. Cannot set TMP text: {(setting != null ? setting.name : "(no setting)")}");
+                return;
+            }
+
+            if (setting == null)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] TextSetting is null. Cannot set TMP text on: {target.name}");
+                return;
+            }
 
             target.name = setting.name;
 
@@ -388,9 +431,15 @@ namespace HuliacDev.UI
         /// </summary>
         public void SetButton(GameObject target, ButtonSetting setting)
         {
-            if (!target || setting == null)
+            if (!target)
             {
-                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target or setting is null. Cannot set button.");
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target GameObject is null. Cannot set button: {(setting != null ? setting.name : "(no setting)")}");
+                return;
+            }
+
+            if (setting == null)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] ButtonSetting is null. Cannot set button on: {target.name}");
                 return;
             }
 
@@ -481,8 +530,23 @@ namespace HuliacDev.UI
         /// </summary>
         public void SetVideo(GameObject target, VideoSetting setting)
         {
-            if (!target || setting == null) return;
-            if (!_videoManager) return;
+            if (!target)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target GameObject is null. Cannot set video: {(setting != null ? setting.name : "(no setting)")}");
+                return;
+            }
+
+            if (setting == null)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] VideoSetting is null. Cannot set video on: {target.name}");
+                return;
+            }
+
+            if (!_videoManager)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] VideoManager is not present in the scene. Cannot set video: {setting.name}");
+                return;
+            }
 
             target.name = setting.name;
 
@@ -548,6 +612,9 @@ namespace HuliacDev.UI
             AssignOrQueueTMPFont(txt, setting.fontName);
         }
 
+        /// <summary>
+        /// uGUI의 TextAnchor 값을 TextMeshPro의 TextAlignmentOptions로 변환함.
+        /// </summary>
         private static TextAlignmentOptions ConvertTextAlignment(TextAnchor anchor)
         {
             return anchor switch
@@ -573,11 +640,17 @@ namespace HuliacDev.UI
             AssignOrQueueFontGeneric(txt, fontName, _loadedFonts, _pendingLabels, (t, f) => t.font = f);
         }
 
+        /// <summary>
+        /// 로드된 TMP 폰트가 있으면 즉시 적용하고, 없다면 대기열에 등록함.
+        /// </summary>
         private void AssignOrQueueTMPFont(TMP_Text txt, string fontName)
         {
             AssignOrQueueFontGeneric(txt, fontName, _loadedTMPFonts, _pendingTMPLabels, (t, f) => t.font = f);
         }
 
+        /// <summary>
+        /// 폰트가 이미 로드되어 있으면 적용하고, 아니면 로드 완료까지 대기열에 넣음.
+        /// </summary>
         private void AssignOrQueueFontGeneric<TComponent, TFontAsset>(
             TComponent component,
             string fontName,
@@ -647,7 +720,7 @@ namespace HuliacDev.UI
             if (string.IsNullOrEmpty(fileName)) return null;
 
             string path = Path.Combine(Application.streamingAssetsPath, fileName).Replace("\\", "/");
-            string cacheKey = compress ? $"{path}#compressed" : path;
+            string cacheKey = compress ? ZString.Concat(path, "#compressed") : path;
 
             if (_cachedSprites.TryGetValue(cacheKey, out Sprite cachedSprite))
             {
@@ -660,7 +733,7 @@ namespace HuliacDev.UI
                 return await ongoingLoad;
             }
 
-            Task<Sprite> loadTask = DecodeSpriteAsync(path, cancellationToken, compress).AsTask();
+            Task<Sprite> loadTask = DecodeSpriteAsync(path, cacheKey, cancellationToken, compress).AsTask();
             _activeSpriteLoads[cacheKey] = loadTask;
 
             try
@@ -675,9 +748,10 @@ namespace HuliacDev.UI
         }
 
         /// <summary>
-        /// 실제 바이트 읽기와 스프라이트 생성을 수행함. 캐시/중복 방지는 호출자가 담당함.
+        /// 실제 바이트 읽기와 스프라이트 생성을 수행함. 캐시/중복 방지는 호출자가 담당하며,
+        /// 캐시 키도 호출자가 계산한 것을 그대로 받아 중복 문자열 생성을 피함.
         /// </summary>
-        private async UniTask<Sprite> DecodeSpriteAsync(string path, CancellationToken cancellationToken, bool compress = false)
+        private async UniTask<Sprite> DecodeSpriteAsync(string path, string cacheKey, CancellationToken cancellationToken, bool compress = false)
         {
             try
             {
@@ -696,7 +770,6 @@ namespace HuliacDev.UI
                     Sprite newSprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
                         new Vector2(0.5f, 0.5f));
 
-                    string cacheKey = compress ? $"{path}#compressed" : path;
                     _cachedSprites[cacheKey] = newSprite;
                     return newSprite;
                 }
@@ -729,11 +802,15 @@ namespace HuliacDev.UI
             {
                 using (UnityWebRequest request = UnityWebRequest.Get(path))
                 {
-                    await request.SendWebRequest().WithCancellation(cancellationToken);
-
-                    if (request.result != UnityWebRequest.Result.Success)
+                    try
                     {
-                        if (_logger != null) _logger.ZLogWarning($"[UIManager] Image not found: {path} / {request.error}");
+                        // ToUniTask는 result가 Success가 아니면 결과를 반환하는 대신
+                        // UnityWebRequestException을 던지므로, 실패는 예외로 잡아 처리한다.
+                        await request.SendWebRequest().ToUniTask(cancellationToken: cancellationToken);
+                    }
+                    catch (UnityWebRequestException e)
+                    {
+                        if (_logger != null) _logger.ZLogWarning($"[UIManager] Image not found: {path} / {e.Error}");
                         return null;
                     }
 

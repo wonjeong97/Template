@@ -52,6 +52,9 @@ namespace HuliacDev.Hardware
             _logger = logger;
         }
 
+        /// <summary>
+        /// 중복 생성 시 기존 객체를 보존하고 새로 생성된 객체를 파괴함.
+        /// </summary>
         private void Awake()
         {
             if (SingletonGuard<ArduinoManager>.CheckDuplicate(this, out _isOriginal))
@@ -79,8 +82,14 @@ namespace HuliacDev.Hardware
             return UniTask.CompletedTask;
         }
 
+        /// <summary>
+        /// WebGL에서는 연결 자체가 없으므로 아무 동작도 하지 않음.
+        /// </summary>
         public void Disconnect() { }
 
+        /// <summary>
+        /// WebGL에서는 시리얼 전송이 불가능하므로 아무 동작도 하지 않음.
+        /// </summary>
         public void Send(string msg) { }
 
         /// <summary>
@@ -168,6 +177,9 @@ namespace HuliacDev.Hardware
             _logger = logger;
         }
 
+        /// <summary>
+        /// 중복 생성 시 기존 객체를 보존하고 새로 생성된 객체를 파괴함.
+        /// </summary>
         private void Awake()
         {
             if (SingletonGuard<ArduinoManager>.CheckDuplicate(this, out _isOriginal))
@@ -178,14 +190,9 @@ namespace HuliacDev.Hardware
         
         /// <summary>
         /// 아두이노 장치와 시리얼 통신 연결을 비동기로 시도함.
+        /// expectedHandshake로 장치를 식별하며, 전체 포트 스캔을 maxRetries만큼 반복함.
+        /// 부팅 직후 장치 인식이 늦는 환경에서는 maxRetries를 늘리고, 빠른 실패가 필요하면 줄임.
         /// </summary>
-        /// <param name="baudRate">시리얼 통신 속도.</param>
-        /// <param name="expectedHandshake">장치 식별에 사용할 기대 응답 문자열.</param>
-        /// <param name="maxRetries">
-        /// 전체 포트 스캔을 반복할 최대 횟수. 기본값 10.
-        /// 부팅 직후 장치 인식이 늦는 환경에서는 늘리고, 빠른 실패가 필요하면 줄임.
-        /// </param>
-        /// <param name="retryDelayMs">재시도 사이의 대기 시간(ms). 기본값 1000.</param>
         public async UniTask ConnectAsync(int baudRate, string expectedHandshake,
             int maxRetries = DefaultMaxRetries, int retryDelayMs = DefaultRetryDelayMs)
         {
@@ -425,6 +432,9 @@ namespace HuliacDev.Hardware
             DisconnectInternal(true);
         }
 
+        /// <summary>
+        /// 읽기 스레드를 정지하고 시리얼 포트를 해제함. 수동 해제일 때는 자동 재연결도 함께 중단함.
+        /// </summary>
         private void DisconnectInternal(bool isManual)
         {
             if (isManual)
@@ -483,17 +493,23 @@ namespace HuliacDev.Hardware
             }
         }
 
+        /// <summary>
+        /// 백그라운드 스레드에서도 안전하게 자동 재연결 절차를 요청함.
+        /// </summary>
         private void TriggerAutoReconnect()
         {
             DispatchAutoReconnectAsync().Forget();
         }
 
+        /// <summary>
+        /// 메인 스레드로 전환한 뒤 중복 실행을 걸러내고 자동 재연결 루프를 시작함.
+        /// </summary>
         private async UniTaskVoid DispatchAutoReconnectAsync()
         {
             try
             {
                 await UniTask.SwitchToMainThread();
-                if (this == null || !isActiveAndEnabled) return;
+                if (!this || !isActiveAndEnabled) return;
                 if (_isReconnecting) return;
                 StopAutoReconnect();
 
@@ -506,6 +522,9 @@ namespace HuliacDev.Hardware
             }
         }
 
+        /// <summary>
+        /// 진행 중인 자동 재연결 루프를 취소하고 토큰 소스를 정리함.
+        /// </summary>
         private void StopAutoReconnect()
         {
             if (_reconnectCts != null)
@@ -516,6 +535,9 @@ namespace HuliacDev.Hardware
             }
         }
 
+        /// <summary>
+        /// 연결에 성공하거나 취소될 때까지 일정 간격으로 재연결을 반복 시도함.
+        /// </summary>
         private async UniTaskVoid AutoReconnectLoopAsync(CancellationToken cancellationToken)
         {
             _isReconnecting = true;
@@ -609,6 +631,9 @@ namespace HuliacDev.Hardware
             }
         }
 
+        /// <summary>
+        /// 읽기 중 발생한 예외를 기록하고 연결을 해제함. 정상 종료 중이면 무시함.
+        /// </summary>
         private void HandleReadException(Exception e)
         {
             try

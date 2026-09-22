@@ -29,7 +29,7 @@ namespace HuliacDev.Utils
         /// </summary>
         private static string GetPath(string fileName, JsonStorageLocation location = JsonStorageLocation.StreamingAssets)
         {
-            string fullFileName = fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? fileName : $"{fileName}.json";
+            string fullFileName = fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? fileName : ZString.Concat(fileName, ".json");
             string basePath = location switch
             {
                 JsonStorageLocation.PersistentData => Application.persistentDataPath,
@@ -46,6 +46,9 @@ namespace HuliacDev.Utils
             return path.Contains("://");
         }
 
+        /// <summary>
+        /// StreamingAssets에서 JSON 파일을 비동기로 읽어오는 기본 오버로드.
+        /// </summary>
         public static UniTask<T> LoadAsync<T>(string fileName, CancellationToken cancellationToken = default) where T : new()
             => LoadAsync<T>(fileName, JsonStorageLocation.StreamingAssets, cancellationToken);
 
@@ -87,6 +90,9 @@ namespace HuliacDev.Utils
             return new T();
         }
 
+        /// <summary>
+        /// StreamingAssets에서 JSON 파일을 동기적으로 읽어오는 기본 오버로드.
+        /// </summary>
         public static T Load<T>(string fileName) where T : new()
             => Load<T>(fileName, JsonStorageLocation.StreamingAssets);
 
@@ -134,11 +140,15 @@ namespace HuliacDev.Utils
         {
             using (UnityWebRequest request = UnityWebRequest.Get(path))
             {
-                await request.SendWebRequest().WithCancellation(cancellationToken);
-
-                if (request.result != UnityWebRequest.Result.Success)
+                try
                 {
-                    Debug.LogWarning(ZString.Concat("[JsonLoader] Failed to fetch JSON: ", path, ". Error: ", request.error));
+                    // ToUniTask는 result가 Success가 아니면 결과를 반환하는 대신
+                    // UnityWebRequestException을 던지므로, 실패는 예외로 잡아 처리한다.
+                    await request.SendWebRequest().ToUniTask(cancellationToken: cancellationToken);
+                }
+                catch (UnityWebRequestException e)
+                {
+                    Debug.LogWarning(ZString.Concat("[JsonLoader] Failed to fetch JSON: ", path, ". Error: ", e.Error));
                     return new T();
                 }
 
@@ -147,6 +157,9 @@ namespace HuliacDev.Utils
             }
         }
 
+        /// <summary>
+        /// 데이터를 StreamingAssets에 JSON으로 비동기 저장하는 기본 오버로드.
+        /// </summary>
         public static UniTask SaveAsync<T>(string fileName, T data, CancellationToken cancellationToken = default)
             => SaveAsync<T>(fileName, data, JsonStorageLocation.StreamingAssets, cancellationToken);
 
@@ -181,6 +194,9 @@ namespace HuliacDev.Utils
             }
         }
 
+        /// <summary>
+        /// 데이터를 StreamingAssets에 JSON으로 동기 저장하는 기본 오버로드.
+        /// </summary>
         public static void Save<T>(string fileName, T data)
             => Save<T>(fileName, data, JsonStorageLocation.StreamingAssets);
 

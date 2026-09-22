@@ -69,6 +69,9 @@ namespace HuliacDev.Core
             }
         }
 
+        /// <summary>
+        /// 모든 입력 장치의 전역 이벤트 구독을 시작함.
+        /// </summary>
         private void OnEnable()
         {
             if (!_isOriginal) return;
@@ -76,11 +79,17 @@ namespace HuliacDev.Core
             InputSystem.onEvent += OnAnyInputEvent;
         }
 
+        /// <summary>
+        /// 입력 이벤트 구독을 해제함.
+        /// </summary>
         private void OnDisable()
         {
             InputSystem.onEvent -= OnAnyInputEvent;
         }
 
+        /// <summary>
+        /// 의존성 주입을 검증하고 설정 로드를 시작함.
+        /// </summary>
         private void Start()
         {
             if (!_isOriginal) return;
@@ -143,6 +152,9 @@ namespace HuliacDev.Core
             }
         }
 
+        /// <summary>
+        /// 마지막 활동 이후 경과 시간을 검사해 타임아웃 시 이벤트를 1회 발행함.
+        /// </summary>
         private void Update()
         {
             if (!_isOriginal || !_isEnabled || _hasTimedOut || _isPaused)
@@ -205,6 +217,9 @@ namespace HuliacDev.Core
             ResetTimer();
         }
 
+        /// <summary>
+        /// 원본 인스턴스일 때만 싱글톤 점유를 해제함.
+        /// </summary>
         private void OnDestroy()
         {
             SingletonGuard<InactivityTimer>.Release(_isOriginal);

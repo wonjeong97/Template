@@ -85,6 +85,19 @@ namespace HuliacDev.Tests
         });
 
         /// <summary>
+        /// 페이드인 완료(알파 0) 시 불필요한 GPU 오버드로우를 막기 위해 캔버스가 비활성화되는지 확인함.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 페이드인_완료_시_오버드로우_방지를_위해_캔버스가_비활성화된다() => UniTask.ToCoroutine(async () =>
+        {
+            await AwaitWithRealtimeTimeout(_fade.FadeOutAsync(0.05f));
+            Assert.IsTrue(GetCanvasEnabled(), "페이드아웃(alpha=1) 상태에서는 캔버스가 활성화되어 있어야 함");
+
+            await AwaitWithRealtimeTimeout(_fade.FadeInAsync(0.05f));
+            Assert.IsFalse(GetCanvasEnabled(), "페이드인 완료(alpha=0) 시 GPU 오버드로우 방지를 위해 캔버스가 비활성화되어야 함");
+        });
+
+        /// <summary>
         /// 페이드 완료를 기다리되, 실시간 기준 제한 시간을 넘기면 Assert 실패로 끝냄.
         /// <para>
         /// 이 가드가 없으면 결함이 있는 구현에서 테스트가 '실패'가 아니라 '무한 대기'로 멈춰
@@ -123,6 +136,12 @@ namespace HuliacDev.Tests
         {
             UnityEngine.UI.RawImage img = _go.GetComponentInChildren<UnityEngine.UI.RawImage>(true);
             return img != null && img.raycastTarget;
+        }
+
+        private bool GetCanvasEnabled()
+        {
+            Canvas canvas = _go.GetComponentInChildren<Canvas>(true);
+            return canvas != null && canvas.enabled;
         }
     }
 }

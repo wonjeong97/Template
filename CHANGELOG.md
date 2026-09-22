@@ -1,6 +1,37 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.22-3] - 2026-09-22
+
+### Fixed
+- **`JsonLoader`, `UIManager`의 웹 요청 실패 처리가 동작하지 않던 문제 수정(`Runtime/Utils`, `Runtime/UI`):** `SendWebRequest().WithCancellation(...)`은 결과가 `Success`가 아니면 `UnityWebRequestException`을 던지므로, 뒤따르던 `request.result` 검사와 그 안의 경고 로그·폴백 반환이 도달 불가능한 코드였음. 그 결과 `JsonLoader`는 "Failed to fetch JSON" 경고 대신 바깥 catch의 "Failed to parse JSON async"가 찍혀 원인을 오인하게 했고, `UIManager.ReadSpriteBytesAsync`는 "Image not found" 경고와 `null` 반환 경로가 죽어 예외가 호출부로 그대로 전파됐음. `SoundManager`가 이미 같은 문제를 겪고 예외 처리로 고쳤던 패턴에 맞춰 `catch (UnityWebRequestException)`으로 통일함.
+
+### Changed
+- **`NetworkStatusService` 도달성 상태를 R3 `ReactiveProperty`로 전환(`Runtime/Network`):** 도달성은 이벤트가 아니라 상태이므로 `Subject` 대신 `ReactiveProperty`로 보유하도록 바꿈. 늦게 구독한 소비자도 구독 즉시 현재 네트워크 상태를 받게 되어, 구독 시점에 따라 상태를 모르던 공백이 사라짐. **Breaking:** `OnReachabilityChanged`(`Observable<NetworkReachability>`)가 `Reachability`(`ReadOnlyReactiveProperty<NetworkReachability>`)로 교체됨. 소비 프로젝트는 해당 참조를 `Reachability`로 바꿔야 하며, 구독 시 초기값이 한 번 더 발행되는 점을 고려해야 함. `CurrentReachability`와 `IsConnected`는 그대로 동작함. `OnNetworkLost`/`OnNetworkRestored`는 실제 이벤트이므로 `Subject`를 유지함.
+- **`UnityWebRequest` 대기 방식을 `ToUniTask`로 통일(`Runtime/Utils`, `Runtime/UI`, `Runtime/Network`):** `WithCancellation`과 혼용하던 것을 `ToUniTask(cancellationToken: ...)` 하나로 맞춰 DOTween 대기 규약과 동일한 관용구만 남김. `ApiRetryUtil`은 실패를 `UnityWebRequestException`으로 받아 `e.Error`를 재시도 로그에 남기도록 정리함.
+- **코딩 규칙 정합성 일괄 정리(`Runtime`, `Tests`):** `var` 사용 제거(런타임 1곳, 테스트 25곳), Unity 오브젝트 null 검사를 암시적 bool로 통일(`SoundManager`의 `AudioSource` 2곳, `RootLifetimeScope`, `ArduinoManager`). 템플릿 코드가 파생 프로젝트의 참조 예시가 되므로 규칙 위반을 남기지 않기 위함.
+- **모든 메서드에 summary 주석 보강(`Runtime` 전반, 35곳):** `Awake`/`OnEnable`/`OnDestroy` 등 생명주기 메서드와 오버로드 축약형을 포함해 누락분을 채움. `ArduinoManager` 8곳, `UIManager`·`InactivityTimer` 각 5곳, `JsonLoader`·`GameManagerBase` 각 4곳 등.
+- **반복 실행되는 문자열 조합을 `ZString`으로 전환(`Runtime/UI`, `Runtime/Utils`, `Runtime/Network`):** 스프라이트 캐시 키(`UIManager`), `.json` 확장자 보정(`JsonLoader`), 외부 API 호출·실패 로그 메시지(`ApiManagerBase`)의 문자열 보간을 `ZString.Concat`으로 교체해 호출마다 발생하던 할당을 줄임. 앱 수명당 한 번만 실행되거나 날짜 서식이 필요한 조합(로그 파일명, 시작/종료 로그)은 대상에서 제외함.
+- **`UIManager`의 인자 검증 실패 시 경고 로그 추가:** `SetImage`/`SetText`/`SetTMPText`/`SetVideo`가 `target`이나 설정이 null일 때 조용히 반환하던 것을 `SetButton`과 동일하게 경고를 남기도록 통일함. 씬 연결 누락이 콘솔에 드러나지 않아 코드를 뒤져야 하던 문제를 방지함.
+
+- **선택적 의존성 주입을 `ResolveOrDefault`로 교체(`Runtime/Core`, `Runtime/Network`):** `GameManagerBase.Construct`의 `TemplateInputActions`와 `ApiManagerBase.Construct`의 외부 API 이벤트 구독자를 매개변수 기본값(`= null`)이 아니라 `IObjectResolver.ResolveOrDefault`로 조회하도록 바꿈. 이 VContainer 버전은 주입 시 C# 기본값을 참조하지 않고 무조건 컨테이너에서 해석하므로, 해당 타입이 등록돼 있지 않으면 `null`이 들어오는 대신 해석 예외가 발생해 바로 아래의 폴백(`?? new TemplateInputActions()`)이 정작 필요한 상황에서 도달하지 못했음(26.9.22의 `NetworkStatusService` `float` 기본값 버그와 동일한 원인). **Breaking:** 두 `Construct`의 시그니처가 바뀌었으므로, 이를 override하거나 직접 호출하는 파생 클래스는 마지막 매개변수를 `IObjectResolver`로 맞춰야 함.
+- **`<param>`/`<returns>` 태그 제거(`Runtime` 전반, 30곳):** 스킬 11번 규약에 맞춰 제거하고, 반환값 의미나 매개변수 주의사항처럼 필요한 내용은 summary 본문으로 옮김(`SingletonGuard.CheckDuplicate`의 조기 반환 규약, `AppSettingsProvider.GetAsync`의 취소 토큰 범위 등).
+- **`UIManager`의 인자 검증 로그 상세화:** `target`과 설정 중 무엇이 null인지 구분하고 반대쪽 식별자(`target.name` 또는 `setting.name`)를 함께 남기도록 바꿔, UI 요소가 많은 환경에서 누락된 오브젝트를 콘솔만으로 찾을 수 있게 함.
+
+### Performance
+- **`PacketUtility` 마샬링을 `GCHandle` 고정 방식으로 전환(`Runtime/Network`):** `Marshal.AllocHGlobal`로 비관리 메모리를 잡고 `Marshal.Copy`로 옮기던 것을, 대상 바이트 배열을 `GCHandle.Alloc(..., Pinned)`로 고정해 그 자리에서 직접 읽고 쓰도록 바꿈. 패킷마다 발생하던 비관리 힙 할당/해제와 중간 복사가 사라짐.
+- **`UIManager` 스프라이트 캐시 키 중복 생성 제거(`Runtime/UI`):** `LoadSpriteAsync`와 `DecodeSpriteAsync`가 동일한 캐시 키 문자열을 각각 만들던 것을 호출자가 계산해 넘기도록 바꿔, 압축 스프라이트 로드마다 발생하던 문자열 할당 1회를 없앰.
+
+## [26.9.22-2] - 2026-09-22
+
+### Added
+- **`IState`, `StateMachine` FSM 유틸리티 추가(`Runtime/Core`):** `IState`, `IState<TContext>` 인터페이스와 GC Allocation 없는 상태 머신 `StateMachine`, `StateMachine<TContext>` 구현. 상태 진입(`Enter`), 갱신(`Update`), 탈퇴(`Exit`) 생명주기와 동일 상태 재진입 무시, 그리고 R3 기반의 상태 변경 스트림(`StateChanged`, `(Previous, Current)` 발행)을 제공함. 상태 전환은 미리 만들어 둔 인스턴스를 `ChangeState(state)`로 직접 넘기는 방식이라 전환마다 딕셔너리 조회나 힙 할당이 없음. 스트림 해제를 위해 `IDisposable`을 구현함. 단위 테스트(`StateMachineTests`) 7건 추가.
+- **`PacketUtility` 고정 바이트 패킹 유틸리티 추가(`Runtime/Network`):** 하드웨어 센서, 시리얼 통신, 네트워크 소켓용 `[StructLayout(LayoutKind.Sequential, Pack = 1)]` 구조체와 바이트 버퍼 간의 직렬화/역직렬화 지원. 메모리 재사용을 위한 버퍼 오프셋 기반 API 제공. 단위 테스트(`PacketUtilityTests`) 4건 추가.
+
+### Changed
+- **`FadeManager` 풀스크린 투명 캔버스 절전(Sleep) 모드 적용(`Runtime/UI`):** 페이드가 끝난 평상시(`alpha == 0`)에 `Canvas.enabled = false`로 캔버스를 완전히 휴면시켜 불필요한 GPU 오버드로우 및 렌더링 낭비 제거. 페이드 시작 시 캔버스를 활성화하고 완료 시 비활성화함. 단위 테스트 검증 추가.
+- **`GameManagerBase` 입력 액션(`TemplateInputActions`) DI 주입 전환(`Runtime/Core`, `Runtime/App`):** `RootLifetimeScope`에 `TemplateInputActions`를 싱글톤으로 등록하고, `GameManagerBase.Construct`에서 DI로 주입받도록 개선(미주입 시 자체 생성 폴백 유지). `OnDestroy` 시 람다 누수 방지를 위한 명시적 핸들러 구독 해제 및 소유권 기반 수명주기 해제 처리.
+
 ## [26.9.22] - 2026-09-22
 
 ### Fixed

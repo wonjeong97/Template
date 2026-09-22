@@ -25,6 +25,7 @@ namespace HuliacDev.Core
         private AppSettingsProvider _settingsProvider;
 
         private TemplateInputActions _inputActions;
+        private bool _ownsInputActions;
 
         // 중복 생성되어 파괴되는 객체가 정적 플래그를 건드리는 것을 막기 위한 인스턴스 확인 변수
         private bool _isOriginal;
@@ -34,18 +35,23 @@ namespace HuliacDev.Core
         /// </summary>
         [Inject]
         public void Construct(IPublisher<InspectorEvent> publisher, ILogger<GameManagerBase> logger,
-            AppSettingsProvider settingsProvider)
+            AppSettingsProvider settingsProvider, IObjectResolver resolver)
         {
             _publisher = publisher;
             _logger = logger;
             _settingsProvider = settingsProvider;
 
-            // 입력 클래스 생성 및 콜백 연결
-            _inputActions = new TemplateInputActions();
+            // 선택적 의존성은 ResolveOrDefault로 조회한다. 매개변수 기본값(= null)은 이 VContainer
+            // 버전이 주입 시 참조하지 않아, 미등록 시 null이 들어오는 대신 해석 예외가 난다.
+            TemplateInputActions injectedInputActions = resolver.ResolveOrDefault<TemplateInputActions>();
+
+            // 주입받은 인스턴스가 있으면 사용하고 없으면 자체 생성 (소유권 플래그로 OnDestroy 시 Dispose 결정)
+            _ownsInputActions = injectedInputActions == null;
+            _inputActions = injectedInputActions ?? new TemplateInputActions();
             
-            _inputActions.System.ToggleDebug.performed += _ => ToggleReporterControl();
-            _inputActions.System.ToggleInspector.performed += _ => ToggleInspectorUI();
-            _inputActions.System.ToggleMouse.performed += _ => ToggleCursorVisibility();
+            _inputActions.System.ToggleDebug.performed += OnToggleDebug;
+            _inputActions.System.ToggleInspector.performed += OnToggleInspector;
+            _inputActions.System.ToggleMouse.performed += OnToggleMouse;
             
             if (isActiveAndEnabled)
             {
@@ -65,12 +71,18 @@ namespace HuliacDev.Core
             }
         }
 
+        /// <summary>
+        /// 입력 액션을 활성화하고 씬 로드 콜백을 연결함.
+        /// </summary>
         protected virtual void OnEnable()
         {
             _inputActions?.Enable();
             SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
+        /// <summary>
+        /// 입력 액션을 비활성화하고 씬 로드 콜백을 해제함.
+        /// </summary>
         protected virtual void OnDisable()
         {
             _inputActions?.Disable();
@@ -87,10 +99,32 @@ namespace HuliacDev.Core
 
             if (_inputActions != null)
             {
-                _inputActions.Dispose();
+                _inputActions.System.ToggleDebug.performed -= OnToggleDebug;
+                _inputActions.System.ToggleInspector.performed -= OnToggleInspector;
+                _inputActions.System.ToggleMouse.performed -= OnToggleMouse;
+
+                if (_ownsInputActions)
+                {
+                    _inputActions.Dispose();
+                }
                 _inputActions = null;
             }
         }
+
+        /// <summary>
+        /// 디버그 토글 입력을 Reporter UI 토글로 전달함.
+        /// </summary>
+        private void OnToggleDebug(UnityEngine.InputSystem.InputAction.CallbackContext _) => ToggleReporterControl();
+
+        /// <summary>
+        /// 인스펙터 토글 입력을 런타임 인스펙터 UI 토글로 전달함.
+        /// </summary>
+        private void OnToggleInspector(UnityEngine.InputSystem.InputAction.CallbackContext _) => ToggleInspectorUI();
+
+        /// <summary>
+        /// 마우스 토글 입력을 커서 표시 토글로 전달함.
+        /// </summary>
+        private void OnToggleMouse(UnityEngine.InputSystem.InputAction.CallbackContext _) => ToggleCursorVisibility();
 
         /// <summary>
         /// 런타임 시작 시 디버그 UI 및 커서를 초기화하고 비동기로 설정을 로드함.
@@ -227,11 +261,17 @@ namespace HuliacDev.Core
             }
         }
         
+        /// <summary>
+        /// 마우스 커서의 표시 여부를 토글함.
+        /// </summary>
         private void ToggleCursorVisibility()
         {
             Cursor.visible = !Cursor.visible;
         }
 
+        /// <summary>
+        /// 씬 로드가 완료될 때마다 씬 이름과 로드 모드를 기록함.
+        /// </summary>
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
             if (_logger != null) _logger.ZLogInformation($"[GameManagerBase] Scene loaded: {scene.name} (mode: {mode})");

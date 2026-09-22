@@ -183,9 +183,12 @@ namespace HuliacDev.UI
             SetMute(!_isMuted);
         }
 
+        /// <summary>
+        /// 마스터/BGM/SFX 볼륨과 음소거 설정을 오디오 소스에 반영함.
+        /// </summary>
         private void UpdateAudioSourceVolumes()
         {
-            if (_bgmSource != null)
+            if (_bgmSource)
             {
                 _bgmSource.mute = _isMuted;
 
@@ -203,7 +206,7 @@ namespace HuliacDev.UI
                 }
             }
 
-            if (_sfxSource != null)
+            if (_sfxSource)
             {
                 _sfxSource.mute = _isMuted;
             }
@@ -515,6 +518,9 @@ namespace HuliacDev.UI
 
         #endregion
 
+        /// <summary>
+        /// 진행 중인 페이드를 취소하고 오디오 캐시를 해제함.
+        /// </summary>
         private void OnDestroy()
         {
             SingletonGuard<SoundManager>.Release(_isOriginal);
