@@ -1,6 +1,16 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.22-2] - 2026-09-22
+
+### Added
+- **`IState`, `StateMachine` FSM 유틸리티 추가(`Runtime/Core`):** `IState`, `IState<TContext>` 인터페이스와 GC Allocation 없는 상태 머신 `StateMachine<TState>`, `StateMachine<TState, TContext>` 구현. 상태 진입(`Enter`), 갱신(`Update`), 탈퇴(`Exit`) 및 R3 기반의 상태 변경 스트림(`StateChanged`) 제공. 단위 테스트(`StateMachineTests`) 7건 추가.
+- **`PacketUtility` 고정 바이트 패킹 유틸리티 추가(`Runtime/Network`):** 하드웨어 센서, 시리얼 통신, 네트워크 소켓용 `[StructLayout(LayoutKind.Sequential, Pack = 1)]` 구조체와 바이트 버퍼 간의 직렬화/역직렬화 지원. 메모리 재사용을 위한 버퍼 오프셋 기반 API 제공. 단위 테스트(`PacketUtilityTests`) 4건 추가.
+
+### Changed
+- **`FadeManager` 풀스크린 투명 캔버스 절전(Sleep) 모드 적용(`Runtime/UI`):** 페이드가 끝난 평상시(`alpha == 0`)에 `Canvas.enabled = false`로 캔버스를 완전히 휴면시켜 불필요한 GPU 오버드로우 및 렌더링 낭비 제거. 페이드 시작 시 캔버스를 활성화하고 완료 시 비활성화함. 단위 테스트 검증 추가.
+- **`GameManagerBase` 입력 액션(`TemplateInputActions`) DI 주입 전환(`Runtime/Core`, `Runtime/App`):** `RootLifetimeScope`에 `TemplateInputActions`를 싱글톤으로 등록하고, `GameManagerBase.Construct`에서 DI로 주입받도록 개선(미주입 시 자체 생성 폴백 유지). `OnDestroy` 시 람다 누수 방지를 위한 명시적 핸들러 구독 해제 및 소유권 기반 수명주기 해제 처리.
+
 ## [26.9.22] - 2026-09-22
 
 ### Fixed

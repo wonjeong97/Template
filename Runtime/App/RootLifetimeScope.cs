@@ -97,6 +97,7 @@ namespace HuliacDev.App
         /// </summary>
         protected virtual void ConfigureCoreComponents(IContainerBuilder builder)
         {
+            builder.Register<TemplateInputActions>(Lifetime.Singleton);
             builder.RegisterComponentInHierarchy<SystemCanvas>();
             builder.RegisterComponentInHierarchy<GameCloser>();
         }

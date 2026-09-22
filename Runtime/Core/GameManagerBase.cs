@@ -25,6 +25,7 @@ namespace HuliacDev.Core
         private AppSettingsProvider _settingsProvider;
 
         private TemplateInputActions _inputActions;
+        private bool _ownsInputActions;
 
         // 중복 생성되어 파괴되는 객체가 정적 플래그를 건드리는 것을 막기 위한 인스턴스 확인 변수
         private bool _isOriginal;
@@ -34,18 +35,19 @@ namespace HuliacDev.Core
         /// </summary>
         [Inject]
         public void Construct(IPublisher<InspectorEvent> publisher, ILogger<GameManagerBase> logger,
-            AppSettingsProvider settingsProvider)
+            AppSettingsProvider settingsProvider, TemplateInputActions inputActions = null)
         {
             _publisher = publisher;
             _logger = logger;
             _settingsProvider = settingsProvider;
 
-            // 입력 클래스 생성 및 콜백 연결
-            _inputActions = new TemplateInputActions();
+            // 주입받은 인스턴스가 있으면 사용하고 없으면 자체 생성 (소유권 플래그로 OnDestroy 시 Dispose 결정)
+            _ownsInputActions = inputActions == null;
+            _inputActions = inputActions ?? new TemplateInputActions();
             
-            _inputActions.System.ToggleDebug.performed += _ => ToggleReporterControl();
-            _inputActions.System.ToggleInspector.performed += _ => ToggleInspectorUI();
-            _inputActions.System.ToggleMouse.performed += _ => ToggleCursorVisibility();
+            _inputActions.System.ToggleDebug.performed += OnToggleDebug;
+            _inputActions.System.ToggleInspector.performed += OnToggleInspector;
+            _inputActions.System.ToggleMouse.performed += OnToggleMouse;
             
             if (isActiveAndEnabled)
             {
@@ -87,10 +89,21 @@ namespace HuliacDev.Core
 
             if (_inputActions != null)
             {
-                _inputActions.Dispose();
+                _inputActions.System.ToggleDebug.performed -= OnToggleDebug;
+                _inputActions.System.ToggleInspector.performed -= OnToggleInspector;
+                _inputActions.System.ToggleMouse.performed -= OnToggleMouse;
+
+                if (_ownsInputActions)
+                {
+                    _inputActions.Dispose();
+                }
                 _inputActions = null;
             }
         }
+
+        private void OnToggleDebug(UnityEngine.InputSystem.InputAction.CallbackContext _) => ToggleReporterControl();
+        private void OnToggleInspector(UnityEngine.InputSystem.InputAction.CallbackContext _) => ToggleInspectorUI();
+        private void OnToggleMouse(UnityEngine.InputSystem.InputAction.CallbackContext _) => ToggleCursorVisibility();
 
         /// <summary>
         /// 런타임 시작 시 디버그 UI 및 커서를 초기화하고 비동기로 설정을 로드함.

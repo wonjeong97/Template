@@ -84,6 +84,7 @@ namespace HuliacDev.UI
             _fadeCanvas = canvasObj.AddComponent<Canvas>();
             _fadeCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
             _fadeCanvas.sortingOrder = -1;
+            _fadeCanvas.enabled = false;
 
             // CanvasScaler를 의도적으로 붙이지 않음. ScreenSpaceOverlay 캔버스는 항상 화면
             // 크기와 일치하고, 페이드 이미지는 풀스트레치 앵커(0~1)로 캔버스 전체를 따라가므로
@@ -191,6 +192,7 @@ namespace HuliacDev.UI
         {
             _isTransitioning = true;
 
+            _fadeCanvas.enabled = true;
             _fadeCanvas.sortingOrder = _activeSortingOrder;
             _fadeImage.raycastTarget = true;
 
@@ -219,6 +221,7 @@ namespace HuliacDev.UI
                 {
                     _fadeCanvas.sortingOrder = -1;
                     _fadeImage.raycastTarget = false;
+                    _fadeCanvas.enabled = false;
                 }
             }
             finally
@@ -227,6 +230,7 @@ namespace HuliacDev.UI
                 {
                     _fadeCanvas.sortingOrder = -1;
                     _fadeImage.raycastTarget = false;
+                    _fadeCanvas.enabled = false;
                 }
 
                 _isTransitioning = false;
