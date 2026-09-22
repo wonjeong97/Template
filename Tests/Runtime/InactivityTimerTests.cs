@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 using HuliacDev.App;
 using HuliacDev.Core;
+using HuliacDev.Utils;
 
 namespace HuliacDev.Tests
 {
@@ -48,6 +49,7 @@ namespace HuliacDev.Tests
         [SetUp]
         public void SetUp()
         {
+            SingletonGuard<InactivityTimer>.ResetForTesting();
             _go = new GameObject("InactivityTimerTests");
             _timer = _go.AddComponent<InactivityTimer>();
             _invoked = false;
@@ -60,6 +62,7 @@ namespace HuliacDev.Tests
         public void TearDown()
         {
             if (_go != null) UnityEngine.Object.DestroyImmediate(_go);
+            SingletonGuard<InactivityTimer>.ResetForTesting();
         }
 
         /// <summary>

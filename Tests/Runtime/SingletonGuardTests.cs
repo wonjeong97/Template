@@ -144,7 +144,8 @@ namespace HuliacDev.Tests
             Assert.IsTrue(isOriginal1);
 
             // Release 호출 없이 GameObject를 파괴 (도메인 리로드 꺼진 에디터에서 플레이 모드 종료 상황 모사)
-            DestroyUtil.SafeDestroy(go1);
+            // PlayMode에서 SafeDestroy는 프레임 종료 시까지 파괴를 지연하므로, 동기식 fake null 검증을 위해 DestroyImmediate 사용
+            UnityEngine.Object.DestroyImmediate(go1);
 
             // 다음 인스턴스가 생성됨
             GameObject go2 = new GameObject("TestA_2");

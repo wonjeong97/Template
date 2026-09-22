@@ -1,6 +1,12 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.23-1] - 2026-09-23
+
+### Fixed
+- **`SingletonGuardTests` PlayMode 동기 실행 시 fake-null 검증 실패 수정(`Tests/Runtime`):** `DestroyUtil.SafeDestroy(go1)`는 PlayMode에서 `Object.Destroy`를 호출하여 오브젝트 파괴를 프레임 종료 시까지 지연시킴. 이로 인해 동기 `[Test]` 메서드 내 동일 프레임에서 후속 인스턴스를 검사할 때 이전 인스턴스가 아직 파괴되지 않아 중복으로 판정되던 문제 수정. `UnityEngine.Object.DestroyImmediate(go1)`를 호출하여 즉시 fake-null 상태가 되도록 교정함.
+- **`InactivityTimerTests` 외부 씬 싱글톤 존재 시 단위 테스트 격리 실패 수정(`Tests/Runtime`):** `RootLifetimeScope` 등 외부 프로젝트 환경에서 이미 `InactivityTimer` 싱글톤이 동작 중인 경우, 단위 테스트에서 생성한 테스트 인스턴스가 중복으로 판정 및 파괴되어 의존성 미주입 로그 검증 등이 누락되던 문제 수정. `SetUp` 및 `TearDown`에 `SingletonGuard<InactivityTimer>.ResetForTesting()`을 추가하여 테스트 환경 간 독립성을 확보함.
+
 ## [26.9.22-4] - 2026-09-22
 
 ### Fixed
