@@ -14,7 +14,12 @@
 - **반복 실행되는 문자열 조합을 `ZString`으로 전환(`Runtime/UI`, `Runtime/Utils`, `Runtime/Network`):** 스프라이트 캐시 키(`UIManager`), `.json` 확장자 보정(`JsonLoader`), 외부 API 호출·실패 로그 메시지(`ApiManagerBase`)의 문자열 보간을 `ZString.Concat`으로 교체해 호출마다 발생하던 할당을 줄임. 앱 수명당 한 번만 실행되거나 날짜 서식이 필요한 조합(로그 파일명, 시작/종료 로그)은 대상에서 제외함.
 - **`UIManager`의 인자 검증 실패 시 경고 로그 추가:** `SetImage`/`SetText`/`SetTMPText`/`SetVideo`가 `target`이나 설정이 null일 때 조용히 반환하던 것을 `SetButton`과 동일하게 경고를 남기도록 통일함. 씬 연결 누락이 콘솔에 드러나지 않아 코드를 뒤져야 하던 문제를 방지함.
 
+- **선택적 의존성 주입을 `ResolveOrDefault`로 교체(`Runtime/Core`, `Runtime/Network`):** `GameManagerBase.Construct`의 `TemplateInputActions`와 `ApiManagerBase.Construct`의 외부 API 이벤트 구독자를 매개변수 기본값(`= null`)이 아니라 `IObjectResolver.ResolveOrDefault`로 조회하도록 바꿈. 이 VContainer 버전은 주입 시 C# 기본값을 참조하지 않고 무조건 컨테이너에서 해석하므로, 해당 타입이 등록돼 있지 않으면 `null`이 들어오는 대신 해석 예외가 발생해 바로 아래의 폴백(`?? new TemplateInputActions()`)이 정작 필요한 상황에서 도달하지 못했음(26.9.22의 `NetworkStatusService` `float` 기본값 버그와 동일한 원인). **Breaking:** 두 `Construct`의 시그니처가 바뀌었으므로, 이를 override하거나 직접 호출하는 파생 클래스는 마지막 매개변수를 `IObjectResolver`로 맞춰야 함.
+- **`<param>`/`<returns>` 태그 제거(`Runtime` 전반, 30곳):** 스킬 11번 규약에 맞춰 제거하고, 반환값 의미나 매개변수 주의사항처럼 필요한 내용은 summary 본문으로 옮김(`SingletonGuard.CheckDuplicate`의 조기 반환 규약, `AppSettingsProvider.GetAsync`의 취소 토큰 범위 등).
+- **`UIManager`의 인자 검증 로그 상세화:** `target`과 설정 중 무엇이 null인지 구분하고 반대쪽 식별자(`target.name` 또는 `setting.name`)를 함께 남기도록 바꿔, UI 요소가 많은 환경에서 누락된 오브젝트를 콘솔만으로 찾을 수 있게 함.
+
 ### Performance
+- **`PacketUtility` 마샬링을 `GCHandle` 고정 방식으로 전환(`Runtime/Network`):** `Marshal.AllocHGlobal`로 비관리 메모리를 잡고 `Marshal.Copy`로 옮기던 것을, 대상 바이트 배열을 `GCHandle.Alloc(..., Pinned)`로 고정해 그 자리에서 직접 읽고 쓰도록 바꿈. 패킷마다 발생하던 비관리 힙 할당/해제와 중간 복사가 사라짐.
 - **`UIManager` 스프라이트 캐시 키 중복 생성 제거(`Runtime/UI`):** `LoadSpriteAsync`와 `DecodeSpriteAsync`가 동일한 캐시 키 문자열을 각각 만들던 것을 호출자가 계산해 넘기도록 바꿔, 압축 스프라이트 로드마다 발생하던 문자열 할당 1회를 없앰.
 
 ## [26.9.22-2] - 2026-09-22

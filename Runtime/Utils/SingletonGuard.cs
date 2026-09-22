@@ -19,11 +19,9 @@ namespace HuliacDev.Utils
 
         /// <summary>
         /// Awake() 시점에 호출하여 중복 생성을 검사하고 방어함.
+        /// 중복으로 판정되어 파괴가 예약되면 true를 반환하므로, 호출측은 이때 Awake를 조기 반환해야 함.
+        /// 최초 원본이면 false를 반환하고 isOriginal로 원본 여부를 함께 돌려줌.
         /// </summary>
-        /// <param name="instance">현재 Awake가 실행 중인 MonoBehaviour 인스턴스</param>
-        /// <param name="isOriginal">호출 컴포넌트의 원본 여부 (out)</param>
-        /// <param name="dontDestroyOnLoad">최초 인스턴스를 DontDestroyOnLoad로 등록할지 여부 (기본 true)</param>
-        /// <returns>중복으로 판정되어 파괴 예약된 경우 true (호출측 Awake 조기 반환 필요), 최초 원본이면 false</returns>
         public static bool CheckDuplicate(T instance, out bool isOriginal, bool dontDestroyOnLoad = true)
         {
             // 에디터 Domain Reload 비활성화 환경이거나 이전 인스턴스가 파괴된 경우(fake null) 자가 복구
@@ -52,7 +50,6 @@ namespace HuliacDev.Utils
         /// <summary>
         /// OnDestroy() 시점에 호출하여 원본 인스턴스가 파괴될 때 인스턴스 플래그를 해제함.
         /// </summary>
-        /// <param name="isOriginal">해당 인스턴스가 원본이었는지 여부</param>
         public static void Release(bool isOriginal)
         {
             if (isOriginal)

@@ -82,8 +82,14 @@ namespace HuliacDev.Hardware
             return UniTask.CompletedTask;
         }
 
+        /// <summary>
+        /// WebGL에서는 연결 자체가 없으므로 아무 동작도 하지 않음.
+        /// </summary>
         public void Disconnect() { }
 
+        /// <summary>
+        /// WebGL에서는 시리얼 전송이 불가능하므로 아무 동작도 하지 않음.
+        /// </summary>
         public void Send(string msg) { }
 
         /// <summary>
@@ -184,14 +190,9 @@ namespace HuliacDev.Hardware
         
         /// <summary>
         /// 아두이노 장치와 시리얼 통신 연결을 비동기로 시도함.
+        /// expectedHandshake로 장치를 식별하며, 전체 포트 스캔을 maxRetries만큼 반복함.
+        /// 부팅 직후 장치 인식이 늦는 환경에서는 maxRetries를 늘리고, 빠른 실패가 필요하면 줄임.
         /// </summary>
-        /// <param name="baudRate">시리얼 통신 속도.</param>
-        /// <param name="expectedHandshake">장치 식별에 사용할 기대 응답 문자열.</param>
-        /// <param name="maxRetries">
-        /// 전체 포트 스캔을 반복할 최대 횟수. 기본값 10.
-        /// 부팅 직후 장치 인식이 늦는 환경에서는 늘리고, 빠른 실패가 필요하면 줄임.
-        /// </param>
-        /// <param name="retryDelayMs">재시도 사이의 대기 시간(ms). 기본값 1000.</param>
         public async UniTask ConnectAsync(int baudRate, string expectedHandshake,
             int maxRetries = DefaultMaxRetries, int retryDelayMs = DefaultRetryDelayMs)
         {

@@ -99,17 +99,24 @@ namespace HuliacDev.Network
         /// </summary>
         protected virtual float ExitLogTimeoutSeconds => 5f;
 
+        /// <summary>
+        /// VContainer 의존성 주입. 로거, 설정 제공자 및 이벤트 구독자를 할당함.
+        /// </summary>
         [Inject]
         public void Construct(ILogger<ApiManagerBase> logger, AppSettingsProvider settingsProvider,
             ISubscriber<InactivityTimeoutEvent> inactivityTimeoutSubscriber, ISubscriber<MoveIdleEvent> moveIdleSubscriber,
-            ISubscriber<ExternalApiCallEvent> externalApiCallSubscriber = null, ISubscriber<ExternalApiReturnEvent> externalApiReturnSubscriber = null)
+            IObjectResolver resolver)
         {
             Logger = logger;
             SettingsProvider = settingsProvider;
             _inactivityTimeoutSubscriber = inactivityTimeoutSubscriber;
             _moveIdleSubscriber = moveIdleSubscriber;
-            _externalApiCallSubscriber = externalApiCallSubscriber;
-            _externalApiReturnSubscriber = externalApiReturnSubscriber;
+
+            // 외부 API 이벤트 브로커는 ConfigureMessagePipe를 override한 프로젝트에서 빠질 수 있는
+            // 선택적 의존성이므로 ResolveOrDefault로 조회한다. 매개변수 기본값(= null)은 이 VContainer
+            // 버전이 주입 시 참조하지 않아, 미등록 시 null이 들어오는 대신 해석 예외가 난다.
+            _externalApiCallSubscriber = resolver.ResolveOrDefault<ISubscriber<ExternalApiCallEvent>>();
+            _externalApiReturnSubscriber = resolver.ResolveOrDefault<ISubscriber<ExternalApiReturnEvent>>();
         }
 
         /// <summary>

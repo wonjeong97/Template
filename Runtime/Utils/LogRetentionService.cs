@@ -41,9 +41,10 @@ namespace HuliacDev.Utils
         private readonly ILogger<LogRetentionService> _logger;
         private CancellationTokenSource _cts;
 
-        /// <param name="logDirectory">로그 파일이 위치한 디렉터리.</param>
-        /// <param name="retentionDays">보관 기간(일). 마지막 기록 시각이 이보다 오래된 파일을 삭제함.</param>
-        /// <param name="logger">정리 결과·실패를 남길 로거. null이면 Debug.Log로 대체 출력함.</param>
+        /// <summary>
+        /// 정리 대상 로그 디렉터리와 보관 기간(일)을 받아 서비스를 구성함.
+        /// 로거를 넘기지 않으면 정리 결과와 실패를 Debug.Log로 대체 출력함.
+        /// </summary>
         public LogRetentionService(string logDirectory, int retentionDays, ILogger<LogRetentionService> logger = null)
         {
             _logDirectory = logDirectory;

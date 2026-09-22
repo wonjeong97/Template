@@ -21,8 +21,10 @@ namespace HuliacDev.Network
         private float _elapsed;
         private bool _hasEverConnected;
 
+        // 생성 시점의 실제 도달성으로 초기화한다. NotReachable로 시작하면 Initialize() 전에
+        // 구독한 소비자가 실제 상태 직전에 NotReachable을 한 번 받는 깜빡임이 생긴다.
         private readonly ReactiveProperty<NetworkReachability> _reachability =
-            new ReactiveProperty<NetworkReachability>(NetworkReachability.NotReachable);
+            new ReactiveProperty<NetworkReachability>(Application.internetReachability);
         private readonly Subject<Unit> _networkLostSubject = new Subject<Unit>();
         private readonly Subject<Unit> _networkRestoredSubject = new Subject<Unit>();
 

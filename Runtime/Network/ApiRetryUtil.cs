@@ -26,14 +26,12 @@ namespace HuliacDev.Network
         /// <summary>재시도 사이의 기본 대기 시간(초).</summary>
         public const float DefaultRetryDelaySeconds = 3f;
 
-        /// <param name="url">요청 URL.</param>
-        /// <param name="logLabel">로그에 표시할 요청 식별용 라벨(예: "시작 로그").</param>
-        /// <param name="logger">로그 출력에 사용할 로거. null이면 로그를 남기지 않음.</param>
-        /// <param name="cancellationToken">취소 토큰.</param>
-        /// <param name="maxAttemptCount">최대 재시도 횟수(최초 시도 포함).</param>
-        /// <param name="retryDelaySeconds">재시도 사이의 대기 시간(초).</param>
-        /// <returns>실제로 전송을 시도해 성공하면 true. 에디터/디벨롭 빌드·네트워크 미연결로
-        /// 전송을 생략했거나 재시도를 모두 소진해 실패했으면 false.</returns>
+        /// <summary>
+        /// 지정한 URL로 GET 요청을 보내고, 실패 시 지정된 횟수만큼 지연을 두고 재시도함.
+        /// 실제로 전송을 시도해 성공하면 true를 반환하고, 에디터·디벨롭 빌드이거나 네트워크가
+        /// 연결돼 있지 않아 전송을 생략했거나 재시도를 모두 소진하면 false를 반환함.
+        /// logLabel은 로그에 표시할 요청 식별용 라벨이며, logger가 null이면 로그를 남기지 않음.
+        /// </summary>
         // 에디터/디벨롭 빌드 분기는 await 없이 즉시 반환하므로 이 컴파일 변형에서만 CS1998이
         // 발생함. 실제 빌드(#else)는 await를 포함하므로 이 심볼 조합에서만 억제를 한정함.
 #if UNITY_EDITOR || DEVELOPMENT_BUILD

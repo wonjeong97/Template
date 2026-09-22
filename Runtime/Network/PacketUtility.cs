@@ -13,9 +13,6 @@ namespace HuliacDev.Network
         /// 바이트 배열을 구조체로 역직렬화함.
         /// </summary>
         /// <typeparam name="T">대상 구조체 타입</typeparam>
-        /// <param name="bytes">패킷 바이트 데이터 배열</param>
-        /// <param name="offset">읽기 시작할 인덱스 오프셋</param>
-        /// <returns>역직렬화된 구조체 인스턴스</returns>
         public static T FromBytes<T>(byte[] bytes, int offset = 0) where T : struct
         {
             if (bytes == null)
@@ -29,15 +26,15 @@ namespace HuliacDev.Network
                 throw new ArgumentException($"Buffer length from offset ({bytes.Length - offset}) is smaller than target struct size ({size}).");
             }
 
-            IntPtr ptr = Marshal.AllocHGlobal(size);
+            // 배열을 고정해 직접 읽음. 비관리 힙 할당(AllocHGlobal)과 중간 복사를 모두 생략함.
+            GCHandle handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
             try
             {
-                Marshal.Copy(bytes, offset, ptr, size);
-                return Marshal.PtrToStructure<T>(ptr);
+                return Marshal.PtrToStructure<T>(IntPtr.Add(handle.AddrOfPinnedObject(), offset));
             }
             finally
             {
-                Marshal.FreeHGlobal(ptr);
+                handle.Free();
             }
         }
 
@@ -45,8 +42,6 @@ namespace HuliacDev.Network
         /// 구조체를 바이트 배열로 직렬화함 (새 바이트 배열 할당).
         /// </summary>
         /// <typeparam name="T">구조체 타입</typeparam>
-        /// <param name="packet">직렬화할 구조체 데이터</param>
-        /// <returns>직렬화된 바이트 배열</returns>
         public static byte[] ToBytes<T>(in T packet) where T : struct
         {
             int size = Marshal.SizeOf<T>();
@@ -56,13 +51,9 @@ namespace HuliacDev.Network
         }
 
         /// <summary>
-        /// 구조체를 기존 바이트 배열에 직렬화하여 GC 할당을 방지함.
+        /// 구조체를 기존 바이트 배열에 직렬화하여 GC 할당을 방지함. 기록한 바이트 수를 반환함.
         /// </summary>
         /// <typeparam name="T">구조체 타입</typeparam>
-        /// <param name="packet">직렬화할 구조체 데이터</param>
-        /// <param name="destination">결과를 기록할 대상 바이트 배열</param>
-        /// <param name="offset">기록 시작 오프셋</param>
-        /// <returns>기록된 바이트 수(구조체 크기)</returns>
         public static int ToBytes<T>(in T packet, byte[] destination, int offset = 0) where T : struct
         {
             if (destination == null)
@@ -76,16 +67,17 @@ namespace HuliacDev.Network
                 throw new ArgumentException($"Destination buffer remaining length ({destination.Length - offset}) is smaller than struct size ({size}).");
             }
 
-            IntPtr ptr = Marshal.AllocHGlobal(size);
+            // 대상 배열을 고정해 그 자리에 바로 기록함. 비관리 힙 할당과 중간 복사가 없음.
+            GCHandle handle = GCHandle.Alloc(destination, GCHandleType.Pinned);
             try
             {
-                Marshal.StructureToPtr(packet, ptr, false);
-                Marshal.Copy(ptr, destination, offset, size);
+                // 제네릭 오버로드가 선택되므로 값 타입 박싱은 발생하지 않음.
+                Marshal.StructureToPtr(packet, IntPtr.Add(handle.AddrOfPinnedObject(), offset), false);
                 return size;
             }
             finally
             {
-                Marshal.FreeHGlobal(ptr);
+                handle.Free();
             }
         }
 

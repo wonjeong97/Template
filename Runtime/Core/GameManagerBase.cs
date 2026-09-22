@@ -35,15 +35,19 @@ namespace HuliacDev.Core
         /// </summary>
         [Inject]
         public void Construct(IPublisher<InspectorEvent> publisher, ILogger<GameManagerBase> logger,
-            AppSettingsProvider settingsProvider, TemplateInputActions inputActions = null)
+            AppSettingsProvider settingsProvider, IObjectResolver resolver)
         {
             _publisher = publisher;
             _logger = logger;
             _settingsProvider = settingsProvider;
 
+            // 선택적 의존성은 ResolveOrDefault로 조회한다. 매개변수 기본값(= null)은 이 VContainer
+            // 버전이 주입 시 참조하지 않아, 미등록 시 null이 들어오는 대신 해석 예외가 난다.
+            TemplateInputActions injectedInputActions = resolver.ResolveOrDefault<TemplateInputActions>();
+
             // 주입받은 인스턴스가 있으면 사용하고 없으면 자체 생성 (소유권 플래그로 OnDestroy 시 Dispose 결정)
-            _ownsInputActions = inputActions == null;
-            _inputActions = inputActions ?? new TemplateInputActions();
+            _ownsInputActions = injectedInputActions == null;
+            _inputActions = injectedInputActions ?? new TemplateInputActions();
             
             _inputActions.System.ToggleDebug.performed += OnToggleDebug;
             _inputActions.System.ToggleInspector.performed += OnToggleInspector;
@@ -107,8 +111,19 @@ namespace HuliacDev.Core
             }
         }
 
+        /// <summary>
+        /// 디버그 토글 입력을 Reporter UI 토글로 전달함.
+        /// </summary>
         private void OnToggleDebug(UnityEngine.InputSystem.InputAction.CallbackContext _) => ToggleReporterControl();
+
+        /// <summary>
+        /// 인스펙터 토글 입력을 런타임 인스펙터 UI 토글로 전달함.
+        /// </summary>
         private void OnToggleInspector(UnityEngine.InputSystem.InputAction.CallbackContext _) => ToggleInspectorUI();
+
+        /// <summary>
+        /// 마우스 토글 입력을 커서 표시 토글로 전달함.
+        /// </summary>
         private void OnToggleMouse(UnityEngine.InputSystem.InputAction.CallbackContext _) => ToggleCursorVisibility();
 
         /// <summary>

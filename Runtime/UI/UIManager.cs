@@ -326,9 +326,15 @@ namespace HuliacDev.UI
         /// </summary>
         public void SetImage(GameObject target, ImageSetting setting, bool compress = false)
         {
-            if (!target || setting == null)
+            if (!target)
             {
-                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target or setting is null. Cannot set image.");
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target GameObject is null. Cannot set image: {(setting != null ? setting.name : "(no setting)")}");
+                return;
+            }
+
+            if (setting == null)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] ImageSetting is null. Cannot set image on: {target.name}");
                 return;
             }
 
@@ -357,9 +363,15 @@ namespace HuliacDev.UI
         /// </summary>
         public void SetText(GameObject target, TextSetting setting)
         {
-            if (!target || setting == null)
+            if (!target)
             {
-                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target or setting is null. Cannot set text.");
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target GameObject is null. Cannot set text: {(setting != null ? setting.name : "(no setting)")}");
+                return;
+            }
+
+            if (setting == null)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] TextSetting is null. Cannot set text on: {target.name}");
                 return;
             }
 
@@ -385,9 +397,15 @@ namespace HuliacDev.UI
         /// </summary>
         public void SetTMPText(GameObject target, TextSetting setting)
         {
-            if (!target || setting == null)
+            if (!target)
             {
-                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target or setting is null. Cannot set TMP text.");
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target GameObject is null. Cannot set TMP text: {(setting != null ? setting.name : "(no setting)")}");
+                return;
+            }
+
+            if (setting == null)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] TextSetting is null. Cannot set TMP text on: {target.name}");
                 return;
             }
 
@@ -413,9 +431,15 @@ namespace HuliacDev.UI
         /// </summary>
         public void SetButton(GameObject target, ButtonSetting setting)
         {
-            if (!target || setting == null)
+            if (!target)
             {
-                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target or setting is null. Cannot set button.");
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target GameObject is null. Cannot set button: {(setting != null ? setting.name : "(no setting)")}");
+                return;
+            }
+
+            if (setting == null)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] ButtonSetting is null. Cannot set button on: {target.name}");
                 return;
             }
 
@@ -506,9 +530,15 @@ namespace HuliacDev.UI
         /// </summary>
         public void SetVideo(GameObject target, VideoSetting setting)
         {
-            if (!target || setting == null)
+            if (!target)
             {
-                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target or setting is null. Cannot set video.");
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] Target GameObject is null. Cannot set video: {(setting != null ? setting.name : "(no setting)")}");
+                return;
+            }
+
+            if (setting == null)
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] VideoSetting is null. Cannot set video on: {target.name}");
                 return;
             }
 
