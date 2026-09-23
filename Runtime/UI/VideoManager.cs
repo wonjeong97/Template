@@ -114,7 +114,7 @@ namespace HuliacDev.UI
             ConfigureVideoPlayer(vp, url, audioSource, volume);
 
             // 2. 비동기 대기 및 에러 처리 로직 분리 (튜플 반환)
-            var (isSuccess, errorMessage) = await WaitUntilPreparedAsync(vp, 30f, cancellationToken);
+            (bool isSuccess, string errorMessage) = await WaitUntilPreparedAsync(vp, 30f, cancellationToken);
 
             if (!isSuccess)
             {

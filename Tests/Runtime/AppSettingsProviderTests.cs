@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.IO;
 using System.Threading;
@@ -73,9 +74,9 @@ namespace HuliacDev.Tests
                 UniTask<Settings> second = provider.GetAsync(cts.Token);
                 UniTask<Settings> third = provider.GetAsync(cts.Token);
 
-                Settings a = await first;
-                Settings b = await second;
-                Settings c = await third;
+                Settings a = await AwaitWithRealtimeTimeout(first);
+                Settings b = await AwaitWithRealtimeTimeout(second);
+                Settings c = await AwaitWithRealtimeTimeout(third);
 
                 Assert.IsNotNull(a, "첫 번째 소비자가 결과를 받지 못함");
                 Assert.IsNotNull(b, "두 번째 소비자가 결과를 받지 못함");
@@ -96,8 +97,8 @@ namespace HuliacDev.Tests
                 UniTask<Settings> first = provider.GetAsync(cts.Token);
                 UniTask<Settings> second = provider.GetAsync(cts.Token);
 
-                Settings a = await first;
-                Settings b = await second;
+                Settings a = await AwaitWithRealtimeTimeout(first);
+                Settings b = await AwaitWithRealtimeTimeout(second);
 
                 Assert.AreSame(a, b, "인스턴스가 다름 - Settings.json을 두 번 로드했을 가능성");
             }
@@ -113,8 +114,8 @@ namespace HuliacDev.Tests
             using (AppSettingsProvider provider = new AppSettingsProvider())
             using (CancellationTokenSource cts = new CancellationTokenSource())
             {
-                Settings first = await provider.GetAsync(cts.Token);
-                Settings second = await provider.GetAsync(cts.Token);
+                Settings first = await AwaitWithRealtimeTimeout(provider.GetAsync(cts.Token));
+                Settings second = await AwaitWithRealtimeTimeout(provider.GetAsync(cts.Token));
 
                 Assert.IsNotNull(first);
                 Assert.AreSame(first, second, "완료 후 재호출에서 다른 인스턴스가 반환됨");
@@ -145,9 +146,32 @@ namespace HuliacDev.Tests
                     // 취소된 소비자는 여기로 오는 것이 정상
                 }
 
-                Settings result = await healthy;
+                Settings result = await AwaitWithRealtimeTimeout(healthy);
                 Assert.IsNotNull(result, "다른 소비자의 취소가 전파되어 결과를 받지 못함");
             }
         });
+
+        /// <summary>
+        /// 로드 완료를 기다리되, 실시간 기준 제한 시간을 넘기면 Assert 실패로 끝냄
+        /// (FadeManagerTests의 AwaitWithRealtimeTimeout과 동일한 이유).
+        /// <para>
+        /// 이 가드가 없으면 결함이 있는 구현에서 테스트가 '실패'가 아니라 '무한 대기'로 멈춰
+        /// 테스트 러너 전체를 막아버림. 대기 자체도 timeScale의 영향을 받으면 안 되므로
+        /// UnscaledDeltaTime을 사용함.
+        /// </para>
+        /// </summary>
+        private static async UniTask<T> AwaitWithRealtimeTimeout<T>(UniTask<T> task, float timeoutSeconds = 3f)
+        {
+            (bool hasResultLeft, T result) = await UniTask.WhenAny(
+                task,
+                UniTask.Delay(TimeSpan.FromSeconds(timeoutSeconds), DelayType.UnscaledDeltaTime));
+
+            if (!hasResultLeft)
+            {
+                Assert.Fail($"제한 시간 {timeoutSeconds}초 내에 완료되지 않음.");
+            }
+
+            return result;
+        }
     }
 }
