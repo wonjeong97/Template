@@ -139,7 +139,8 @@ namespace HuliacDev.Tests
 
                 try
                 {
-                    await canceled;
+                    await AwaitWithRealtimeTimeout(canceled);
+                    Assert.Fail("취소된 토큰으로 요청한 작업이 예외를 던지지 않음");
                 }
                 catch (System.OperationCanceledException)
                 {
