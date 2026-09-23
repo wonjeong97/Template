@@ -45,9 +45,9 @@ namespace HuliacDev.Tests
             UniTask<int> second = WaitOn(shared);
             UniTask<int> third = WaitOn(shared);
 
-            int a = await AwaitWithRealtimeTimeout(first);
-            int b = await AwaitWithRealtimeTimeout(second);
-            int c = await AwaitWithRealtimeTimeout(third);
+            int a = await first.AwaitWithRealtimeTimeout();
+            int b = await second.AwaitWithRealtimeTimeout();
+            int c = await third.AwaitWithRealtimeTimeout();
 
             Assert.AreEqual(7, a);
             Assert.AreEqual(7, b, "두 번째 소비자가 결과를 받지 못함");
@@ -98,29 +98,6 @@ namespace HuliacDev.Tests
         private static async UniTask<int> WaitOn(Task<int> task)
         {
             return await task;
-        }
-
-        /// <summary>
-        /// 완료를 기다리되, 실시간 기준 제한 시간을 넘기면 Assert 실패로 끝냄
-        /// (FadeManagerTests의 AwaitWithRealtimeTimeout과 동일한 이유).
-        /// <para>
-        /// 이 가드가 없으면 결함이 있는 구현에서 테스트가 '실패'가 아니라 '무한 대기'로 멈춰
-        /// 테스트 러너 전체를 막아버림. 대기 자체도 timeScale의 영향을 받으면 안 되므로
-        /// UnscaledDeltaTime을 사용함.
-        /// </para>
-        /// </summary>
-        private static async UniTask<T> AwaitWithRealtimeTimeout<T>(UniTask<T> task, float timeoutSeconds = 3f)
-        {
-            (bool hasResultLeft, T result) = await UniTask.WhenAny(
-                task,
-                UniTask.Delay(TimeSpan.FromSeconds(timeoutSeconds), DelayType.UnscaledDeltaTime));
-
-            if (!hasResultLeft)
-            {
-                Assert.Fail($"제한 시간 {timeoutSeconds}초 내에 완료되지 않음.");
-            }
-
-            return result;
         }
     }
 }
