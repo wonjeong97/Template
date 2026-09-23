@@ -260,7 +260,7 @@ namespace HuliacDev.Network
                 // 백업(유니티가 멈춰 강제로 꺼진 경우)은 이 경로를 타지 않고 가드 스크립트가
                 // "end_kill (by Task Scheduler)"를 직접 보냄(TaskSchedulerIntegration.cs 참고).
                 string message = $"{ExitLogMessage} (by {QuitReason.Current})";
-                string url = settings.apiUrl + Uri.EscapeDataString(message);
+                string url = ZString.Concat(settings.apiUrl, Uri.EscapeDataString(message));
 
                 await ApiRetryUtil.SendGetRequestWithRetryAsync(
                     url,
@@ -322,7 +322,7 @@ namespace HuliacDev.Network
                 string today = DateTime.Now.ToString("yyyy-MM-dd");
                 bool alreadyLoggedToday = PlayerPrefs.GetString(LastStartupLogDateKey, string.Empty) == today;
                 string message = alreadyLoggedToday ? "start (restart)" : "start";
-                string url = settings.apiUrl + Uri.EscapeDataString(message);
+                string url = ZString.Concat(settings.apiUrl, Uri.EscapeDataString(message));
 
                 bool success = await ApiRetryUtil.SendGetRequestWithRetryAsync(url, $"startup log ({message})", Logger, cancellationToken);
 
@@ -549,7 +549,7 @@ namespace HuliacDev.Network
                     return;
                 }
 
-                string url = settings.apiUrl + Uri.EscapeDataString(message);
+                string url = ZString.Concat(settings.apiUrl, Uri.EscapeDataString(message));
                 await ApiRetryUtil.SendGetRequestWithRetryAsync(url, message, Logger, cancellationToken);
             }
             catch (OperationCanceledException)

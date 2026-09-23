@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -36,7 +35,6 @@ namespace HuliacDev.Tests
             // 다른 테스트에 영향을 주지 않도록 전역 상태를 반드시 복구함.
             Time.timeScale = _originalTimeScale;
 
-            // using System; 이 있으면 Object가 System.Object와 모호해지므로 정규화함.
             if (_go != null) UnityEngine.Object.DestroyImmediate(_go);
         }
 
@@ -49,7 +47,7 @@ namespace HuliacDev.Tests
         {
             Time.timeScale = 0f;
 
-            await AwaitWithRealtimeTimeout(_fade.FadeOutAsync(0.1f));
+            await _fade.FadeOutAsync(0.1f).AwaitWithRealtimeTimeout();
 
             Assert.AreEqual(1f, GetAlpha(), 0.001f, "timeScale=0에서 페이드아웃이 완료되지 않음");
             Assert.IsFalse(GetIsTransitioning(), "_isTransitioning이 해제되지 않아 이후 페이드가 모두 무시됨");
@@ -63,7 +61,7 @@ namespace HuliacDev.Tests
         {
             Time.timeScale = 0f;
 
-            await AwaitWithRealtimeTimeout(_fade.FadeInAsync(0.1f));
+            await _fade.FadeInAsync(0.1f).AwaitWithRealtimeTimeout();
 
             Assert.AreEqual(0f, GetAlpha(), 0.001f, "timeScale=0에서 페이드인이 완료되지 않음");
             Assert.IsFalse(GetIsTransitioning(), "_isTransitioning이 해제되지 않음");
@@ -78,7 +76,7 @@ namespace HuliacDev.Tests
         {
             Time.timeScale = 1f;
 
-            await AwaitWithRealtimeTimeout(_fade.FadeOutAsync(0.1f));
+            await _fade.FadeOutAsync(0.1f).AwaitWithRealtimeTimeout();
 
             Assert.AreEqual(1f, GetAlpha(), 0.001f);
             Assert.IsFalse(GetIsTransitioning());
@@ -90,33 +88,12 @@ namespace HuliacDev.Tests
         [UnityTest]
         public IEnumerator 페이드인_완료_시_오버드로우_방지를_위해_캔버스가_비활성화된다() => UniTask.ToCoroutine(async () =>
         {
-            await AwaitWithRealtimeTimeout(_fade.FadeOutAsync(0.05f));
+            await _fade.FadeOutAsync(0.05f).AwaitWithRealtimeTimeout();
             Assert.IsTrue(GetCanvasEnabled(), "페이드아웃(alpha=1) 상태에서는 캔버스가 활성화되어 있어야 함");
 
-            await AwaitWithRealtimeTimeout(_fade.FadeInAsync(0.05f));
+            await _fade.FadeInAsync(0.05f).AwaitWithRealtimeTimeout();
             Assert.IsFalse(GetCanvasEnabled(), "페이드인 완료(alpha=0) 시 GPU 오버드로우 방지를 위해 캔버스가 비활성화되어야 함");
         });
-
-        /// <summary>
-        /// 페이드 완료를 기다리되, 실시간 기준 제한 시간을 넘기면 Assert 실패로 끝냄.
-        /// <para>
-        /// 이 가드가 없으면 결함이 있는 구현에서 테스트가 '실패'가 아니라 '무한 대기'로 멈춰
-        /// 테스트 러너 전체를 막아버림. 실제로 수정 전 코드에서 이 현상을 확인했음.
-        /// 대기 자체도 timeScale의 영향을 받으면 안 되므로 UnscaledDeltaTime을 사용함.
-        /// </para>
-        /// </summary>
-        private static async UniTask AwaitWithRealtimeTimeout(UniTask task, float timeoutSeconds = 3f)
-        {
-            int finishedIndex = await UniTask.WhenAny(
-                task,
-                UniTask.Delay(TimeSpan.FromSeconds(timeoutSeconds), DelayType.UnscaledDeltaTime));
-
-            if (finishedIndex != 0)
-            {
-                Assert.Fail($"제한 시간 {timeoutSeconds}초 내에 완료되지 않음. " +
-                            "timeScale에 묶여 진행이 멈춘 것으로 보임.");
-            }
-        }
 
         private float GetAlpha()
         {

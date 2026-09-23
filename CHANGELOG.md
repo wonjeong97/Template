@@ -1,6 +1,12 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.23-2] - 2026-09-23
+
+### Fixed
+- **`unity-stack-scaffold` 스킬 컨벤션 위반 2건 수정(`Runtime/UI`, `Runtime/Network`):** `VideoManager.WaitUntilPreparedAsync` 튜플 반환 구조분해에 `var`를 쓰던 것을 명시적 타입(`(bool isSuccess, string errorMessage)`)으로 교정. `ApiManagerBase`의 종료/시작/공통 로그 URL 조립 3곳이 같은 클래스 안에서 `ZString.Concat`을 쓰는 다른 곳과 달리 `+` 문자열 연결을 쓰던 것을 `ZString.Concat`으로 통일.
+- **PlayMode 테스트 무한 대기 가드 누락 보완(`Tests/Runtime`):** `AppSettingsProviderTests`(4곳)와 `ConcurrentLoadTests`(1곳)가 `FadeManagerTests`/`InactivityTimerTests`와 달리 실시간 타임아웃 가드 없이 `UniTask<T>`를 직접 `await`하던 것을, 제네릭 `AwaitWithRealtimeTimeout<T>` 헬퍼를 추가해 결함이 있는 구현에서 테스트가 무한 대기로 러너를 막지 않도록 보완.
+
 ## [26.9.23-1] - 2026-09-23
 
 ### Fixed

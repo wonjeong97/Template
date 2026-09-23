@@ -73,9 +73,9 @@ namespace HuliacDev.Tests
                 UniTask<Settings> second = provider.GetAsync(cts.Token);
                 UniTask<Settings> third = provider.GetAsync(cts.Token);
 
-                Settings a = await first;
-                Settings b = await second;
-                Settings c = await third;
+                Settings a = await first.AwaitWithRealtimeTimeout();
+                Settings b = await second.AwaitWithRealtimeTimeout();
+                Settings c = await third.AwaitWithRealtimeTimeout();
 
                 Assert.IsNotNull(a, "첫 번째 소비자가 결과를 받지 못함");
                 Assert.IsNotNull(b, "두 번째 소비자가 결과를 받지 못함");
@@ -96,8 +96,8 @@ namespace HuliacDev.Tests
                 UniTask<Settings> first = provider.GetAsync(cts.Token);
                 UniTask<Settings> second = provider.GetAsync(cts.Token);
 
-                Settings a = await first;
-                Settings b = await second;
+                Settings a = await first.AwaitWithRealtimeTimeout();
+                Settings b = await second.AwaitWithRealtimeTimeout();
 
                 Assert.AreSame(a, b, "인스턴스가 다름 - Settings.json을 두 번 로드했을 가능성");
             }
@@ -113,8 +113,8 @@ namespace HuliacDev.Tests
             using (AppSettingsProvider provider = new AppSettingsProvider())
             using (CancellationTokenSource cts = new CancellationTokenSource())
             {
-                Settings first = await provider.GetAsync(cts.Token);
-                Settings second = await provider.GetAsync(cts.Token);
+                Settings first = await provider.GetAsync(cts.Token).AwaitWithRealtimeTimeout();
+                Settings second = await provider.GetAsync(cts.Token).AwaitWithRealtimeTimeout();
 
                 Assert.IsNotNull(first);
                 Assert.AreSame(first, second, "완료 후 재호출에서 다른 인스턴스가 반환됨");
@@ -138,14 +138,15 @@ namespace HuliacDev.Tests
 
                 try
                 {
-                    await canceled;
+                    await canceled.AwaitWithRealtimeTimeout();
+                    Assert.Fail("취소된 토큰으로 요청한 작업이 예외를 던지지 않음");
                 }
                 catch (System.OperationCanceledException)
                 {
                     // 취소된 소비자는 여기로 오는 것이 정상
                 }
 
-                Settings result = await healthy;
+                Settings result = await healthy.AwaitWithRealtimeTimeout();
                 Assert.IsNotNull(result, "다른 소비자의 취소가 전파되어 결과를 받지 못함");
             }
         });

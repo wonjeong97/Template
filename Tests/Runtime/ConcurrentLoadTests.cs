@@ -45,9 +45,9 @@ namespace HuliacDev.Tests
             UniTask<int> second = WaitOn(shared);
             UniTask<int> third = WaitOn(shared);
 
-            int a = await first;
-            int b = await second;
-            int c = await third;
+            int a = await first.AwaitWithRealtimeTimeout();
+            int b = await second.AwaitWithRealtimeTimeout();
+            int c = await third.AwaitWithRealtimeTimeout();
 
             Assert.AreEqual(7, a);
             Assert.AreEqual(7, b, "두 번째 소비자가 결과를 받지 못함");
