@@ -22,7 +22,10 @@ namespace HuliacDev.Utils
         PartialPosition = 1 << 2,
 
         /// <summary>position을 적었지만 0~1 정규화 범위를 벗어남.</summary>
-        PositionOutOfRange = 1 << 3
+        PositionOutOfRange = 1 << 3,
+
+        /// <summary>resetClickTime이 양수지만 최소값(1초)보다 작아 최소값으로 올려 적용함.</summary>
+        ResetClickTimeBelowMinimum = 1 << 4
     }
 
     /// <summary>
@@ -58,9 +61,16 @@ namespace HuliacDev.Utils
     internal static class CloseSettingResolver
     {
         /// <summary>
+        /// 연속 클릭 제한 시간의 최소값(초). 이보다 짧으면 사람이 숨은 버튼을 제시간에 누를 수 없어,
+        /// 현장에서 앱을 끌 방법이 사라짐.
+        /// </summary>
+        internal const float MinClickTimeWindow = 1f;
+
+        /// <summary>
         /// numToClose가 양수가 아니면(closeSetting 키 누락 포함) 설정 전체를 무시하도록 false를 반환함.
         /// 그 외에는 JSON에서 올바르게 지정된 필드만 값으로 채우고, 미지정(표시값)이거나 잘못된 필드는 null로 둠.
         /// 잘못된 필드(범위 밖 값, 위치 한 성분만 지정)는 Issues에 표시해 호출부가 경고를 남기게 함.
+        /// 제한 시간이 최소값(1초)보다 작으면 최소값으로 올려 적용하고 역시 Issues에 표시함.
         /// </summary>
         public static bool TryResolve(CloseSetting setting, out ResolvedCloseSetting resolved)
         {
@@ -80,15 +90,46 @@ namespace HuliacDev.Utils
         }
 
         /// <summary>
-        /// 제한 시간이 양수면 그 값을, 미지정이면 null을 반환함. 0 이하를 명시했으면 null과 함께 문제로 표시함.
+        /// 제한 시간이 최소값(1초) 이상이면 그 값을, 미지정이면 null을 반환함.
+        /// 양수지만 최소값보다 작으면 최소값으로 올리고, 0 이하를 명시했으면 null과 함께 문제로 표시함.
         /// </summary>
         private static float? ResolveResetClickTime(float value, ref CloseSettingIssues issues)
         {
             if (IsUnset(value)) return null;
-            if (value > 0f) return value;
 
-            issues |= CloseSettingIssues.InvalidResetClickTime;
-            return null;
+            if (value <= 0f)
+            {
+                issues |= CloseSettingIssues.InvalidResetClickTime;
+                return null;
+            }
+
+            if (value < MinClickTimeWindow)
+            {
+                issues |= CloseSettingIssues.ResetClickTimeBelowMinimum;
+                return MinClickTimeWindow;
+            }
+
+            return value;
+        }
+
+        /// <summary>
+        /// 해석 결과와 현재 값으로 최종 클릭 횟수·제한 시간을 계산함. 클릭 횟수가 0 이하인 결과
+        /// (TryResolve 실패 시의 default 등)는 거부해 false를 반환함. 0이 적용되면 숨은 버튼을
+        /// 한 번만 눌러도 앱이 종료되기 때문임. 제한 시간이 없으면 현재 값을 그대로 둠.
+        /// </summary>
+        public static bool TryGetClickSettings(ResolvedCloseSetting resolved, float currentClickTimeWindow,
+            out int targetClickCount, out float clickTimeWindow)
+        {
+            if (resolved.TargetClickCount <= 0)
+            {
+                targetClickCount = 0;
+                clickTimeWindow = currentClickTimeWindow;
+                return false;
+            }
+
+            targetClickCount = resolved.TargetClickCount;
+            clickTimeWindow = resolved.ClickTimeWindow ?? currentClickTimeWindow;
+            return true;
         }
 
         /// <summary>

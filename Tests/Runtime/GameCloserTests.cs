@@ -173,35 +173,60 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
-        /// 클릭 횟수와 제한 시간이 있는 결과를 적용하면 GameCloser의 종료 조건이 그 값으로 바뀌어야 함.
+        /// 1초 미만의 양수 제한 시간은 사람이 제시간에 누를 수 없어 앱을 끌 수 없게 되므로,
+        /// 최소값(1초)으로 올려 적용하고 문제로 표시해 경고를 남기게 해야 함.
         /// </summary>
         [Test]
-        public void 해석_결과의_클릭_횟수와_제한_시간을_적용한다()
+        public void 제한_시간이_1초_미만이면_1초로_올리고_문제로_표시한다()
         {
-            GameCloser closer = CreateCloser(out RectTransform _, out Image _);
+            Settings settings = JsonUtility.FromJson<Settings>("{\"closeSetting\":{\"numToClose\":5,\"resetClickTime\":0.003}}");
 
-            closer.ApplyResolvedSettings(new ResolvedCloseSetting(5, 2.5f, null, null, CloseSettingIssues.None));
-
-            Assert.AreEqual(5, closer.TargetClickCount);
-            Assert.AreEqual(2.5f, closer.ClickTimeWindow, 0.0001f);
+            Assert.IsTrue(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting resolved));
+            Assert.AreEqual(CloseSettingResolver.MinClickTimeWindow, resolved.ClickTimeWindow.Value, 0.0001f);
+            Assert.AreEqual(CloseSettingIssues.ResetClickTimeBelowMinimum, resolved.Issues);
         }
 
         /// <summary>
-        /// TryResolve가 실패했을 때의 default 결과(클릭 횟수 0)를 적용해도 종료 조건이 바뀌면 안 됨.
-        /// 0이 들어가면 숨은 버튼을 한 번만 눌러도 앱이 종료됨.
+        /// 최소값(1초) 이상인 제한 시간은 경계값을 포함해 그대로 적용되어야 함.
         /// </summary>
         [Test]
-        public void 클릭_횟수가_0인_결과는_적용하지_않는다()
+        public void 제한_시간이_1초_이상이면_그대로_적용한다()
         {
-            GameCloser closer = CreateCloser(out RectTransform _, out Image _);
-            int originalTarget = closer.TargetClickCount;
-            float originalWindow = closer.ClickTimeWindow;
+            Settings settings = JsonUtility.FromJson<Settings>("{\"closeSetting\":{\"numToClose\":5,\"resetClickTime\":1}}");
 
-            closer.ApplyResolvedSettings(default);
+            Assert.IsTrue(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting resolved));
+            Assert.AreEqual(1f, resolved.ClickTimeWindow.Value, 0.0001f);
+            Assert.AreEqual(CloseSettingIssues.None, resolved.Issues);
+        }
 
-            Assert.AreEqual(originalTarget, closer.TargetClickCount, "클릭 횟수 0이 적용되어 한 번 클릭에 종료될 수 있음");
-            Assert.AreEqual(originalWindow, closer.ClickTimeWindow, 0.0001f);
-            Assert.Greater(closer.TargetClickCount, 0);
+        /// <summary>
+        /// 해석 결과의 클릭 횟수와 제한 시간이 최종 종료 조건이 되어야 하고,
+        /// 제한 시간이 없으면 현재 값을 유지해야 함.
+        /// </summary>
+        [Test]
+        public void 해석_결과의_클릭_횟수와_제한_시간을_최종_값으로_쓴다()
+        {
+            Assert.IsTrue(CloseSettingResolver.TryGetClickSettings(
+                new ResolvedCloseSetting(7, 2.5f, null, null, CloseSettingIssues.None), 3f,
+                out int target, out float window));
+            Assert.AreEqual(7, target);
+            Assert.AreEqual(2.5f, window, 0.0001f);
+
+            Assert.IsTrue(CloseSettingResolver.TryGetClickSettings(
+                new ResolvedCloseSetting(7, null, null, null, CloseSettingIssues.None), 3f,
+                out int _, out float keptWindow));
+            Assert.AreEqual(3f, keptWindow, 0.0001f, "제한 시간 미지정인데 현재 값이 바뀜");
+        }
+
+        /// <summary>
+        /// TryResolve가 실패했을 때의 default 결과(클릭 횟수 0)는 거부되어야 함.
+        /// 0이 적용되면 숨은 버튼을 한 번만 눌러도 앱이 종료됨.
+        /// </summary>
+        [Test]
+        public void 클릭_횟수가_0인_결과는_거부한다()
+        {
+            Assert.IsFalse(CloseSettingResolver.TryGetClickSettings(default, 3f, out int _, out float _),
+                "클릭 횟수 0 결과가 적용되어 한 번 클릭에 종료될 수 있음");
         }
 
         /// <summary>

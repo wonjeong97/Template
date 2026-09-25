@@ -22,10 +22,10 @@ namespace HuliacDev.Utils
     public class GameCloser : MonoBehaviour
     {
         [Header("Close Settings (Overwritten by JSON)")]
-        [SerializeField, Tooltip("앱을 종료하기 위해 필요한 연속 클릭 횟수")]
-        private int targetClickCount = 10;
+        [SerializeField, Min(1), Tooltip("앱을 종료하기 위해 필요한 연속 클릭 횟수")]
+        private int targetClickCount = 5;
 
-        [SerializeField, Tooltip("연속 클릭으로 인정되는 최대 대기 시간 (초)")]
+        [SerializeField, Min(CloseSettingResolver.MinClickTimeWindow), Tooltip("연속 클릭으로 인정되는 최대 대기 시간 (초, 최소 1초)")]
         private float clickTimeWindow = 3.0f;
 
         private int _currentClickCount;
@@ -34,12 +34,6 @@ namespace HuliacDev.Utils
         private ILogger<GameCloser> _logger;
         private AppSettingsProvider _settingsProvider;
         private Button _hiddenButton;
-
-        /// <summary>앱 종료에 필요한 현재 연속 클릭 횟수(테스트에서 적용 결과를 확인하기 위한 읽기 전용 접근).</summary>
-        internal int TargetClickCount => targetClickCount;
-
-        /// <summary>현재 연속 클릭 제한 시간(초)(테스트에서 적용 결과를 확인하기 위한 읽기 전용 접근).</summary>
-        internal float ClickTimeWindow => clickTimeWindow;
 
         /// <summary>
         /// VContainer 의존성 주입.
@@ -137,6 +131,11 @@ namespace HuliacDev.Utils
                 _logger.ZLogWarning($"[GameCloser] closeSetting.resetClickTime must be positive. Using inspector value: Window({clickTimeWindow}s)");
             }
 
+            if ((issues & CloseSettingIssues.ResetClickTimeBelowMinimum) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] closeSetting.resetClickTime is below the minimum ({CloseSettingResolver.MinClickTimeWindow}s). Using the minimum instead.");
+            }
+
             if ((issues & CloseSettingIssues.ImageAlphaOutOfRange) != 0)
             {
                 _logger.ZLogWarning($"[GameCloser] closeSetting.imageAlpha must be between 0 and 1. Keeping current image alpha.");
@@ -144,7 +143,7 @@ namespace HuliacDev.Utils
 
             if ((issues & CloseSettingIssues.PartialPosition) != 0)
             {
-                _logger.ZLogWarning($"[GameCloser] closeSetting.position must specify both x and y. Keeping current position.");
+                _logger.ZLogWarning($"[GameCloser] closeSetting.position must specify both x and y (-1 is reserved as 'unspecified' and cannot be used as a coordinate). Keeping current position.");
             }
 
             if ((issues & CloseSettingIssues.PositionOutOfRange) != 0)
@@ -156,19 +155,19 @@ namespace HuliacDev.Utils
         /// <summary>
         /// 해석된 설정을 클릭 조건과 RectTransform·Image에 적용함.
         /// 값이 없는(미지정이거나 잘못 지정된) 필드는 바꾸지 않고 인스펙터에서 정한 값을 그대로 둠.
-        /// 클릭 횟수가 0 이하인 결과(TryResolve 실패 시의 default 등)는 적용하지 않음.
-        /// 0이 들어가면 숨은 버튼을 한 번만 눌러도 앱이 종료되기 때문임.
+        /// 클릭 횟수가 0 이하인 결과(TryResolve 실패 시의 default 등)는 CloseSettingResolver.TryGetClickSettings가
+        /// 거부하므로 아무것도 적용하지 않음. 0이 들어가면 숨은 버튼을 한 번만 눌러도 앱이 종료되기 때문임.
         /// </summary>
         internal void ApplyResolvedSettings(ResolvedCloseSetting resolved)
         {
-            if (resolved.TargetClickCount <= 0)
+            if (!CloseSettingResolver.TryGetClickSettings(resolved, clickTimeWindow, out int newTargetClickCount, out float newClickTimeWindow))
             {
                 if (_logger != null) _logger.ZLogError($"[GameCloser] Resolved closeSetting has non-positive click count ({resolved.TargetClickCount}). Settings were not applied.");
                 return;
             }
 
-            targetClickCount = resolved.TargetClickCount;
-            if (resolved.ClickTimeWindow.HasValue) clickTimeWindow = resolved.ClickTimeWindow.Value;
+            targetClickCount = newTargetClickCount;
+            clickTimeWindow = newClickTimeWindow;
 
             bool isPositionApplied = resolved.Position.HasValue && TryApplyPosition(resolved.Position.Value);
             bool isAlphaApplied = resolved.ImageAlpha.HasValue && TryApplyImageAlpha(resolved.ImageAlpha.Value);

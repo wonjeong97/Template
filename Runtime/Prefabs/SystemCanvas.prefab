@@ -313,8 +313,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7e3f1195b781ab143b24753b6f58a347, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  targetClickCount: 10
-  clickTimeWindow: 0.5
+  targetClickCount: 5
+  clickTimeWindow: 3
 --- !u!1001 &3991792086443802033
 PrefabInstance:
   m_ObjectHideFlags: 0
