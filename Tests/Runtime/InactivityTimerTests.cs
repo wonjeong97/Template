@@ -27,12 +27,24 @@ namespace HuliacDev.Tests
     /// 테스트 중 실제 마우스·키보드 입력이 들어오면 타이머가 초기화되어 결과가 흔들렸음
     /// (예: 타임아웃 뒤 입력이 들어와 이벤트가 다시 발동). InputTestFixture로 실제 장치 입력을
     /// 차단한 가상 입력 환경에서 실행하고, 입력 초기화 동작은 가상 키보드로 직접 검증함.
+    /// InputTestFixture를 상속해, 이 클래스의 SetUp이 실패해도 픽스처의 TearDown은 실행되어
+    /// Input System이 가상 환경에 남지 않게 함(NUnit은 SetUp이 성공한 단계의 TearDown만 실행함).
     /// </summary>
-    public class InactivityTimerTests
+    public class InactivityTimerTests : InputTestFixture
     {
         private static readonly BindingFlags Nonpublic = BindingFlags.NonPublic | BindingFlags.Instance;
 
-        private readonly InputTestFixture _input = new InputTestFixture();
+        /// <summary>
+        /// 발동 지연을 검증하는 테스트의 타임아웃(초). 에디터 부하로 프레임이 튀어도 결과가 흔들리지 않도록
+        /// 대기 시간과 넉넉한 차이를 둠.
+        /// </summary>
+        private const float DelayCheckTimeoutSeconds = 1f;
+
+        /// <summary>
+        /// 발동 지연 검증의 대기 시간(초). 두 번 기다리면 원래 기준으로는 타임아웃을 넘기지만(1.2 &gt; 1.0)
+        /// 초기화 기준으로는 넘기지 않아(0.6 &lt; 1.0), 양쪽 모두 0.4초의 여유가 있음.
+        /// </summary>
+        private const float DelayCheckWaitSeconds = 0.6f;
 
         private GameObject _go;
         private InactivityTimer _timer;
@@ -54,12 +66,15 @@ namespace HuliacDev.Tests
             }
         }
 
+        /// <summary>
+        /// 테스트용 타이머를 만듦. 기반 클래스(InputTestFixture)의 Setup이 먼저 실행되어 가상 입력 환경이
+        /// 준비된 뒤이므로, 타이머의 OnEnable에서 걸리는 InputSystem.onEvent 구독도 가상 환경에 걸림.
+        /// </summary>
         [SetUp]
-        public void SetUp()
+        public void SetUpTimer()
         {
-            // 타이머가 OnEnable에서 InputSystem.onEvent를 구독하므로, 가상 입력 환경을 먼저 준비한 뒤 생성함.
-            // (반대 순서면 구독이 실제 입력 환경에 걸린 채 남음)
-            _input.Setup();
+            // 실제 장치가 남아 있으면 격리가 깨진 것(예: 픽스처 적용 방식이 바뀜)이므로 바로 드러나게 함.
+            Assert.AreEqual(0, InputSystem.devices.Count, "가상 입력 환경에 실제 입력 장치가 남아 있음");
 
             SingletonGuard<InactivityTimer>.ResetForTesting();
             _go = new GameObject("InactivityTimerTests");
@@ -70,14 +85,14 @@ namespace HuliacDev.Tests
                 .SetValue(_timer, new FakePublisher(() => _invoked = true));
         }
 
+        /// <summary>
+        /// 타이머를 파괴해 onEvent 구독을 해제함. 실제 입력 환경 복원은 이후 기반 클래스의 TearDown이 담당함.
+        /// </summary>
         [TearDown]
-        public void TearDown()
+        public void TearDownTimer()
         {
             if (_go != null) UnityEngine.Object.DestroyImmediate(_go);
             SingletonGuard<InactivityTimer>.ResetForTesting();
-
-            // 타이머를 파괴해 onEvent 구독을 해제한 뒤 실제 입력 환경을 복원함.
-            _input.TearDown();
         }
 
         /// <summary>
@@ -121,12 +136,12 @@ namespace HuliacDev.Tests
         public IEnumerator 타임아웃_전_ResetTimer_호출시_발동이_늦춰진다() => UniTask.ToCoroutine(async () =>
         {
             ExpectMissingDependencyLog();
-            SetTimeout(0.15f, isEnabled: true);
+            SetTimeout(DelayCheckTimeoutSeconds, isEnabled: true);
 
-            await UniTask.Delay(TimeSpan.FromSeconds(0.08), DelayType.UnscaledDeltaTime);
+            await UniTask.Delay(TimeSpan.FromSeconds(DelayCheckWaitSeconds), DelayType.UnscaledDeltaTime);
             _timer.ResetTimer();
 
-            await UniTask.Delay(TimeSpan.FromSeconds(0.08), DelayType.UnscaledDeltaTime);
+            await UniTask.Delay(TimeSpan.FromSeconds(DelayCheckWaitSeconds), DelayType.UnscaledDeltaTime);
             Assert.IsFalse(_invoked, "ResetTimer 이후에도 원래 시간 기준으로 발동함");
 
             await AwaitInvocation();
@@ -142,12 +157,12 @@ namespace HuliacDev.Tests
         {
             ExpectMissingDependencyLog();
             Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
-            SetTimeout(0.15f, isEnabled: true);
+            SetTimeout(DelayCheckTimeoutSeconds, isEnabled: true);
 
-            await UniTask.Delay(TimeSpan.FromSeconds(0.08), DelayType.UnscaledDeltaTime);
-            _input.PressAndRelease(keyboard.spaceKey);
+            await UniTask.Delay(TimeSpan.FromSeconds(DelayCheckWaitSeconds), DelayType.UnscaledDeltaTime);
+            PressAndRelease(keyboard.spaceKey);
 
-            await UniTask.Delay(TimeSpan.FromSeconds(0.08), DelayType.UnscaledDeltaTime);
+            await UniTask.Delay(TimeSpan.FromSeconds(DelayCheckWaitSeconds), DelayType.UnscaledDeltaTime);
             Assert.IsFalse(_invoked, "입력 이벤트 이후에도 원래 시간 기준으로 발동함(입력이 타이머를 초기화하지 않음)");
 
             await AwaitInvocation();
@@ -177,15 +192,15 @@ namespace HuliacDev.Tests
         public IEnumerator Resume_직후에는_바로_발동하지_않고_전체_시간이_다시_주어진다() => UniTask.ToCoroutine(async () =>
         {
             ExpectMissingDependencyLog();
-            SetTimeout(0.1f, isEnabled: true);
+            SetTimeout(DelayCheckTimeoutSeconds, isEnabled: true);
             _timer.Pause();
 
             // Pause 중 타임아웃 시간보다 훨씬 긴 시간이 흐름(긴 영상 재생 시뮬레이션).
-            await UniTask.Delay(TimeSpan.FromSeconds(0.3), DelayType.UnscaledDeltaTime);
+            await UniTask.Delay(TimeSpan.FromSeconds(DelayCheckTimeoutSeconds * 1.5f), DelayType.UnscaledDeltaTime);
 
             _timer.Resume();
 
-            await UniTask.Delay(TimeSpan.FromSeconds(0.05), DelayType.UnscaledDeltaTime);
+            await UniTask.Delay(TimeSpan.FromSeconds(DelayCheckWaitSeconds), DelayType.UnscaledDeltaTime);
             Assert.IsFalse(_invoked, "Resume 직후 곧바로 타임아웃됨 - 정지 중 흐른 시간이 그대로 반영된 것으로 보임");
 
             await AwaitInvocation();
