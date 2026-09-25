@@ -101,6 +101,27 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
+        /// VideoPlayer는 살아 있지만 targetTexture가 다른 텍스처로 바뀌었다면,
+        /// 더 이상 쓰이지 않는 이전 텍스처는 고아로 회수되어야 함.
+        /// </summary>
+        [Test]
+        public void 플레이어가_다른_텍스처로_바뀌면_이전_텍스처를_회수한다()
+        {
+            VideoPlayer vp = CreateWiredVideo("Retargeted");
+            RenderTexture replacement = new RenderTexture(16, 16, 0);
+            vp.targetTexture = replacement;
+
+            int released = _videoManager.ReleaseOrphanedRenderTextures();
+
+            Assert.AreEqual(1, released, "쓰이지 않게 된 이전 텍스처가 회수되어야 함");
+            Assert.AreEqual(0, GetTrackedCount());
+            Assert.AreSame(replacement, vp.targetTexture, "매니저가 만들지 않은 텍스처는 건드리면 안 됨");
+
+            vp.targetTexture = null;
+            UnityEngine.Object.DestroyImmediate(replacement);
+        }
+
+        /// <summary>
         /// 크기가 0 이하로 들어와도 유효한 RenderTexture를 만들어야 함.
         /// (JSON 설정 오류로 size가 비어 오는 경우 대비)
         /// </summary>

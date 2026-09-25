@@ -131,6 +131,10 @@ namespace HuliacDev.Utils
                         _logger.ZLogInformation($"[GameCloser] Settings applied from JSON: Pos({settings.closeSetting.position}), Alpha({settings.closeSetting.imageAlpha}), Target({targetClickCount}), Window({clickTimeWindow}s)");
                     }
                 }
+                else if (_logger != null)
+                {
+                    _logger.ZLogWarning($"[GameCloser] closeSetting is missing in settings. Using inspector defaults: Target({targetClickCount}), Window({clickTimeWindow}s)");
+                }
             }
             catch (OperationCanceledException)
             {

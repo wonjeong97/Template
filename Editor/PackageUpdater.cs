@@ -66,7 +66,7 @@ namespace HuliacDev.Editor
 
             _updateQueue = new Queue<string>();
 
-            foreach (var pkg in _listRequest.Result)
+            foreach (UnityEditor.PackageManager.PackageInfo pkg in _listRequest.Result)
             {
                 if (!TargetPackageNames.Contains(pkg.name))
                     continue;
@@ -115,7 +115,7 @@ namespace HuliacDev.Editor
                 return;
             }
 
-            var id = _updateQueue.Dequeue();
+            string id = _updateQueue.Dequeue();
             EditorUtility.DisplayProgressBar("Package Updater", $"업데이트 중: {id}", (float)_done / _total);
             _addRequest = Client.Add(id);
             EditorApplication.update += WaitForAdd;

@@ -3,14 +3,12 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Cysharp.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 using HuliacDev.Data;
 using HuliacDev.UI;
-using ZLogger.Unity;
 
 namespace HuliacDev.Tests
 {
@@ -191,9 +189,9 @@ namespace HuliacDev.Tests
             _spawned.Add(soundGo);
             SoundManager soundManager = soundGo.AddComponent<SoundManager>();
 
-            SetSoundManagerLogger(soundManager);
+            SoundManagerTestHelper.SetLogger(soundManager);
             SetSoundManager(_uiManager, soundManager);
-            SetSoundSetting(soundManager, "click", "sounds/UIManagerTests_존재하지않는파일.wav");
+            SoundManagerTestHelper.SetSoundSetting(soundManager, "click", "sounds/UIManagerTests_존재하지않는파일.wav");
 
             GameObject buttonGo = new GameObject("SoundButton");
             _spawned.Add(buttonGo);
@@ -204,6 +202,34 @@ namespace HuliacDev.Tests
             LogAssert.Expect(LogType.Error, new Regex("Failed to load sound.*UIManagerTests_존재하지않는파일"));
 
             buttonGo.GetComponent<Button>().onClick.Invoke();
+        }
+
+        /// <summary>
+        /// 배경 Image가 붙은 버튼에 텍스트를 설정하면, Graphic 충돌로 버튼 자신에는 Text를 붙일 수
+        /// 없으므로 직계 자식 "Text"에 적용되어야 함. 예전에는 AddComponent가 null을 반환해
+        /// 텍스트가 조용히 사라졌음. 다시 설정해도 자식이 중복 생성되면 안 됨.
+        /// </summary>
+        [Test]
+        public void 배경과_텍스트를_함께_설정해도_버튼_텍스트가_적용된다()
+        {
+            GameObject buttonGo = new GameObject("BgTextButton");
+            _spawned.Add(buttonGo);
+
+            ButtonSetting setting = new ButtonSetting
+            {
+                name = "BgTextButton",
+                buttonBackgroundImage = new ImageSetting { name = "Bg" },
+                buttonText = new TextSetting { name = "Label", text = "확인" }
+            };
+
+            _uiManager.SetButton(buttonGo, setting);
+            _uiManager.SetButton(buttonGo, setting);
+
+            Transform child = buttonGo.transform.Find(UIManager.ButtonTextChildName);
+            Assert.IsTrue(child, "버튼 텍스트 자식이 생성되어야 함");
+            Assert.IsTrue(child.TryGetComponent(out Text text), "자식에 Text가 있어야 함");
+            Assert.AreEqual("확인", text.text);
+            Assert.AreEqual(1, buttonGo.transform.childCount, "재설정 시 텍스트 자식이 중복 생성되면 안 됨");
         }
 
         /// <summary>
@@ -280,29 +306,6 @@ namespace HuliacDev.Tests
         private static void SetSoundManager(UIManager uiManager, SoundManager soundManager)
         {
             typeof(UIManager).GetField("_soundManager", Nonpublic).SetValue(uiManager, soundManager);
-        }
-
-        private static void SetSoundSetting(SoundManager soundManager, string key, string clipPath)
-        {
-            FieldInfo field = typeof(SoundManager).GetField("_soundSettings", Nonpublic);
-            Dictionary<string, SoundSetting> settings = (Dictionary<string, SoundSetting>)field.GetValue(soundManager);
-            settings[key] = new SoundSetting { key = key, clipPath = clipPath, volume = 1f };
-        }
-
-        /// <summary>
-        /// SoundManager의 실패 로그가 실제로 콘솔에 출력되도록, DI 없이 생성된 인스턴스에
-        /// ZLogger 기반 로거를 직접 주입함(RootLifetimeScope.ConfigureLogging의 최소 재현).
-        /// </summary>
-        private static void SetSoundManagerLogger(SoundManager soundManager)
-        {
-            ILoggerFactory factory = LoggerFactory.Create(builder =>
-            {
-                builder.SetMinimumLevel(LogLevel.Debug);
-                builder.AddZLoggerUnityDebug();
-            });
-
-            ILogger<SoundManager> logger = factory.CreateLogger<SoundManager>();
-            typeof(SoundManager).GetField("_logger", Nonpublic).SetValue(soundManager, logger);
         }
     }
 }

@@ -18,6 +18,12 @@ namespace HuliacDev.UI
         private bool _isOriginal;
 
         private readonly List<RenderTexture> _activeRenderTextures = new List<RenderTexture>();
+
+        // 각 RenderTexture를 연결한 VideoPlayer. 고아 판정 시 씬 전체를 탐색하지 않고
+        // "연결했던 플레이어가 살아 있고 아직 이 텍스처를 쓰는가"만 확인하기 위함.
+        private readonly Dictionary<RenderTexture, VideoPlayer> _renderTextureOwners =
+            new Dictionary<RenderTexture, VideoPlayer>();
+
         private ILogger<VideoManager> _logger;
 
         /// <summary>
@@ -75,6 +81,7 @@ namespace HuliacDev.UI
             if (vp.targetTexture)
             {
                 _activeRenderTextures.Remove(vp.targetTexture);
+                _renderTextureOwners.Remove(vp.targetTexture);
                 vp.targetTexture.Release();
                 DestroyUtil.SafeDestroy(vp.targetTexture);
             }
@@ -84,6 +91,7 @@ namespace HuliacDev.UI
             RenderTexture rTex = new RenderTexture(rtW, rtH, 24);
             rTex.Create();
             _activeRenderTextures.Add(rTex);
+            _renderTextureOwners[rTex] = vp;
 
             vp.renderMode = VideoRenderMode.RenderTexture;
             vp.targetTexture = rTex;
@@ -205,26 +213,16 @@ namespace HuliacDev.UI
         {
             int released = 0;
 
-#if UNITY_2023_1_OR_NEWER
-            VideoPlayer[] players = FindObjectsByType<VideoPlayer>(FindObjectsSortMode.None);
-#else
-            VideoPlayer[] players = FindObjectsOfType<VideoPlayer>();
-#endif
-            HashSet<RenderTexture> activeTargets = new HashSet<RenderTexture>();
-            foreach (VideoPlayer player in players)
-            {
-                if (player && player.targetTexture)
-                {
-                    activeTargets.Add(player.targetTexture);
-                }
-            }
-
             for (int i = _activeRenderTextures.Count - 1; i >= 0; i--)
             {
                 RenderTexture rt = _activeRenderTextures[i];
 
-                // 이미 파괴됐거나, 이 텍스처를 targetTexture로 쓰는 VideoPlayer가 없으면 고아로 판정함.
-                if (rt && activeTargets.Contains(rt)) continue;
+                // 이미 파괴됐거나, 연결했던 VideoPlayer가 파괴됐거나 다른 텍스처로 바뀌었으면 고아로 판정함.
+                if (rt && _renderTextureOwners.TryGetValue(rt, out VideoPlayer owner)
+                    && owner && owner.targetTexture == rt)
+                {
+                    continue;
+                }
 
                 if (rt)
                 {
@@ -234,6 +232,7 @@ namespace HuliacDev.UI
                 }
 
                 _activeRenderTextures.RemoveAt(i);
+                _renderTextureOwners.Remove(rt);
             }
 
             return released;
@@ -258,6 +257,7 @@ namespace HuliacDev.UI
             }
 
             _activeRenderTextures.Clear();
+            _renderTextureOwners.Clear();
         }
     }
 }

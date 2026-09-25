@@ -98,7 +98,7 @@ namespace HuliacDev.Core
         {
             try
             {
-                _schedule = await JsonLoader.LoadAsync<ShutdownSetting>(ShutdownSettingsFileName, cancellationToken);
+                _schedule = await JsonLoader.LoadAsync<ShutdownSetting>(ShutdownSettingsFileName, cancellationToken, logger: _logger);
 
                 if (!HasAnySchedule())
                 {

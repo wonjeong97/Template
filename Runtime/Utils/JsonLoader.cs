@@ -5,6 +5,7 @@ using Cysharp.Text;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
+using ZLogger;
 
 namespace HuliacDev.Utils
 {
@@ -47,16 +48,38 @@ namespace HuliacDev.Utils
         }
 
         /// <summary>
+        /// 로거가 있으면 ZLogger로, 없으면 Unity 콘솔로 경고를 남김.
+        /// 정적 클래스라 로거를 주입받을 수 없으므로 호출자가 넘긴 로거를 사용함.
+        /// </summary>
+        private static void LogWarning(Microsoft.Extensions.Logging.ILogger logger, string message)
+        {
+            if (logger != null) logger.ZLogWarning($"{message}");
+            else Debug.LogWarning(message);
+        }
+
+        /// <summary>
+        /// 로거가 있으면 ZLogger로, 없으면 Unity 콘솔로 오류를 남김.
+        /// </summary>
+        private static void LogError(Microsoft.Extensions.Logging.ILogger logger, string message)
+        {
+            if (logger != null) logger.ZLogError($"{message}");
+            else Debug.LogError(message);
+        }
+
+        /// <summary>
         /// StreamingAssets에서 JSON 파일을 비동기로 읽어오는 기본 오버로드.
         /// </summary>
-        public static UniTask<T> LoadAsync<T>(string fileName, CancellationToken cancellationToken = default) where T : new()
-            => LoadAsync<T>(fileName, JsonStorageLocation.StreamingAssets, cancellationToken);
+        public static UniTask<T> LoadAsync<T>(string fileName, CancellationToken cancellationToken = default,
+            Microsoft.Extensions.Logging.ILogger logger = null) where T : new()
+            => LoadAsync<T>(fileName, JsonStorageLocation.StreamingAssets, cancellationToken, logger);
 
         /// <summary>
         /// 지정된 저장 위치에서 JSON 파일을 비동기적으로 읽어옴.
         /// URL 기반 플랫폼(WebGL, Android)에서는 UnityWebRequest, 그 외에는 파일 I/O를 사용함.
+        /// logger를 넘기면 실패 로그를 ZLogger로 남기고, 없으면 Unity 콘솔로 대신 출력함.
         /// </summary>
-        public static async UniTask<T> LoadAsync<T>(string fileName, JsonStorageLocation location, CancellationToken cancellationToken = default) where T : new()
+        public static async UniTask<T> LoadAsync<T>(string fileName, JsonStorageLocation location,
+            CancellationToken cancellationToken = default, Microsoft.Extensions.Logging.ILogger logger = null) where T : new()
         {
             string path = GetPath(fileName, location);
 
@@ -64,7 +87,7 @@ namespace HuliacDev.Utils
             {
                 if (IsRemotePath(path))
                 {
-                    return await LoadViaWebRequestAsync<T>(path, cancellationToken);
+                    return await LoadViaWebRequestAsync<T>(path, cancellationToken, logger);
                 }
 
                 if (File.Exists(path))
@@ -77,14 +100,14 @@ namespace HuliacDev.Utils
                     return JsonUtility.FromJson<T>(json) ?? new T();
                 }
 
-                Debug.LogWarning(ZString.Concat("[JsonLoader] JSON file not found: ", path));
+                LogWarning(logger, ZString.Concat("[JsonLoader] JSON file not found: ", path));
             }
             catch (OperationCanceledException)
             {
             }
             catch (Exception e)
             {
-                Debug.LogError(ZString.Concat("[JsonLoader] Failed to parse JSON async: ", path, ". Error: ", e.Message));
+                LogError(logger, ZString.Concat("[JsonLoader] Failed to parse JSON async: ", path, ". Error: ", e.Message));
             }
 
             return new T();
@@ -101,7 +124,7 @@ namespace HuliacDev.Utils
         /// WebGL/Android처럼 직접 파일 접근이 불가능한 URL 기반 플랫폼에서는 동기 I/O 자체가
         /// 불가능하므로 지원하지 않으며, 호출 시 에러를 로그로 남기고 기본값을 반환함.
         /// 메인 스레드를 블로킹하므로 비동기 컨텍스트를 쓸 수 없는 초기화 극초반이나
-        /// 에디터 전용 툴링 코드에서만 사용하고, 런타임 로직은 <see cref="LoadAsync{T}(string, JsonStorageLocation, CancellationToken)"/>를 쓸 것.
+        /// 에디터 전용 툴링 코드에서만 사용하고, 런타임 로직은 <see cref="LoadAsync{T}(string, JsonStorageLocation, CancellationToken, Microsoft.Extensions.Logging.ILogger)"/>를 쓸 것.
         /// </summary>
         public static T Load<T>(string fileName, JsonStorageLocation location) where T : new()
         {
@@ -136,7 +159,8 @@ namespace HuliacDev.Utils
         /// <summary>
         /// UnityWebRequest로 URL 경로의 JSON을 비동기 로드함.
         /// </summary>
-        private static async UniTask<T> LoadViaWebRequestAsync<T>(string path, CancellationToken cancellationToken) where T : new()
+        private static async UniTask<T> LoadViaWebRequestAsync<T>(string path, CancellationToken cancellationToken,
+            Microsoft.Extensions.Logging.ILogger logger) where T : new()
         {
             using (UnityWebRequest request = UnityWebRequest.Get(path))
             {
@@ -148,7 +172,7 @@ namespace HuliacDev.Utils
                 }
                 catch (UnityWebRequestException e)
                 {
-                    Debug.LogWarning(ZString.Concat("[JsonLoader] Failed to fetch JSON: ", path, ". Error: ", e.Error));
+                    LogWarning(logger, ZString.Concat("[JsonLoader] Failed to fetch JSON: ", path, ". Error: ", e.Error));
                     return new T();
                 }
 
@@ -160,20 +184,23 @@ namespace HuliacDev.Utils
         /// <summary>
         /// 데이터를 StreamingAssets에 JSON으로 비동기 저장하는 기본 오버로드.
         /// </summary>
-        public static UniTask SaveAsync<T>(string fileName, T data, CancellationToken cancellationToken = default)
-            => SaveAsync<T>(fileName, data, JsonStorageLocation.StreamingAssets, cancellationToken);
+        public static UniTask SaveAsync<T>(string fileName, T data, CancellationToken cancellationToken = default,
+            Microsoft.Extensions.Logging.ILogger logger = null)
+            => SaveAsync<T>(fileName, data, JsonStorageLocation.StreamingAssets, cancellationToken, logger);
 
         /// <summary>
         /// 데이터를 JSON 형식으로 비동기 저장함 (.json 확장자 자동 부착).
         /// StreamingAssets가 읽기 전용인 플랫폼(WebGL, Android)에서는 저장이 불가능함.
+        /// logger를 넘기면 실패 로그를 ZLogger로 남기고, 없으면 Unity 콘솔로 대신 출력함.
         /// </summary>
-        public static async UniTask SaveAsync<T>(string fileName, T data, JsonStorageLocation location, CancellationToken cancellationToken = default)
+        public static async UniTask SaveAsync<T>(string fileName, T data, JsonStorageLocation location,
+            CancellationToken cancellationToken = default, Microsoft.Extensions.Logging.ILogger logger = null)
         {
             string path = GetPath(fileName, location);
 
             if (IsRemotePath(path))
             {
-                Debug.LogError(ZString.Concat("[JsonLoader] Saving to StreamingAssets is not supported on this platform: ", path));
+                LogError(logger, ZString.Concat("[JsonLoader] Saving to StreamingAssets is not supported on this platform: ", path));
                 return;
             }
 
@@ -190,7 +217,7 @@ namespace HuliacDev.Utils
             }
             catch (Exception e)
             {
-                Debug.LogError(ZString.Concat("[JsonLoader] Failed to save JSON async: ", path, ". Error: ", e.Message));
+                LogError(logger, ZString.Concat("[JsonLoader] Failed to save JSON async: ", path, ". Error: ", e.Message));
             }
         }
 
@@ -203,7 +230,7 @@ namespace HuliacDev.Utils
         /// <summary>
         /// 데이터를 JSON 형식으로 동기적으로 저장함 (.json 확장자 자동 부착).
         /// StreamingAssets가 읽기 전용인 플랫폼(WebGL, Android)에서는 저장이 불가능함.
-        /// 메인 스레드를 블로킹하므로 <see cref="SaveAsync{T}(string, T, JsonStorageLocation, CancellationToken)"/>를 쓸 수 없는 제한적인
+        /// 메인 스레드를 블로킹하므로 <see cref="SaveAsync{T}(string, T, JsonStorageLocation, CancellationToken, Microsoft.Extensions.Logging.ILogger)"/>를 쓸 수 없는 제한적인
         /// 상황(에디터 전용 툴링 등)에서만 사용할 것.
         /// </summary>
         public static void Save<T>(string fileName, T data, JsonStorageLocation location)
