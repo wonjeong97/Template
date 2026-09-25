@@ -1,6 +1,15 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.25-2] - 2026-09-25
+
+### Fixed
+- **`GameCloser` closeSetting의 일부 필드만 빼면 그 필드가 0으로 덮어써지던 문제 수정(`Runtime/Utils`, `Runtime/Data/TemplateData.cs`):** 26.9.25-1은 `numToClose`가 양수면 `closeSetting` 전체를 적용해, JSON에서 `resetClickTime`·`imageAlpha`·`position` 중 일부만 빼면 그 필드가 0으로 인스펙터 기본값을 덮어썼음(26.9.25-1 항목에 적은 한계). `JsonUtility`가 JSON에 없는 필드(중첩 객체 키가 통째로 없는 경우 포함)에 필드 초기값을 남긴다는 점을 테스트로 확인하고, `CloseSetting`의 초기값을 "미지정" 표시값(`resetClickTime = -1`, `imageAlpha = -1`, `position = (-1, -1)`)으로 둠. 이제 JSON에 적은 필드만 적용하고 빠진 필드는 인스펙터 기본값을 유지함. 표시값은 정상 값과 겹치지 않게 골라, 투명도 0(숨은 버튼)과 위치 (0,0)(좌하단)은 그대로 적용됨. `numToClose`가 없거나 0 이하이면 이전처럼 설정 전체를 무시하고 경고를 남기며, 모든 필드를 적은 기존 설정 파일은 결과가 같음. 위치는 두 성분이 모두 지정된 경우에만 적용함. `GameCloserTests`에 테스트 6건 추가(JsonUtility 초기값 유지 동작, 키 누락, null, `numToClose`만 지정, 0을 포함한 전체 지정, 위치 한 성분만 지정).
+  - **Breaking:** JSON에서 `imageAlpha`·`position`·`resetClickTime`을 빼 두고 0으로 적용되는 것(예: 투명도 0으로 버튼 숨기기, 좌하단 배치)에 기대던 프로젝트는 이제 인스펙터 값이 쓰이므로, 해당 필드를 JSON에 명시해야 함. `resetClickTime`에 0 이하를 적은 경우도 미지정으로 처리됨. 코드에서 `new CloseSetting()`을 만들어 직렬화하면 표시값(-1)이 기록됨.
+
+### Changed
+- **`GameCloser` 설정 병합 로직을 순수 계산 유틸리티로 분리(`Runtime/Utils/CloseSettingResolver.cs`):** "CloseSetting + 현재 인스펙터 값 → 최종 적용 값" 계산을 Unity 오브젝트·`AppSettingsProvider`에 의존하지 않는 `internal` 정적 클래스 `CloseSettingResolver`로 옮기고, `GameCloser`는 그 결과를 `RectTransform`/`Image`에 적용하는 일만 하도록 함. 26.9.25-1에서 가짜 설정을 넣을 방법이 없어 생략했던 회귀 테스트를 새 리플렉션 없이 작성하기 위함이며, 테스트 어셈블리 접근을 위해 `Runtime/AssemblyInfo.cs`에 `InternalsVisibleTo("HuliacDev.Template.Tests")`를 추가함. 공개 API 변화는 없음.
+
 ## [26.9.25-1] - 2026-09-25
 
 ### Fixed

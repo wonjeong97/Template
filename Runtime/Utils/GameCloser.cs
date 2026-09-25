@@ -90,7 +90,7 @@ namespace HuliacDev.Utils
 
        /// <summary>
         /// JsonLoader를 통해 프레임 드랍 없이 Settings.json을 읽어와
-        /// 버튼의 작동 로직(클릭 횟수, 시간)과 UI(위치, 투명도)를 동적으로 덮어씌움.
+        /// 버튼의 작동 로직(클릭 횟수, 시간)과 UI(위치, 투명도) 중 JSON에 지정된 값만 덮어씌움.
         /// </summary>
         private async UniTaskVoid ApplySettingsAsync(CancellationToken cancellationToken)
         {
@@ -98,55 +98,55 @@ namespace HuliacDev.Utils
             {
                 Settings settings = await _settingsProvider.GetAsync(cancellationToken);
 
-                // JsonUtility는 JSON에 "closeSetting" 키가 없어도 null 대신 모든 값이 0인 기본 인스턴스를
-                // 만들므로 null 검사로는 누락을 알 수 없음. 그대로 적용하면 클릭 횟수·시간·투명도가 0으로
-                // 인스펙터 기본값을 덮어쓰므로, 유효한 클릭 횟수가 없으면 누락으로 보고 기본값을 유지함.
-                // 단, numToClose가 양수면 closeSetting 전체(resetClickTime, imageAlpha, position)를 적용하므로
-                // JSON에서 일부 필드만 빼면 그 필드는 0으로 덮어써짐.
-                if (settings == null || settings.closeSetting == null || settings.closeSetting.numToClose <= 0)
+                // 병합 규칙(누락 판정, 필드별 미지정 처리)은 CloseSettingResolver가 담당하고,
+                // 여기서는 그 결과를 컴포넌트에 적용하는 일만 함.
+                if (!CloseSettingResolver.TryResolve(settings?.closeSetting, targetClickCount, clickTimeWindow,
+                        out ResolvedCloseSetting resolved))
                 {
                     if (_logger != null)
                     {
                         _logger.ZLogWarning($"[GameCloser] closeSetting is missing or numToClose is not positive in settings. Using inspector defaults: Target({targetClickCount}), Window({clickTimeWindow}s)");
                     }
+                    return;
                 }
-                else
-                {
-                    // 1. 작동 로직 동기화
-                    targetClickCount = settings.closeSetting.numToClose;
-                    clickTimeWindow = settings.closeSetting.resetClickTime;
 
-                    // 2. UI 위치 동기화 (0~1 비율의 정규화 좌표 적용)
-                    if (TryGetComponent(out RectTransform rt))
-                    {
-                        Vector2 normalizedPos = settings.closeSetting.position;
-                        
-                        // 앵커(기준점)와 피벗(중심점)을 세팅값(예: 0,0 또는 1,1)으로 맞춰서 모서리를 지정함
-                        rt.anchorMin = normalizedPos;
-                        rt.anchorMax = normalizedPos;
-                        rt.pivot = normalizedPos;
-                        
-                        // 기준점에 완전히 밀착하도록 로컬 좌표를 0으로 초기화
-                        rt.anchoredPosition = Vector2.zero;
-                    }
-
-                    // 3. UI 투명도 동기화
-                    if (TryGetComponent(out Image img))
-                    {
-                        Color c = img.color;
-                        c.a = settings.closeSetting.imageAlpha;
-                        img.color = c;
-                    }
-
-                    if (_logger != null)
-                    {
-                        _logger.ZLogInformation($"[GameCloser] Settings applied from JSON: Pos({settings.closeSetting.position}), Alpha({settings.closeSetting.imageAlpha}), Target({targetClickCount}), Window({clickTimeWindow}s)");
-                    }
-                }
+                ApplyResolvedSettings(resolved);
             }
             catch (OperationCanceledException)
             {
                 // 오브젝트 파괴 시 정상적으로 취소됨
+            }
+        }
+
+        /// <summary>
+        /// 병합된 설정을 클릭 조건과 RectTransform·Image에 적용함.
+        /// 위치·투명도는 JSON에서 지정된 경우에만 바꾸고, 미지정이면 인스펙터에서 정한 값을 그대로 둠.
+        /// </summary>
+        private void ApplyResolvedSettings(ResolvedCloseSetting resolved)
+        {
+            targetClickCount = resolved.TargetClickCount;
+            clickTimeWindow = resolved.ClickTimeWindow;
+
+            // 앵커(기준점)와 피벗(중심점)을 세팅값(0~1 정규화 좌표, 예: 0,0 또는 1,1)으로 맞춰서 모서리를 지정하고,
+            // 기준점에 완전히 밀착하도록 로컬 좌표를 0으로 초기화함.
+            if (resolved.HasPosition && TryGetComponent(out RectTransform rt))
+            {
+                rt.anchorMin = resolved.Position;
+                rt.anchorMax = resolved.Position;
+                rt.pivot = resolved.Position;
+                rt.anchoredPosition = Vector2.zero;
+            }
+
+            if (resolved.HasImageAlpha && TryGetComponent(out Image img))
+            {
+                Color c = img.color;
+                c.a = resolved.ImageAlpha;
+                img.color = c;
+            }
+
+            if (_logger != null)
+            {
+                _logger.ZLogInformation($"[GameCloser] Settings applied from JSON: Pos({(resolved.HasPosition ? resolved.Position.ToString() : "inspector")}), Alpha({(resolved.HasImageAlpha ? resolved.ImageAlpha.ToString() : "inspector")}), Target({targetClickCount}), Window({clickTimeWindow}s)");
             }
         }
 

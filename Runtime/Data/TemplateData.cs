@@ -22,13 +22,25 @@ namespace HuliacDev.Data
         Filled
     }
 
+    /// <summary>
+    /// GameCloser 설정. 각 필드의 초기값은 "JSON에서 미지정"을 뜻하는 표시값임.
+    /// JsonUtility는 JSON에 없는 필드(중첩 객체 키가 통째로 없는 경우 포함)에 초기값을 그대로 남기므로,
+    /// GameCloser는 표시값인 필드를 건너뛰고 인스펙터 기본값을 유지함.
+    /// </summary>
     [Serializable]
     public class CloseSetting
     {
-        public Vector2 position;
+        /// <summary>버튼 모서리 위치(0~1 정규화 좌표). 두 성분 중 하나라도 음수면 미지정.</summary>
+        public Vector2 position = new Vector2(-1f, -1f);
+
+        /// <summary>앱 종료에 필요한 연속 클릭 횟수. 0 이하면 미지정이며, 이때는 closeSetting 전체를 무시함.</summary>
         public int numToClose;
-        public float resetClickTime;
-        public float imageAlpha;
+
+        /// <summary>연속 클릭으로 인정하는 제한 시간(초). 0 이하면 미지정.</summary>
+        public float resetClickTime = -1f;
+
+        /// <summary>버튼 이미지 투명도(0~1). 음수면 미지정. 0은 완전히 투명한 정상 값임.</summary>
+        public float imageAlpha = -1f;
     }
 
     /// <summary>
