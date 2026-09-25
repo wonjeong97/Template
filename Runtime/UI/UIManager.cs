@@ -477,8 +477,8 @@ namespace HuliacDev.UI
         }
 
         /// <summary>
-        /// 버튼의 텍스트 컴포넌트 설정을 적용함.
-        /// 기존 텍스트를 찾지 못했을 때만 "Text" 자식을 새로 만듦. 버튼 자신에 Text를 붙이지 않는 이유:
+        /// 버튼의 텍스트 컴포넌트(legacy Text 또는 TMP_Text) 설정을 적용함.
+        /// 기존 텍스트를 찾지 못했을 때만 legacy "Text" 자식을 새로 만듦. 버튼 자신에 Text를 붙이지 않는 이유:
         /// 배경 Image가 이미 붙어 있으면 Graphic 컴포넌트는 한 오브젝트에 둘을 둘 수 없어
         /// AddComponent가 null을 반환하고 텍스트가 사라짐.
         /// </summary>
@@ -486,33 +486,57 @@ namespace HuliacDev.UI
         {
             if (textSetting == null) return;
 
-            Text btnText = FindButtonText(target);
-            if (!btnText)
+            if (TryFindButtonText(target, out Text legacyText, out TMP_Text tmpText))
             {
-                btnText = CreateButtonTextChild(target);
+                if (legacyText)
+                {
+                    ApplyTextSettings(legacyText, textSetting);
+                }
+                else
+                {
+                    ApplyTMPTextSettings(tmpText, textSetting);
+                }
+                return;
             }
 
-            ApplyTextSettings(btnText, textSetting);
+            ApplyTextSettings(CreateButtonTextChild(target), textSetting);
         }
 
         /// <summary>
-        /// 버튼 자신 → 직계 자식 "Text" → 그 밖의 직계 자식 순으로 Text를 찾고, 없으면 null을 반환함.
-        /// 마지막 단계는 Unity 메뉴(UI > Legacy > Button)가 만드는 "Text (Legacy)"처럼 이름이 다른
-        /// 기존 버튼에서 새 자식이 생겨 글자가 겹치지 않도록 하기 위함. 손자 이하 계층은 보지 않음.
+        /// 버튼 자신 → 직계 자식 "Text" → 그 밖의 직계 자식 순으로 텍스트 컴포넌트를 찾음.
+        /// 각 단계에서 legacy Text와 TMP_Text를 함께 확인하여, Unity 메뉴가 만드는 "Text (Legacy)"와
+        /// "Text (TMP)"처럼 이름이 다른 기존 버튼에 새 자식이 생겨 글자가 겹치지 않게 함.
+        /// 손자 이하 계층은 보지 않음. 찾으면 둘 중 하나만 채워서 true를 반환함.
         /// </summary>
-        private static Text FindButtonText(GameObject target)
+        private static bool TryFindButtonText(GameObject target, out Text legacyText, out TMP_Text tmpText)
         {
-            if (target.TryGetComponent(out Text selfText)) return selfText;
+            if (TryGetTextComponent(target.transform, out legacyText, out tmpText)) return true;
 
             Transform named = target.transform.Find(ButtonTextChildName);
-            if (named && named.TryGetComponent(out Text namedText)) return namedText;
+            if (named && TryGetTextComponent(named, out legacyText, out tmpText)) return true;
 
             foreach (Transform child in target.transform)
             {
-                if (child.TryGetComponent(out Text childText)) return childText;
+                if (TryGetTextComponent(child, out legacyText, out tmpText)) return true;
             }
 
-            return null;
+            legacyText = null;
+            tmpText = null;
+            return false;
+        }
+
+        /// <summary>
+        /// 한 오브젝트에서 legacy Text를 먼저, 없으면 TMP_Text를 찾음.
+        /// 둘 다 Graphic이라 한 오브젝트에 함께 붙을 수 없으므로 실제로 둘이 겹칠 일은 없고,
+        /// 순서는 이 메서드가 새로 만드는 쪽(legacy "Text")과 맞춘 것일 뿐임.
+        /// </summary>
+        private static bool TryGetTextComponent(Transform candidate, out Text legacyText, out TMP_Text tmpText)
+        {
+            tmpText = null;
+            if (candidate.TryGetComponent(out legacyText)) return true;
+
+            legacyText = null;
+            return candidate.TryGetComponent(out tmpText);
         }
 
         /// <summary>

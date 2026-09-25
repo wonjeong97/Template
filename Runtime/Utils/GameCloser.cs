@@ -101,6 +101,8 @@ namespace HuliacDev.Utils
                 // JsonUtility는 JSON에 "closeSetting" 키가 없어도 null 대신 모든 값이 0인 기본 인스턴스를
                 // 만들므로 null 검사로는 누락을 알 수 없음. 그대로 적용하면 클릭 횟수·시간·투명도가 0으로
                 // 인스펙터 기본값을 덮어쓰므로, 유효한 클릭 횟수가 없으면 누락으로 보고 기본값을 유지함.
+                // 단, numToClose가 양수면 closeSetting 전체(resetClickTime, imageAlpha, position)를 적용하므로
+                // JSON에서 일부 필드만 빼면 그 필드는 0으로 덮어써짐.
                 if (settings == null || settings.closeSetting == null || settings.closeSetting.numToClose <= 0)
                 {
                     if (_logger != null)

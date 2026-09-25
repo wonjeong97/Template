@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
+using TMPro;
 using UnityEngine;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
@@ -271,6 +272,35 @@ namespace HuliacDev.Tests
 
             Assert.AreEqual(1, buttonGo.transform.childCount, "기존 텍스트 자식이 있으면 새 자식을 만들면 안 됨");
             Assert.AreEqual("확인", legacyText.text, "기존 Text에 설정이 적용되어야 함");
+        }
+
+        /// <summary>
+        /// Unity 메뉴(UI > Button - TextMeshPro)로 만든 버튼은 루트에 Image, 자식 "Text (TMP)"에
+        /// TextMeshProUGUI를 둠. 이런 버튼에 SetButton을 하면 legacy "Text" 자식을 새로 만들지 않고
+        /// 기존 TMP 텍스트에 적용해야 함. 새로 만들면 TMP 글자 위에 legacy 글자가 겹침.
+        /// </summary>
+        [Test]
+        public void TMP_텍스트_자식이_있으면_새로_만들지_않고_재사용한다()
+        {
+            GameObject buttonGo = new GameObject("TmpButton", typeof(RectTransform));
+            _spawned.Add(buttonGo);
+            buttonGo.AddComponent<Image>();
+
+            GameObject tmpTextGo = new GameObject("Text (TMP)", typeof(RectTransform));
+            tmpTextGo.transform.SetParent(buttonGo.transform, false);
+            TextMeshProUGUI tmpText = tmpTextGo.AddComponent<TextMeshProUGUI>();
+            tmpText.text = "Button";
+
+            ButtonSetting setting = new ButtonSetting
+            {
+                name = "TmpButton",
+                buttonText = new TextSetting { name = "Label", text = "확인" }
+            };
+
+            _uiManager.SetButton(buttonGo, setting);
+
+            Assert.AreEqual(1, buttonGo.transform.childCount, "TMP 텍스트 자식이 있으면 legacy 자식을 새로 만들면 안 됨");
+            Assert.AreEqual("확인", tmpText.text, "기존 TMP 텍스트에 설정이 적용되어야 함");
         }
 
         /// <summary>
