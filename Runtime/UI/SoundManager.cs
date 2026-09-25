@@ -31,6 +31,9 @@ namespace HuliacDev.UI
         private bool _isMuted;
         private string _currentBGMKey;
 
+        // 설정 로드 완료 여부. 재생 요청이 무시됐을 때 "아직 로드 전"인지 "없는 키"인지 구분하는 데 씀.
+        private bool _isSettingsLoaded;
+
         public float MasterVolume => _masterVolume;
         public float BGMVolume => _bgmVolume;
         public float SFXVolume => _sfxVolume;
@@ -122,15 +125,18 @@ namespace HuliacDev.UI
             {
                 Settings settings = await _settingsProvider.GetAsync(cancellationToken);
 
-                if (settings?.sounds == null) return;
-
-                foreach (SoundSetting s in settings.sounds)
+                if (settings?.sounds != null)
                 {
-                    if (!_soundSettings.ContainsKey(s.key))
+                    foreach (SoundSetting s in settings.sounds)
                     {
-                        _soundSettings.Add(s.key, s);
+                        if (!_soundSettings.ContainsKey(s.key))
+                        {
+                            _soundSettings.Add(s.key, s);
+                        }
                     }
                 }
+
+                _isSettingsLoaded = true;
             }
             catch (OperationCanceledException)
             {
@@ -218,7 +224,7 @@ namespace HuliacDev.UI
         /// </summary>
         public void PlayBGM(string key)
         {
-            if (!_soundSettings.TryGetValue(key, out SoundSetting setting)) return;
+            if (!TryGetSoundSetting(key, nameof(PlayBGM), out SoundSetting setting)) return;
 
             _currentBGMKey = key;
             CancelFadeRoutine();
@@ -230,9 +236,36 @@ namespace HuliacDev.UI
         /// </summary>
         public void PlaySFX(string key)
         {
-            if (!_soundSettings.TryGetValue(key, out SoundSetting setting)) return;
+            if (!TryGetSoundSetting(key, nameof(PlaySFX), out SoundSetting setting)) return;
 
             LoadAndPlayAsync(setting, _sfxSource, false, this.GetCancellationTokenOnDestroy()).Forget();
+        }
+
+        /// <summary>
+        /// 키에 해당하는 사운드 설정을 찾고, 없으면 설정 미로드와 미등록 키를 구분해 경고를 남김.
+        /// </summary>
+        private bool TryGetSoundSetting(string key, string caller, out SoundSetting setting)
+        {
+            if (!string.IsNullOrEmpty(key) && _soundSettings.TryGetValue(key, out setting))
+            {
+                return true;
+            }
+
+            setting = null;
+
+            if (_logger != null)
+            {
+                if (!_isSettingsLoaded)
+                {
+                    _logger.ZLogWarning($"[SoundManager] Sound settings are not loaded yet. Ignored {caller}: {key}");
+                }
+                else
+                {
+                    _logger.ZLogWarning($"[SoundManager] Unknown sound key. Ignored {caller}: {key}");
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -259,9 +292,12 @@ namespace HuliacDev.UI
         /// </summary>
         public void FadeOutBGM(float duration)
         {
+            // 재생 중이 아니어도 키는 먼저 지움. 첫 로드가 진행 중일 때 호출되면 재생 중인 BGM이 없어
+            // 아래 가드에서 반환되는데, 키가 남아 있으면 로드 완료 후 LoadAndPlayAsync가 재생해 버림.
+            _currentBGMKey = null;
+
             if (!_bgmSource || !_bgmSource.isPlaying) return;
 
-            _currentBGMKey = null;
             CancelFadeRoutine();
             _bgmFadeCts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
 
@@ -375,6 +411,14 @@ namespace HuliacDev.UI
             if (!targetClip)
             {
                 if (_logger != null) _logger.ZLogWarning($"[SoundManager] targetClip is null. Cannot play sound.");
+                return;
+            }
+
+            // 다운로드를 기다리는 사이 StopBGM/FadeOutBGM/다른 PlayBGM이 호출됐으면 이 요청은 이미
+            // 무효임. 그대로 재생하면 정지한 BGM이 되살아나거나 새로 고른 BGM을 덮어씀.
+            if (isBGM && _currentBGMKey != setting.key)
+            {
+                if (_logger != null) _logger.ZLogInformation($"[SoundManager] BGM request superseded while loading; skipped: {setting.key}");
                 return;
             }
 

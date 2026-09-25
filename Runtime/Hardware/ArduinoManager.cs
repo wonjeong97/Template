@@ -165,7 +165,19 @@ namespace HuliacDev.Hardware
         private bool _isReconnecting;
         private CancellationTokenSource _reconnectCts;
 
-        public bool IsConnected => _serialPort != null && _serialPort.IsOpen;
+        /// <summary>
+        /// 시리얼 포트가 열려 있는지 여부.
+        /// 읽기 스레드의 DisconnectInternal이 _serialPort를 언제든 null로 바꿀 수 있으므로,
+        /// 필드를 두 번 읽지 않고 지역 변수에 한 번 복사해 검사함(검사와 사용 사이 NRE 방지).
+        /// </summary>
+        public bool IsConnected
+        {
+            get
+            {
+                SerialPort port = _serialPort;
+                return port != null && port.IsOpen;
+            }
+        }
 
         /// <summary>
         /// VContainer 의존성 주입.
@@ -571,11 +583,13 @@ namespace HuliacDev.Hardware
         /// </summary>
         public void Send(string msg)
         {
-            if (!IsConnected) return;
-            
+            // IsConnected와 같은 이유로 필드를 지역 변수에 고정한 뒤 검사·사용함.
+            SerialPort port = _serialPort;
+            if (port == null || !port.IsOpen) return;
+
             try
             {
-                _serialPort.WriteLine(msg);
+                port.WriteLine(msg);
             }
             catch (Exception e)
             {

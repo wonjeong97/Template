@@ -22,6 +22,9 @@ namespace HuliacDev.UI
 {
     public class UIManager : MonoBehaviour
     {
+        /// <summary>SetButton이 버튼 텍스트를 찾고 만드는 직계 자식 오브젝트 이름.</summary>
+        public const string ButtonTextChildName = "Text";
+
         private bool _isOriginal;
 
         private readonly Dictionary<string, string> _fontAddresses = new Dictionary<string, string>();
@@ -474,19 +477,84 @@ namespace HuliacDev.UI
         }
 
         /// <summary>
-        /// 버튼 하위의 텍스트 컴포넌트 설정을 적용함.
+        /// 버튼의 텍스트 컴포넌트(legacy Text 또는 TMP_Text) 설정을 적용함.
+        /// 기존 텍스트를 찾지 못했을 때만 legacy "Text" 자식을 새로 만듦. 버튼 자신에 Text를 붙이지 않는 이유:
+        /// 배경 Image가 이미 붙어 있으면 Graphic 컴포넌트는 한 오브젝트에 둘을 둘 수 없어
+        /// AddComponent가 null을 반환하고 텍스트가 사라짐.
         /// </summary>
         private void ApplyButtonText(GameObject target, TextSetting textSetting)
         {
             if (textSetting == null) return;
 
-            Text btnText = target.GetComponentInChildren<Text>();
-            if (!btnText)
+            if (TryFindButtonText(target, out Text legacyText, out TMP_Text tmpText))
             {
-                btnText = target.AddComponent<Text>();
+                if (legacyText)
+                {
+                    ApplyTextSettings(legacyText, textSetting);
+                }
+                else
+                {
+                    ApplyTMPTextSettings(tmpText, textSetting);
+                }
+                return;
             }
 
-            ApplyTextSettings(btnText, textSetting);
+            ApplyTextSettings(CreateButtonTextChild(target), textSetting);
+        }
+
+        /// <summary>
+        /// 버튼 자신 → 직계 자식 "Text" → 그 밖의 직계 자식 순으로 텍스트 컴포넌트를 찾음.
+        /// 각 단계에서 legacy Text와 TMP_Text를 함께 확인하여, Unity 메뉴가 만드는 "Text (Legacy)"와
+        /// "Text (TMP)"처럼 이름이 다른 기존 버튼에 새 자식이 생겨 글자가 겹치지 않게 함.
+        /// 손자 이하 계층은 보지 않음. 찾으면 둘 중 하나만 채워서 true를 반환함.
+        /// </summary>
+        private static bool TryFindButtonText(GameObject target, out Text legacyText, out TMP_Text tmpText)
+        {
+            if (TryGetTextComponent(target.transform, out legacyText, out tmpText)) return true;
+
+            Transform named = target.transform.Find(ButtonTextChildName);
+            if (named && TryGetTextComponent(named, out legacyText, out tmpText)) return true;
+
+            foreach (Transform child in target.transform)
+            {
+                if (TryGetTextComponent(child, out legacyText, out tmpText)) return true;
+            }
+
+            legacyText = null;
+            tmpText = null;
+            return false;
+        }
+
+        /// <summary>
+        /// 한 오브젝트에서 legacy Text를 먼저, 없으면 TMP_Text를 찾음.
+        /// 둘 다 Graphic이라 한 오브젝트에 함께 붙을 수 없으므로 실제로 둘이 겹칠 일은 없고,
+        /// 순서는 이 메서드가 새로 만드는 쪽(legacy "Text")과 맞춘 것일 뿐임.
+        /// </summary>
+        private static bool TryGetTextComponent(Transform candidate, out Text legacyText, out TMP_Text tmpText)
+        {
+            tmpText = null;
+            if (candidate.TryGetComponent(out legacyText)) return true;
+
+            return candidate.TryGetComponent(out tmpText);
+        }
+
+        /// <summary>
+        /// 버튼 영역 전체를 채우는 텍스트 전용 자식 오브젝트를 만들고 그 Text를 반환함.
+        /// </summary>
+        private static Text CreateButtonTextChild(GameObject target)
+        {
+            GameObject textObj = new GameObject(ButtonTextChildName, typeof(RectTransform));
+            textObj.transform.SetParent(target.transform, false);
+
+            RectTransform rt = (RectTransform)textObj.transform;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+
+            Text text = textObj.AddComponent<Text>();
+            text.raycastTarget = false;
+            return text;
         }
 
         /// <summary>
@@ -584,13 +652,14 @@ namespace HuliacDev.UI
 
         /// <summary>
         /// 텍스트 컴포넌트의 텍스트, 크기, 정렬 및 폰트를 설정함.
+        /// fontSize가 0 이하면 미지정으로 보고 기존 글자 크기를 유지함(JSON에서 빠지면 0이 되어 글자가 사라지는 것을 막기 위함).
         /// </summary>
         private void ApplyTextSettings(Text txt, TextSetting setting)
         {
             if (!txt || setting == null) return;
 
             txt.text = setting.text;
-            txt.fontSize = setting.fontSize;
+            if (setting.fontSize > 0) txt.fontSize = setting.fontSize;
             txt.color = setting.fontColor;
             txt.alignment = setting.alignment;
 
@@ -599,13 +668,14 @@ namespace HuliacDev.UI
 
         /// <summary>
         /// TMP_Text 컴포넌트의 텍스트, 크기, 정렬 및 폰트를 설정함.
+        /// fontSize가 0 이하면 미지정으로 보고 기존 글자 크기를 유지함(JSON에서 빠지면 0이 되어 글자가 사라지는 것을 막기 위함).
         /// </summary>
         private void ApplyTMPTextSettings(TMP_Text txt, TextSetting setting)
         {
             if (!txt || setting == null) return;
 
             txt.text = setting.text;
-            txt.fontSize = setting.fontSize;
+            if (setting.fontSize > 0) txt.fontSize = setting.fontSize;
             txt.color = setting.fontColor;
             txt.alignment = ConvertTextAlignment(setting.alignment);
 

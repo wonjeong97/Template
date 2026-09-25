@@ -3,14 +3,13 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Cysharp.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 using NUnit.Framework;
+using TMPro;
 using UnityEngine;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 using HuliacDev.Data;
 using HuliacDev.UI;
-using ZLogger.Unity;
 
 namespace HuliacDev.Tests
 {
@@ -108,6 +107,41 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
+        /// JSON에서 fontSize를 빼면 기본값 0이 들어옴. 0 이하는 미지정으로 보고 기존 글자 크기를
+        /// 유지해야 함. 그대로 0을 적용하면 legacy Text 글자가 보이지 않게 됨.
+        /// </summary>
+        [Test]
+        public void fontSize를_지정하지_않으면_legacy_Text의_기존_글자_크기가_유지된다()
+        {
+            GameObject go = new GameObject("KeepLegacySize", typeof(RectTransform));
+            _spawned.Add(go);
+            Text text = go.AddComponent<Text>();
+            text.fontSize = 40;
+
+            _uiManager.SetText(go, new TextSetting { name = "KeepLegacySize", text = "크기 유지" });
+
+            Assert.AreEqual("크기 유지", text.text, "fontSize 외 설정은 적용되어야 함");
+            Assert.AreEqual(40, text.fontSize, "fontSize 미지정(0)이 기존 글자 크기를 덮어씀");
+        }
+
+        /// <summary>
+        /// TMP_Text도 legacy Text와 같은 규칙으로, fontSize 미지정(0 이하)이면 기존 글자 크기를 유지해야 함.
+        /// </summary>
+        [Test]
+        public void fontSize를_지정하지_않으면_TMP_Text의_기존_글자_크기가_유지된다()
+        {
+            GameObject go = new GameObject("KeepTmpSize", typeof(RectTransform));
+            _spawned.Add(go);
+            TextMeshProUGUI tmpText = go.AddComponent<TextMeshProUGUI>();
+            tmpText.fontSize = 40f;
+
+            _uiManager.SetTMPText(go, new TextSetting { name = "KeepTmpSize", text = "크기 유지" });
+
+            Assert.AreEqual("크기 유지", tmpText.text, "fontSize 외 설정은 적용되어야 함");
+            Assert.AreEqual(40f, tmpText.fontSize, 0.001f, "fontSize 미지정(0)이 기존 글자 크기를 덮어씀");
+        }
+
+        /// <summary>
         /// RectTransform 속성이 설정값대로 적용되어야 함.
         /// </summary>
         [Test]
@@ -180,20 +214,26 @@ namespace HuliacDev.Tests
         /// SetButton으로 등록한 buttonSound가 클릭 시 SoundManager.PlaySFX로 실제 전달되는지 검증.
         /// PlaySFX는 키를 찾으면 비동기 로드를 시작하는데, 존재하지 않는 clipPath를 넣어 로드가
         /// 실패하도록 만들고 그 실패 로그(클립 경로 포함)를 관찰함으로써 클릭→SoundManager 연결을
-        /// 검증함. 로컬 파일 미존재는 UnityWebRequest가 프레임 진행 없이 동기적으로 실패를
-        /// 확정하므로 프레임을 넘기지 않아도 됨 — 일부러 프레임을 넘기지 않아 이 테스트가
-        /// _uiManager(DI 없이 생성됨)의 Start()를 건드리지 않도록 함(다른 로그와 순서 충돌 방지).
+        /// 검증함. 로컬 파일 미존재 실패가 동기적으로 확정된다고 가정하고 프레임을 넘기지 않던 예전
+        /// 방식은, 앞선 테스트가 실제 오디오를 로드한 뒤에는 실패가 비동기로 확정되어 로그를 놓쳤음.
+        /// 그래서 클릭 후 실시간으로 잠시 기다림. LogAssert.Expect는 등록 순서대로 대조하므로, 두 매니저
+        /// (DI 없이 생성됨)의 Start()가 출력하는 의존성 누락 오류를 클릭 전에 먼저 나오게 해 순서를 고정함.
+        /// 두 Start()의 호출 순서는 보장되지 않으므로 각 예상은 어느 쪽 메시지든 받아들임.
         /// </summary>
-        [Test]
-        public void 버튼_클릭시_buttonSound가_SoundManager로_전달된다()
+        [UnityTest]
+        public IEnumerator 버튼_클릭시_buttonSound가_SoundManager로_전달된다() => UniTask.ToCoroutine(async () =>
         {
+            Regex missingDependency = new Regex(@"\[UIManager\] Dependencies were not injected|\[SoundManager\] AppSettingsProvider was not injected");
+            LogAssert.Expect(LogType.Error, missingDependency);
+            LogAssert.Expect(LogType.Error, missingDependency);
+
             GameObject soundGo = new GameObject("SoundManagerForButtonTest");
             _spawned.Add(soundGo);
             SoundManager soundManager = soundGo.AddComponent<SoundManager>();
 
-            SetSoundManagerLogger(soundManager);
+            SoundManagerTestHelper.SetLogger(soundManager);
             SetSoundManager(_uiManager, soundManager);
-            SetSoundSetting(soundManager, "click", "sounds/UIManagerTests_존재하지않는파일.wav");
+            SoundManagerTestHelper.SetSoundSetting(soundManager, "click", "sounds/UIManagerTests_존재하지않는파일.wav");
 
             GameObject buttonGo = new GameObject("SoundButton");
             _spawned.Add(buttonGo);
@@ -201,9 +241,101 @@ namespace HuliacDev.Tests
             ButtonSetting setting = new ButtonSetting { name = "SoundButton", buttonSound = "click" };
             _uiManager.SetButton(buttonGo, setting);
 
+            // 두 매니저의 Start()가 실행되어 의존성 누락 오류가 먼저 출력되도록 프레임을 넘김.
+            await UniTask.Yield();
+            await UniTask.Yield();
+
             LogAssert.Expect(LogType.Error, new Regex("Failed to load sound.*UIManagerTests_존재하지않는파일"));
 
             buttonGo.GetComponent<Button>().onClick.Invoke();
+
+            await UniTask.Delay(1000, DelayType.UnscaledDeltaTime);
+        });
+
+        /// <summary>
+        /// 배경 Image가 붙은 버튼에 텍스트를 설정하면, Graphic 충돌로 버튼 자신에는 Text를 붙일 수
+        /// 없으므로 직계 자식 "Text"에 적용되어야 함. 예전에는 AddComponent가 null을 반환해
+        /// 텍스트가 조용히 사라졌음. 다시 설정해도 자식이 중복 생성되면 안 됨.
+        /// </summary>
+        [Test]
+        public void 배경과_텍스트를_함께_설정해도_버튼_텍스트가_적용된다()
+        {
+            GameObject buttonGo = new GameObject("BgTextButton");
+            _spawned.Add(buttonGo);
+
+            ButtonSetting setting = new ButtonSetting
+            {
+                name = "BgTextButton",
+                buttonBackgroundImage = new ImageSetting { name = "Bg" },
+                buttonText = new TextSetting { name = "Label", text = "확인" }
+            };
+
+            _uiManager.SetButton(buttonGo, setting);
+            _uiManager.SetButton(buttonGo, setting);
+
+            Transform child = buttonGo.transform.Find(UIManager.ButtonTextChildName);
+            Assert.IsTrue(child, "버튼 텍스트 자식이 생성되어야 함");
+            Assert.IsTrue(child.TryGetComponent(out Text text), "자식에 Text가 있어야 함");
+            Assert.AreEqual("확인", text.text);
+            Assert.AreEqual(1, buttonGo.transform.childCount, "재설정 시 텍스트 자식이 중복 생성되면 안 됨");
+        }
+
+        /// <summary>
+        /// Unity 메뉴(UI > Legacy > Button)로 만든 버튼은 텍스트 자식 이름이 "Text (Legacy)"임.
+        /// 이런 기존 버튼에 SetButton을 하면 새 "Text" 자식을 만들지 않고 기존 Text에 적용해야 함.
+        /// 새로 만들면 두 텍스트가 겹쳐 보임.
+        /// </summary>
+        [Test]
+        public void 이름이_다른_기존_텍스트_자식이_있으면_새로_만들지_않고_재사용한다()
+        {
+            GameObject buttonGo = new GameObject("LegacyButton");
+            _spawned.Add(buttonGo);
+
+            GameObject legacyTextGo = new GameObject("Text (Legacy)", typeof(RectTransform));
+            legacyTextGo.transform.SetParent(buttonGo.transform, false);
+            Text legacyText = legacyTextGo.AddComponent<Text>();
+            legacyText.text = "Button";
+
+            ButtonSetting setting = new ButtonSetting
+            {
+                name = "LegacyButton",
+                buttonBackgroundImage = new ImageSetting { name = "Bg" },
+                buttonText = new TextSetting { name = "Label", text = "확인" }
+            };
+
+            _uiManager.SetButton(buttonGo, setting);
+
+            Assert.AreEqual(1, buttonGo.transform.childCount, "기존 텍스트 자식이 있으면 새 자식을 만들면 안 됨");
+            Assert.AreEqual("확인", legacyText.text, "기존 Text에 설정이 적용되어야 함");
+        }
+
+        /// <summary>
+        /// Unity 메뉴(UI > Button - TextMeshPro)로 만든 버튼은 루트에 Image, 자식 "Text (TMP)"에
+        /// TextMeshProUGUI를 둠. 이런 버튼에 SetButton을 하면 legacy "Text" 자식을 새로 만들지 않고
+        /// 기존 TMP 텍스트에 적용해야 함. 새로 만들면 TMP 글자 위에 legacy 글자가 겹침.
+        /// </summary>
+        [Test]
+        public void TMP_텍스트_자식이_있으면_새로_만들지_않고_재사용한다()
+        {
+            GameObject buttonGo = new GameObject("TmpButton", typeof(RectTransform));
+            _spawned.Add(buttonGo);
+            buttonGo.AddComponent<Image>();
+
+            GameObject tmpTextGo = new GameObject("Text (TMP)", typeof(RectTransform));
+            tmpTextGo.transform.SetParent(buttonGo.transform, false);
+            TextMeshProUGUI tmpText = tmpTextGo.AddComponent<TextMeshProUGUI>();
+            tmpText.text = "Button";
+
+            ButtonSetting setting = new ButtonSetting
+            {
+                name = "TmpButton",
+                buttonText = new TextSetting { name = "Label", text = "확인" }
+            };
+
+            _uiManager.SetButton(buttonGo, setting);
+
+            Assert.AreEqual(1, buttonGo.transform.childCount, "TMP 텍스트 자식이 있으면 legacy 자식을 새로 만들면 안 됨");
+            Assert.AreEqual("확인", tmpText.text, "기존 TMP 텍스트에 설정이 적용되어야 함");
         }
 
         /// <summary>
@@ -280,29 +412,6 @@ namespace HuliacDev.Tests
         private static void SetSoundManager(UIManager uiManager, SoundManager soundManager)
         {
             typeof(UIManager).GetField("_soundManager", Nonpublic).SetValue(uiManager, soundManager);
-        }
-
-        private static void SetSoundSetting(SoundManager soundManager, string key, string clipPath)
-        {
-            FieldInfo field = typeof(SoundManager).GetField("_soundSettings", Nonpublic);
-            Dictionary<string, SoundSetting> settings = (Dictionary<string, SoundSetting>)field.GetValue(soundManager);
-            settings[key] = new SoundSetting { key = key, clipPath = clipPath, volume = 1f };
-        }
-
-        /// <summary>
-        /// SoundManager의 실패 로그가 실제로 콘솔에 출력되도록, DI 없이 생성된 인스턴스에
-        /// ZLogger 기반 로거를 직접 주입함(RootLifetimeScope.ConfigureLogging의 최소 재현).
-        /// </summary>
-        private static void SetSoundManagerLogger(SoundManager soundManager)
-        {
-            ILoggerFactory factory = LoggerFactory.Create(builder =>
-            {
-                builder.SetMinimumLevel(LogLevel.Debug);
-                builder.AddZLoggerUnityDebug();
-            });
-
-            ILogger<SoundManager> logger = factory.CreateLogger<SoundManager>();
-            typeof(SoundManager).GetField("_logger", Nonpublic).SetValue(soundManager, logger);
         }
     }
 }

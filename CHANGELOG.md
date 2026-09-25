@@ -1,6 +1,25 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.25-1] - 2026-09-25
+
+### Fixed
+- **`SoundManager` 늦게 끝난 BGM 로드가 정지·교체 요청을 덮어쓰던 문제 수정(`Runtime/UI`):** 캐시에 없는 BGM은 다운로드 완료 후 무조건 재생되어, 로드 중 `StopBGM`/`FadeOutBGM`을 호출하면 정지한 BGM이 되살아나고, 로드 중 다른 BGM을 요청하면 늦게 도착한 이전 BGM이 새 BGM을 덮어썼음. 재생 직전에 이 요청이 아직 현재 BGM(`_currentBGMKey`)인지 확인해 무효가 된 요청은 건너뜀. 또 `FadeOutBGM`은 재생 중인 BGM이 없으면 키를 지우기 전에 반환해, 부팅 직후 첫 로드 중에 호출하면 로드가 끝난 뒤 BGM이 재생됐음. 키를 먼저 지우고, 재생 중이 아닐 때는 페이드 루틴만 시작하지 않도록 순서를 바꿈. `SoundManagerTests`에 회귀 테스트 2건 추가(로드 중 `StopBGM`, 첫 로드 중 `FadeOutBGM`; 둘 다 수정 전 코드에서 실패함을 확인). "캐시된 BGM으로 교체" 시나리오는 같은 확인 한 줄을 공유하지만, 이 에디터 환경에서 로드가 동기적으로 끝나 재현이 불가능해 테스트로 고정하지 못함.
+- **`UIManager.SetButton` 배경이 있는 버튼에 텍스트가 붙지 않던 문제 수정(`Runtime/UI`):** 자식에 `Text`가 없으면 버튼 자신에 `Text`를 추가했는데, 이미 배경 `Image`가 붙어 있으면 `Graphic` 계열 컴포넌트 충돌로 `AddComponent`가 null을 반환해 텍스트가 조용히 사라졌음. 버튼 텍스트를 버튼 자신 → 직계 자식 `"Text"`(`UIManager.ButtonTextChildName`) → 그 밖의 직계 자식 순으로 찾고, 각 단계에서 legacy `Text`와 `TMP_Text`를 함께 확인함(`TMP_Text`는 기존 TMP 설정 경로로 적용). 모두 없을 때만 legacy `"Text"` 자식을 새로 만듦. Unity 메뉴가 만드는 `"Text (Legacy)"`(UI > Legacy > Button)와 `"Text (TMP)"`(UI > Button - TextMeshPro) 자식도 그대로 재사용함. 금지 API인 `GetComponentInChildren`도 제거함. `UIManagerTests`에 테스트 3건 추가.
+  - **Breaking:** 텍스트 탐색 범위가 "하위 계층 전체"에서 "버튼 자신과 직계 자식"으로 좁아짐. `Text`/`TMP_Text`가 손자 이하 계층에만 있는 버튼은 `"Text"` 자식이 새로 생겨 글자가 겹침. 소비 프로젝트는 이런 버튼의 텍스트 오브젝트를 버튼의 직계 자식으로 옮겨야 함.
+- **`ArduinoManager` 연결 해제 경합으로 인한 NullReferenceException 방지(`Runtime/Hardware`):** `IsConnected`와 `Send`가 `_serialPort` 필드를 검사와 사용 시점에 따로 읽어, 그 사이 읽기 스레드의 연결 해제가 필드를 null로 바꾸면 NRE가 날 수 있었음. 필드를 지역 변수에 한 번 복사해 검사·사용하도록 수정함.
+- **`SoundManager.PlayBGM`/`PlaySFX` 무시된 요청에 경고 로그 추가(`Runtime/UI`):** 키 조회 실패 시 로그 없이 반환해 키 오타나 설정 로드 전 호출의 원인을 알 수 없었음. 설정 로드 전인지 미등록 키인지 구분해 경고를 남기고, null/빈 키로 인한 `ArgumentNullException`도 막음. `SoundManagerTests`에 테스트 1건 추가.
+- **`GameCloser` 설정 누락 시 인스펙터 기본값이 0으로 덮어써지던 문제 수정(`Runtime/Utils`):** `JsonUtility`는 `Settings.json`에 `"closeSetting"` 키가 없어도 null 대신 모든 값이 0인 기본 인스턴스를 만들어, 클릭 횟수·제한 시간·투명도·위치가 0으로 인스펙터 기본값을 덮어썼음. null 검사 대신 `numToClose <= 0`이면 누락으로 판정해 인스펙터 기본값을 유지하고, 사용 중인 기본값과 함께 경고를 남기도록 함(`Settings` 자체가 null인 경우도 같은 경고). 단, `numToClose`가 양수면 `closeSetting` 전체(`resetClickTime`, `imageAlpha`, `position`)를 적용하므로 JSON에서 일부 필드만 빼면 그 필드는 0으로 덮어써짐. 설정을 `AppSettingsProvider`로만 받아 가짜 설정을 넣으려면 새 리플렉션이나 공개 API 변경이 필요해 회귀 테스트는 추가하지 않음.
+- **`UIManager` 텍스트 설정에서 `fontSize`를 빼면 글자가 사라지던 문제 수정(`Runtime/UI`, `Runtime/Data/TemplateData.cs`):** `TextSetting.fontSize`의 기본값이 0이라, JSON에서 이 필드를 빼면 글자 크기 0이 적용되어 텍스트가 보이지 않았음. 이번 `SetButton` 수정으로 기존 `"Text (Legacy)"`·`"Text (TMP)"` 버튼에도 텍스트 설정이 적용되면서 더 쉽게 드러나게 됨. `ApplyTextSettings`와 `ApplyTMPTextSettings`에서 `fontSize <= 0`이면 미지정으로 보고 기존 글자 크기를 유지하도록 함. `SetButton`뿐 아니라 두 메서드를 쓰는 모든 텍스트 설정 경로(`SetText`, `SetTMPText`, `SetButton`)에 적용되는 동작 변화임. `UIManagerTests`에 테스트 2건 추가(legacy `Text`, `TMP_Text`).
+  - **Breaking:** `fontSize`에 0을 넣어 글자를 숨기던 프로젝트는 더 이상 글자가 숨겨지지 않으므로, 텍스트 오브젝트를 비활성화하는 방식으로 바꿔야 함.
+
+### Changed
+- **`VideoManager.ReleaseOrphanedRenderTextures` 씬 탐색 제거(`Runtime/UI`):** `FindObjectsByType<VideoPlayer>`로 씬 전체를 뒤지던 것을, 텍스처를 연결할 때 기록한 소유 `VideoPlayer`가 살아 있고 아직 그 텍스처를 쓰는지만 확인하도록 바꿈(스킬 0번 씬 탐색 금지). 플레이어가 다른 텍스처로 바뀐 경우도 회수 대상에 포함됨. 반대로, 매니저가 만든 텍스처를 호출부가 다른 `VideoPlayer`에 옮겨 쓰는 경우에는 사용 중이어도 회수됨(이전에는 씬의 어느 플레이어든 쓰고 있으면 유지됐음). `VideoManagerTests`에 테스트 1건 추가.
+- **`JsonLoader.LoadAsync`/`SaveAsync`에 선택적 로거 인자 추가(`Runtime/Utils`):** 정적 클래스라 로거를 주입받지 못해 실패 로그가 항상 `Debug.Log`로 나가던 것을, 호출자가 `ILogger`를 넘기면 ZLogger로 남기도록 함. 넘기지 않으면 기존과 동일하게 Unity 콘솔로 출력함. `AppSettingsProvider`(생성자 주입 추가)와 `ShutdownScheduler`가 자신의 로거를 넘김. 기존 호출부는 수정 없이 동작함. VContainer는 생성자 매개변수 기본값을 쓰지 않으므로, `ConfigureLogging`을 override한 소비 프로젝트는 `ILogger<>`를 계속 등록해야 `AppSettingsProvider`가 해석됨(기본 `RootLifetimeScope`는 이미 등록함).
+- **`PackageUpdater` `var` 제거(`Editor`):** 2곳을 명시 타입으로 교정함.
+- **`SoundManager` 테스트 헬퍼 공용화(`Tests/Runtime`):** `UIManagerTests`의 private 리플렉션 헬퍼(사운드 설정 등록, 로거 주입)를 `SoundManagerTestHelper`로 옮겨 `SoundManagerTests`와 함께 재사용함(새 리플렉션 코드 추가 없음).
+- **`UIManagerTests.버튼_클릭시_buttonSound가_SoundManager로_전달된다` 순서 의존 제거(`Tests/Runtime`):** "로컬 파일 미존재 실패는 동기적으로 확정된다"는 가정에 기대 프레임을 넘기지 않던 테스트가, 앞선 테스트에서 실제 오디오를 로드하면 실패 로그를 놓쳤음. `[UnityTest]`로 바꿔 두 매니저의 `Start()` 오류를 먼저 흘려보낸 뒤 클릭하고 실시간으로 잠시 기다리도록 함(`LogAssert.Expect`는 등록 순서대로 대조하므로 로그 순서를 고정함).
+
 ## [26.9.23-2] - 2026-09-23
 
 ### Fixed

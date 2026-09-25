@@ -1,6 +1,6 @@
 {
   "name": "com.huliacdev.template",
-  "version": "26.9.23-2",
+  "version": "26.9.25-1",
   "displayName": "HuliacDev Template",
   "description": "전시/키오스크형 Unity 앱을 위한 통합 템플릿 프레임워크 (VContainer, UniTask, ZLogger, R3 기반).\n\n[주요 클래스 및 기능]\n• Core\n  - GameManagerBase: 순수 DI(VContainer) 기반 비동기 라이프사이클 총괄, OnSettingsLoaded 초기화 훅\n  - InactivityTimer: 무입력 타임아웃 감지 및 자동 복귀 이벤트(InactivityTimeoutEvent) 발행\n  - ShutdownScheduler: 일별/요일별 자동 종료 스케줄링 및 사전 알림(BeforeShutdownEvent)\n• UI & Media\n  - UIManager: uGUI/TextMeshPro 폰트 비동기 프리로드 및 적용, VRAM 텍스처 압축(compress) 제어\n  - FadeManager: 화면 페이드 인/아웃(DOTween/UniTask), 커스텀 색상(Color? color) 및 SortingOrder 지원\n  - SoundManager: BGM/SFX 비동기 재생, 마스터/BGM/SFX 개별 볼륨 및 음소거 제어, 페이드 충돌 방어\n  - VideoManager: VideoPlayer 비동기 프리로드 및 재생 제어, 고아 RenderTexture 메모리 해제 최적화\n• Network & Logging\n  - NetworkStatusService: R3 기반 실시간 네트워크 도달성/끊김/복구 모니터링 (오프라인 키오스크 방어)\n  - ApiManagerBase: 시작/종료/비활동/외부API 통신 로깅 추상 베이스\n  - ApiRetryUtil: 지수 백오프 및 소켓/DNS 네트워크 예외 격리 기반 WebRequest 안정적 재시도\n  - LogRetentionService: 일별 로그 파일 회전(AddZLoggerRollingFile) 및 30일 보관 주기 자동 정리\n• Hardware\n  - ArduinoManager: 아두이노 시리얼 비동기 통신, 예외 격리 및 메인 스레드 마샬링 기반 자동 재연결(Auto-Reconnect)\n• Data & Utils\n  - AppSettingsProvider: Settings.json 단일 로드/캐싱 및 런타임 핫 리로드(ReloadAsync)\n  - JsonLoader: StreamingAssets/PersistentData 경로 지원, .json 확장자 자동 보정 직렬화\n  - SingletonGuard<T>: DontDestroyOnLoad 중복 방어 일원화 및 에디터 Domain Reload 비활성화 자가 복구",
   "unity": "2022.3",
