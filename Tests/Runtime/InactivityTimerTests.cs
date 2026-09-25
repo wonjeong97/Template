@@ -6,6 +6,7 @@ using Cysharp.Threading.Tasks;
 using MessagePipe;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.TestTools;
 using HuliacDev.App;
 using HuliacDev.Core;
@@ -21,10 +22,17 @@ namespace HuliacDev.Tests
     /// 주입하여 파일 I/O·DI 컨테이너 없이 Update() 타임아웃 로직만 검증함.
     /// 메시지 파이프 퍼블리셔도 전체 DI 컨테이너 없이, Publish 시 콜백만 실행하는
     /// 최소 테스트 더블(FakePublisher)을 리플렉션으로 주입해 검증함.
+    ///
+    /// InactivityTimer는 InputSystem.onEvent로 모든 장치의 입력을 받아 타이머를 초기화하므로,
+    /// 테스트 중 실제 마우스·키보드 입력이 들어오면 타이머가 초기화되어 결과가 흔들렸음
+    /// (예: 타임아웃 뒤 입력이 들어와 이벤트가 다시 발동). InputTestFixture로 실제 장치 입력을
+    /// 차단한 가상 입력 환경에서 실행하고, 입력 초기화 동작은 가상 키보드로 직접 검증함.
     /// </summary>
     public class InactivityTimerTests
     {
         private static readonly BindingFlags Nonpublic = BindingFlags.NonPublic | BindingFlags.Instance;
+
+        private readonly InputTestFixture _input = new InputTestFixture();
 
         private GameObject _go;
         private InactivityTimer _timer;
@@ -49,6 +57,10 @@ namespace HuliacDev.Tests
         [SetUp]
         public void SetUp()
         {
+            // 타이머가 OnEnable에서 InputSystem.onEvent를 구독하므로, 가상 입력 환경을 먼저 준비한 뒤 생성함.
+            // (반대 순서면 구독이 실제 입력 환경에 걸린 채 남음)
+            _input.Setup();
+
             SingletonGuard<InactivityTimer>.ResetForTesting();
             _go = new GameObject("InactivityTimerTests");
             _timer = _go.AddComponent<InactivityTimer>();
@@ -63,6 +75,9 @@ namespace HuliacDev.Tests
         {
             if (_go != null) UnityEngine.Object.DestroyImmediate(_go);
             SingletonGuard<InactivityTimer>.ResetForTesting();
+
+            // 타이머를 파괴해 onEvent 구독을 해제한 뒤 실제 입력 환경을 복원함.
+            _input.TearDown();
         }
 
         /// <summary>
@@ -116,6 +131,27 @@ namespace HuliacDev.Tests
 
             await AwaitInvocation();
             Assert.IsTrue(_invoked, "ResetTimer 이후 재설정된 시간이 지났는데도 발동하지 않음");
+        });
+
+        /// <summary>
+        /// 타임아웃 전에 실제 입력 장치 이벤트(가상 키보드 입력)가 들어오면 InputSystem.onEvent를 통해
+        /// 타이머가 초기화되어 발동이 그만큼 늦춰져야 함.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 입력_이벤트가_들어오면_발동이_늦춰진다() => UniTask.ToCoroutine(async () =>
+        {
+            ExpectMissingDependencyLog();
+            Keyboard keyboard = InputSystem.AddDevice<Keyboard>();
+            SetTimeout(0.15f, isEnabled: true);
+
+            await UniTask.Delay(TimeSpan.FromSeconds(0.08), DelayType.UnscaledDeltaTime);
+            _input.PressAndRelease(keyboard.spaceKey);
+
+            await UniTask.Delay(TimeSpan.FromSeconds(0.08), DelayType.UnscaledDeltaTime);
+            Assert.IsFalse(_invoked, "입력 이벤트 이후에도 원래 시간 기준으로 발동함(입력이 타이머를 초기화하지 않음)");
+
+            await AwaitInvocation();
+            Assert.IsTrue(_invoked, "입력 이후 재설정된 시간이 지났는데도 발동하지 않음");
         });
 
         /// <summary>
