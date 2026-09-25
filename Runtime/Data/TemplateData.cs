@@ -95,6 +95,10 @@ namespace HuliacDev.Data
     {
         public string text;
         public string fontName;
+        /// <summary>
+        /// 글자 크기. 0 이하면 미지정으로 보고 UIManager가 기존 글자 크기를 유지함
+        /// (JSON에서 이 필드를 빼면 기본값 0이 들어오기 때문).
+        /// </summary>
         public int fontSize;
         public Color fontColor = Color.white;
         public TextAnchor alignment = TextAnchor.MiddleCenter;

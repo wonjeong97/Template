@@ -107,6 +107,41 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
+        /// JSON에서 fontSize를 빼면 기본값 0이 들어옴. 0 이하는 미지정으로 보고 기존 글자 크기를
+        /// 유지해야 함. 그대로 0을 적용하면 legacy Text 글자가 보이지 않게 됨.
+        /// </summary>
+        [Test]
+        public void fontSize를_지정하지_않으면_legacy_Text의_기존_글자_크기가_유지된다()
+        {
+            GameObject go = new GameObject("KeepLegacySize", typeof(RectTransform));
+            _spawned.Add(go);
+            Text text = go.AddComponent<Text>();
+            text.fontSize = 40;
+
+            _uiManager.SetText(go, new TextSetting { name = "KeepLegacySize", text = "크기 유지" });
+
+            Assert.AreEqual("크기 유지", text.text, "fontSize 외 설정은 적용되어야 함");
+            Assert.AreEqual(40, text.fontSize, "fontSize 미지정(0)이 기존 글자 크기를 덮어씀");
+        }
+
+        /// <summary>
+        /// TMP_Text도 legacy Text와 같은 규칙으로, fontSize 미지정(0 이하)이면 기존 글자 크기를 유지해야 함.
+        /// </summary>
+        [Test]
+        public void fontSize를_지정하지_않으면_TMP_Text의_기존_글자_크기가_유지된다()
+        {
+            GameObject go = new GameObject("KeepTmpSize", typeof(RectTransform));
+            _spawned.Add(go);
+            TextMeshProUGUI tmpText = go.AddComponent<TextMeshProUGUI>();
+            tmpText.fontSize = 40f;
+
+            _uiManager.SetTMPText(go, new TextSetting { name = "KeepTmpSize", text = "크기 유지" });
+
+            Assert.AreEqual("크기 유지", tmpText.text, "fontSize 외 설정은 적용되어야 함");
+            Assert.AreEqual(40f, tmpText.fontSize, 0.001f, "fontSize 미지정(0)이 기존 글자 크기를 덮어씀");
+        }
+
+        /// <summary>
         /// RectTransform 속성이 설정값대로 적용되어야 함.
         /// </summary>
         [Test]

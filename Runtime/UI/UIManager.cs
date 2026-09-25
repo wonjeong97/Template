@@ -535,7 +535,6 @@ namespace HuliacDev.UI
             tmpText = null;
             if (candidate.TryGetComponent(out legacyText)) return true;
 
-            legacyText = null;
             return candidate.TryGetComponent(out tmpText);
         }
 
@@ -653,13 +652,14 @@ namespace HuliacDev.UI
 
         /// <summary>
         /// 텍스트 컴포넌트의 텍스트, 크기, 정렬 및 폰트를 설정함.
+        /// fontSize가 0 이하면 미지정으로 보고 기존 글자 크기를 유지함(JSON에서 빠지면 0이 되어 글자가 사라지는 것을 막기 위함).
         /// </summary>
         private void ApplyTextSettings(Text txt, TextSetting setting)
         {
             if (!txt || setting == null) return;
 
             txt.text = setting.text;
-            txt.fontSize = setting.fontSize;
+            if (setting.fontSize > 0) txt.fontSize = setting.fontSize;
             txt.color = setting.fontColor;
             txt.alignment = setting.alignment;
 
@@ -668,13 +668,14 @@ namespace HuliacDev.UI
 
         /// <summary>
         /// TMP_Text 컴포넌트의 텍스트, 크기, 정렬 및 폰트를 설정함.
+        /// fontSize가 0 이하면 미지정으로 보고 기존 글자 크기를 유지함(JSON에서 빠지면 0이 되어 글자가 사라지는 것을 막기 위함).
         /// </summary>
         private void ApplyTMPTextSettings(TMP_Text txt, TextSetting setting)
         {
             if (!txt || setting == null) return;
 
             txt.text = setting.text;
-            txt.fontSize = setting.fontSize;
+            if (setting.fontSize > 0) txt.fontSize = setting.fontSize;
             txt.color = setting.fontColor;
             txt.alignment = ConvertTextAlignment(setting.alignment);
 
