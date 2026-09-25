@@ -57,9 +57,6 @@ namespace HuliacDev.Utils
     /// </summary>
     internal static class CloseSettingResolver
     {
-        /// <summary>CloseSetting 필드 초기값으로 쓰는 "미지정" 표시값.</summary>
-        internal const float UnsetValue = -1f;
-
         /// <summary>
         /// numToClose가 양수가 아니면(closeSetting 키 누락 포함) 설정 전체를 무시하도록 false를 반환함.
         /// 그 외에는 JSON에서 올바르게 지정된 필드만 값으로 채우고, 미지정(표시값)이거나 잘못된 필드는 null로 둠.
@@ -135,7 +132,7 @@ namespace HuliacDev.Utils
         /// </summary>
         private static bool IsUnset(float value)
         {
-            return Mathf.Approximately(value, UnsetValue);
+            return Mathf.Approximately(value, CloseSetting.UnsetValue);
         }
 
         /// <summary>

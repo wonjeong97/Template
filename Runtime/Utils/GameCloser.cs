@@ -35,6 +35,12 @@ namespace HuliacDev.Utils
         private AppSettingsProvider _settingsProvider;
         private Button _hiddenButton;
 
+        /// <summary>앱 종료에 필요한 현재 연속 클릭 횟수(테스트에서 적용 결과를 확인하기 위한 읽기 전용 접근).</summary>
+        internal int TargetClickCount => targetClickCount;
+
+        /// <summary>현재 연속 클릭 제한 시간(초)(테스트에서 적용 결과를 확인하기 위한 읽기 전용 접근).</summary>
+        internal float ClickTimeWindow => clickTimeWindow;
+
         /// <summary>
         /// VContainer 의존성 주입.
         /// ZLogger 및 설정 제공자 할당.
@@ -150,9 +156,17 @@ namespace HuliacDev.Utils
         /// <summary>
         /// 해석된 설정을 클릭 조건과 RectTransform·Image에 적용함.
         /// 값이 없는(미지정이거나 잘못 지정된) 필드는 바꾸지 않고 인스펙터에서 정한 값을 그대로 둠.
+        /// 클릭 횟수가 0 이하인 결과(TryResolve 실패 시의 default 등)는 적용하지 않음.
+        /// 0이 들어가면 숨은 버튼을 한 번만 눌러도 앱이 종료되기 때문임.
         /// </summary>
         internal void ApplyResolvedSettings(ResolvedCloseSetting resolved)
         {
+            if (resolved.TargetClickCount <= 0)
+            {
+                if (_logger != null) _logger.ZLogError($"[GameCloser] Resolved closeSetting has non-positive click count ({resolved.TargetClickCount}). Settings were not applied.");
+                return;
+            }
+
             targetClickCount = resolved.TargetClickCount;
             if (resolved.ClickTimeWindow.HasValue) clickTimeWindow = resolved.ClickTimeWindow.Value;
 

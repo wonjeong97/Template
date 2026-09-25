@@ -37,14 +37,14 @@ namespace HuliacDev.Tests
         public void JsonUtility는_빠진_필드에_CloseSetting_초기값을_남긴다()
         {
             Settings partial = JsonUtility.FromJson<Settings>("{\"closeSetting\":{\"numToClose\":5}}");
-            Assert.AreEqual(-1f, partial.closeSetting.imageAlpha, "빠진 필드가 초기값을 유지하지 않음");
-            Assert.AreEqual(-1f, partial.closeSetting.resetClickTime);
-            Assert.AreEqual(new Vector2(-1f, -1f), partial.closeSetting.position);
+            Assert.AreEqual(CloseSetting.UnsetValue, partial.closeSetting.imageAlpha, "빠진 필드가 초기값을 유지하지 않음");
+            Assert.AreEqual(CloseSetting.UnsetValue, partial.closeSetting.resetClickTime);
+            Assert.AreEqual(new Vector2(CloseSetting.UnsetValue, CloseSetting.UnsetValue), partial.closeSetting.position);
 
             Settings missing = JsonUtility.FromJson<Settings>("{}");
             Assert.IsNotNull(missing.closeSetting, "키가 없어도 JsonUtility는 기본 인스턴스를 만듦");
             Assert.AreEqual(0, missing.closeSetting.numToClose);
-            Assert.AreEqual(-1f, missing.closeSetting.imageAlpha);
+            Assert.AreEqual(CloseSetting.UnsetValue, missing.closeSetting.imageAlpha);
         }
 
         /// <summary>
@@ -136,6 +136,72 @@ namespace HuliacDev.Tests
             Assert.AreEqual(
                 CloseSettingIssues.InvalidResetClickTime | CloseSettingIssues.ImageAlphaOutOfRange | CloseSettingIssues.PositionOutOfRange,
                 resolved.Issues);
+        }
+
+        /// <summary>
+        /// 표시값(-1)이 아닌 음수를 명시하면 미지정이 아니라 잘못된 값이므로, 조용히 넘기지 않고 문제로 표시해야 함.
+        /// </summary>
+        [Test]
+        public void 표시값이_아닌_음수는_잘못된_값으로_표시한다()
+        {
+            Settings settings = JsonUtility.FromJson<Settings>(
+                "{\"closeSetting\":{\"position\":{\"x\":-0.5,\"y\":0.5},\"numToClose\":5,\"resetClickTime\":-3,\"imageAlpha\":-0.5}}");
+
+            Assert.IsTrue(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting resolved));
+            Assert.IsFalse(resolved.ClickTimeWindow.HasValue);
+            Assert.IsFalse(resolved.ImageAlpha.HasValue);
+            Assert.IsFalse(resolved.Position.HasValue);
+            Assert.AreEqual(
+                CloseSettingIssues.InvalidResetClickTime | CloseSettingIssues.ImageAlphaOutOfRange | CloseSettingIssues.PositionOutOfRange,
+                resolved.Issues);
+        }
+
+        /// <summary>
+        /// 설계 한계 고정: JSON에 표시값(-1)을 직접 적으면 미지정과 구분되지 않아, 경고 없이 미지정으로 처리됨.
+        /// </summary>
+        [Test]
+        public void 표시값과_같은_값을_직접_적으면_미지정으로_처리된다()
+        {
+            Settings settings = JsonUtility.FromJson<Settings>(
+                "{\"closeSetting\":{\"position\":{\"x\":-1,\"y\":-1},\"numToClose\":5,\"resetClickTime\":-1,\"imageAlpha\":-1}}");
+
+            Assert.IsTrue(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting resolved));
+            Assert.IsFalse(resolved.ClickTimeWindow.HasValue);
+            Assert.IsFalse(resolved.ImageAlpha.HasValue);
+            Assert.IsFalse(resolved.Position.HasValue);
+            Assert.AreEqual(CloseSettingIssues.None, resolved.Issues);
+        }
+
+        /// <summary>
+        /// 클릭 횟수와 제한 시간이 있는 결과를 적용하면 GameCloser의 종료 조건이 그 값으로 바뀌어야 함.
+        /// </summary>
+        [Test]
+        public void 해석_결과의_클릭_횟수와_제한_시간을_적용한다()
+        {
+            GameCloser closer = CreateCloser(out RectTransform _, out Image _);
+
+            closer.ApplyResolvedSettings(new ResolvedCloseSetting(5, 2.5f, null, null, CloseSettingIssues.None));
+
+            Assert.AreEqual(5, closer.TargetClickCount);
+            Assert.AreEqual(2.5f, closer.ClickTimeWindow, 0.0001f);
+        }
+
+        /// <summary>
+        /// TryResolve가 실패했을 때의 default 결과(클릭 횟수 0)를 적용해도 종료 조건이 바뀌면 안 됨.
+        /// 0이 들어가면 숨은 버튼을 한 번만 눌러도 앱이 종료됨.
+        /// </summary>
+        [Test]
+        public void 클릭_횟수가_0인_결과는_적용하지_않는다()
+        {
+            GameCloser closer = CreateCloser(out RectTransform _, out Image _);
+            int originalTarget = closer.TargetClickCount;
+            float originalWindow = closer.ClickTimeWindow;
+
+            closer.ApplyResolvedSettings(default);
+
+            Assert.AreEqual(originalTarget, closer.TargetClickCount, "클릭 횟수 0이 적용되어 한 번 클릭에 종료될 수 있음");
+            Assert.AreEqual(originalWindow, closer.ClickTimeWindow, 0.0001f);
+            Assert.Greater(closer.TargetClickCount, 0);
         }
 
         /// <summary>

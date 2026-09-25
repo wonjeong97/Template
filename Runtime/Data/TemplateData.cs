@@ -36,19 +36,25 @@ namespace HuliacDev.Data
     public class CloseSetting
     {
         /// <summary>
+        /// "JSON에서 미지정"을 뜻하는 표시값. 필드 초기값과 CloseSettingResolver의 판정이 모두 이 상수를 씀.
+        /// JSON에 이 값(-1)을 직접 적어도 미지정과 구분되지 않음.
+        /// </summary>
+        public const float UnsetValue = -1f;
+
+        /// <summary>
         /// 버튼 모서리 위치(0~1 정규화 좌표). 표시값 (-1, -1)이면 미지정.
         /// 한 성분만 적었거나 0~1을 벗어나면 적용하지 않고 경고함.
         /// </summary>
-        public Vector2 position = new Vector2(-1f, -1f);
+        public Vector2 position = new Vector2(UnsetValue, UnsetValue);
 
         /// <summary>앱 종료에 필요한 연속 클릭 횟수. 0 이하면 미지정이며, 이때는 closeSetting 전체를 무시함.</summary>
         public int numToClose;
 
         /// <summary>연속 클릭으로 인정하는 제한 시간(초). 표시값 -1이면 미지정. 0 이하를 적으면 적용하지 않고 경고함.</summary>
-        public float resetClickTime = -1f;
+        public float resetClickTime = UnsetValue;
 
         /// <summary>버튼 이미지 투명도(0~1). 표시값 -1이면 미지정. 0은 완전히 투명한 정상 값이며, 0~1을 벗어나면 적용하지 않고 경고함.</summary>
-        public float imageAlpha = -1f;
+        public float imageAlpha = UnsetValue;
     }
 
     /// <summary>
