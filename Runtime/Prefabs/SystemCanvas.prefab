@@ -314,7 +314,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   targetClickCount: 10
-  clickTimeWindow: 0.5
+  clickTimeWindow: 3
 --- !u!1001 &3991792086443802033
 PrefabInstance:
   m_ObjectHideFlags: 0

@@ -1,6 +1,19 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.9.25-2] - 2026-09-25
+
+### Fixed
+- **`GameCloser` closeSetting의 일부 필드만 빼면 그 필드가 0으로 덮어써지던 문제 수정(`Runtime/Utils`, `Runtime/Data/TemplateData.cs`):** 26.9.25-1은 `numToClose`가 양수면 `closeSetting` 전체를 적용해, JSON에서 `resetClickTime`·`imageAlpha`·`position` 중 일부만 빼면 그 필드가 0으로 인스펙터 기본값을 덮어썼음(26.9.25-1 항목에 적은 한계). `JsonUtility`가 JSON에 없는 필드(중첩 객체 키가 통째로 없는 경우 포함)에 필드 초기값을 남긴다는 점을 테스트로 확인하고, `CloseSetting`의 초기값을 "미지정" 표시값(`resetClickTime = -1`, `imageAlpha = -1`, `position = (-1, -1)`)으로 둠. 이제 JSON에 적은 필드만 적용하고 빠진 필드는 인스펙터 기본값을 유지함. 표시값은 정상 값과 겹치지 않게 골라, 투명도 0(숨은 버튼)과 위치 (0,0)(좌하단)은 그대로 적용됨. `numToClose`가 없거나 0 이하이면 이전처럼 설정 전체를 무시하고 경고를 남기며, 모든 필드를 올바르게 적은 기존 설정 파일은 결과가 같음. `GameCloserTests`에 테스트 5건 추가(JsonUtility 초기값 유지 동작, 키 누락, null, `numToClose`만 지정, 0을 포함한 전체 지정).
+  - **Breaking:** JSON에서 `imageAlpha`·`position`·`resetClickTime`을 빼 두고 0으로 적용되는 것(예: 투명도 0으로 버튼 숨기기, 좌하단 배치)에 기대던 프로젝트는 이제 인스펙터 값이 쓰이므로, 해당 필드를 JSON에 명시해야 함. 명시했더라도 잘못된 값(아래 경고 항목)은 이제 적용되지 않음(예: 이전에는 `imageAlpha` 1.5가 그대로 들어갔음). 코드에서 `new CloseSetting()`을 만들어 직렬화하면 표시값(-1)이 기록됨.
+- **`GameCloser` 설정 실수를 조용히 넘기던 문제 수정(`Runtime/Utils`):** `resetClickTime` 0 이하, `imageAlpha`·`position`의 0~1 범위 이탈, `position`의 한 성분만 지정한 경우를 필드별로 적용하지 않고 원인을 경고로 남기도록 함. 또 위치·투명도를 적용할 `RectTransform`·`Image`가 없으면 경고하고, 적용 로그에는 실제로 JSON 값이 적용됐는지(`PositionFromJson`/`AlphaFromJson`)를 남기도록 함(이전에는 컴포넌트가 없어 적용되지 않아도 적용된 값처럼 기록됐음). `resetClickTime`은 최소 1초로 제한해, 0보다 크고 1초보다 짧은 값은 1초로 올려 적용하고 경고함(0.003처럼 잘못 적으면 사람이 제시간에 누를 수 없어 현장에서 앱을 끌 방법이 사라짐). 또 최종 적용된 클릭 횟수가 3회 미만이면, 값이 JSON(`numToClose`)에서 왔든 인스펙터에서 왔든 관람객이 우연히 눌러 앱이 꺼질 수 있어 경고함(값은 그대로 적용). 또 해석에 실패한 결과(클릭 횟수 0)가 적용되면 숨은 버튼을 한 번만 눌러도 앱이 종료되므로, 클릭 횟수가 0 이하인 결과는 적용하지 않고 오류를 남기도록 방어함. JSON에 표시값(-1)을 직접 적으면 미지정과 구분되지 않는다는 설계 한계도 테스트로 고정함. `GameCloserTests`에 테스트 17건 추가(위치 한 성분만 지정, 잘못된 값, 표시값이 아닌 음수, 표시값 직접 기입, 제한 시간 1초 미만·이상, `numToClose` 3회 미만 적용, 최종 클릭 횟수 오터치 위험 판정, 인스펙터 값 최소값 미만·이상, 클릭 횟수·제한 시간 최종 값 계산, 클릭 횟수 0 결과 거부, 적용한 클릭 횟수만큼 눌러야 종료, 클릭 횟수 0 결과 적용 시 한 번 클릭에 종료되지 않음, 컴포넌트 적용 3건).
+  - **Breaking:** 0보다 크고 1초보다 짧은 `resetClickTime`은 이제 1초로 올려 적용됨. `position`에는 -1을 좌표로 쓸 수 없음(미지정 표시값과 구분되지 않아 한 성분만 지정한 것으로 경고됨).
+
+### Changed
+- **`GameCloser` 설정 해석 로직을 순수 계산 유틸리티로 분리(`Runtime/Utils/CloseSettingResolver.cs`):** `CloseSetting`에서 적용할 값만 골라내는 계산(미지정 판정, 범위 검증)을 Unity 오브젝트·`AppSettingsProvider`·인스펙터 값에 의존하지 않는 `internal` 정적 클래스 `CloseSettingResolver`로 옮김. 결과는 미지정·잘못된 필드를 null로 두는 nullable 값과 JSON 문제 플래그(`CloseSettingIssues`)로 돌려주고(인스펙터 값 보정 내역은 `InspectorValueCorrections`로 구분), `GameCloser`는 경고를 남긴 뒤 값이 있는 필드만 `RectTransform`/`Image`에 적용함. 또 `QuitApplication`을 `protected virtual`로 바꿔, 파생 클래스가 종료 방식을 바꿀 수 있게 함(테스트는 이를 이용해 실제로 앱을 끄지 않고 클릭 횟수 적용을 검증함). 26.9.25-1에서 가짜 설정을 넣을 방법이 없어 생략했던 회귀 테스트를 새 리플렉션 없이 작성하기 위함이며, 테스트 어셈블리 접근을 위해 `Runtime/AssemblyInfo.cs`에 `InternalsVisibleTo("HuliacDev.Template.Tests")`를 추가함. 표시값은 `CloseSetting.UnsetValue` 공개 상수 하나로 정의해 필드 초기값과 판정이 함께 쓰도록 함(공개 API 변화는 이 상수 추가와 `GameCloser.QuitApplication`의 `protected virtual` 전환뿐).
+- **설정 데이터의 "미지정" 표기 규칙 문서화(`Runtime/Data/TemplateData.cs`):** 0이 의미 없는 필드는 "0 이하면 미지정"(`TextSetting.fontSize`, `CloseSetting.numToClose`), 0이 정상 값일 수 있는 필드는 "초기값 표시값 -1"(`CloseSetting`의 나머지 필드)로 나뉘는 규칙을 파일 상단에 적어, 새 필드를 추가할 때 따르도록 함.
+- **`GameCloser` 인스펙터 최소값 지정과 프리팹 제한 시간 수정(`Runtime/Utils/GameCloser.cs`, `Runtime/Prefabs/SystemCanvas.prefab`):** 인스펙터에서 클릭 횟수는 1 미만, 제한 시간은 1초 미만으로 설정할 수 없도록 `[Min]`을 붙임. `[Min]`은 인스펙터에서 편집할 때만 동작해 이미 저장된 값(씬 재정의 등)은 바뀌지 않으므로, 실행 시 `Start`에서도 같은 최소값으로 올리고 경고를 남김. `SystemCanvas.prefab`의 GameCloser 제한 시간은 새 최소값(1초)에 맞춰 0.5초에서 3초(코드 기본값)로 바꿈(클릭 횟수 10회는 유지). 0.5초 안에 10번 누르기는 사실상 불가능해, `closeSetting`이 없으면 앱을 끌 수 없었음. **Breaking:** `Settings.json`에 `closeSetting`이 없는 프로젝트는 이제 3초 안에 10번 누르면 앱이 종료됨. 씬에서 이 값을 재정의한 인스턴스는 기존 값이 유지됨.
+
 ## [26.9.25-1] - 2026-09-25
 
 ### Fixed

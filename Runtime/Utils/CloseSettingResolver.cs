@@ -1,0 +1,245 @@
+using System;
+using UnityEngine;
+using HuliacDev.Data;
+
+namespace HuliacDev.Utils
+{
+    /// <summary>
+    /// CloseSetting을 해석하다 발견한 설정 문제. 해당 필드는 적용하지 않고, 호출부가 경고로 남김.
+    /// </summary>
+    [Flags]
+    internal enum CloseSettingIssues
+    {
+        None = 0,
+
+        /// <summary>resetClickTime을 적었지만 0 이하임.</summary>
+        InvalidResetClickTime = 1 << 0,
+
+        /// <summary>imageAlpha를 적었지만 0~1 범위를 벗어남.</summary>
+        ImageAlphaOutOfRange = 1 << 1,
+
+        /// <summary>position의 x·y 중 한 성분만 적음.</summary>
+        PartialPosition = 1 << 2,
+
+        /// <summary>position을 적었지만 0~1 정규화 범위를 벗어남.</summary>
+        PositionOutOfRange = 1 << 3,
+
+        /// <summary>resetClickTime이 양수지만 최소값(1초)보다 작아 최소값으로 올려 적용함.</summary>
+        ResetClickTimeBelowMinimum = 1 << 4
+    }
+
+    /// <summary>
+    /// 인스펙터(직렬화) 값을 실행 시 최소값 규칙에 맞춰 보정한 내역. JSON 해석 문제(CloseSettingIssues)와 구분함.
+    /// </summary>
+    [Flags]
+    internal enum InspectorValueCorrections
+    {
+        None = 0,
+
+        /// <summary>클릭 횟수가 1보다 작아 1로 올림.</summary>
+        ClickCountRaised = 1 << 0,
+
+        /// <summary>제한 시간이 최소값(1초)보다 작아 최소값으로 올림.</summary>
+        ClickTimeWindowRaised = 1 << 1
+    }
+
+    /// <summary>
+    /// CloseSetting에서 GameCloser에 적용할 값만 골라낸 결과.
+    /// 값이 null인 필드는 JSON에서 지정되지 않았거나 잘못 지정된 것이므로, 호출부가 기존(인스펙터) 값을 유지함.
+    /// </summary>
+    internal readonly struct ResolvedCloseSetting
+    {
+        public readonly Vector2? Position;
+        public readonly float? ClickTimeWindow;
+        public readonly float? ImageAlpha;
+        public readonly int TargetClickCount;
+        public readonly CloseSettingIssues Issues;
+
+        /// <summary>
+        /// 해석이 끝난 값들로 결과를 구성함.
+        /// </summary>
+        public ResolvedCloseSetting(int targetClickCount, float? clickTimeWindow, float? imageAlpha,
+            Vector2? position, CloseSettingIssues issues)
+        {
+            Position = position;
+            ClickTimeWindow = clickTimeWindow;
+            ImageAlpha = imageAlpha;
+            TargetClickCount = targetClickCount;
+            Issues = issues;
+        }
+    }
+
+    /// <summary>
+    /// GameCloser 설정 해석 규칙을 담은 순수 계산 유틸리티.
+    /// Unity 오브젝트나 AppSettingsProvider, 인스펙터 값에 의존하지 않아 설정 파일 없이도 규칙을 단위 테스트할 수 있음.
+    /// </summary>
+    internal static class CloseSettingResolver
+    {
+        /// <summary>
+        /// 연속 클릭 제한 시간의 최소값(초). 이보다 짧으면 사람이 숨은 버튼을 제시간에 누를 수 없어,
+        /// 현장에서 앱을 끌 방법이 사라짐.
+        /// </summary>
+        internal const float MinClickTimeWindow = 1f;
+
+        /// <summary>
+        /// 클릭 횟수의 최소값. 0 이하면 숨은 버튼을 한 번만 눌러도 앱이 종료됨.
+        /// </summary>
+        internal const int MinClickCount = 1;
+
+        /// <summary>
+        /// 오터치로 인한 종료를 막기 위한 클릭 횟수 권장 최소값. 최종 적용된 클릭 횟수가 이보다 작으면
+        /// 값의 출처(JSON·인스펙터)와 관계없이 경고만 하고 그대로 적용함.
+        /// </summary>
+        internal const int RecommendedMinClickCount = 3;
+
+        /// <summary>
+        /// numToClose가 양수가 아니면(closeSetting 키 누락 포함) 설정 전체를 무시하도록 false를 반환함.
+        /// 그 외에는 JSON에서 올바르게 지정된 필드만 값으로 채우고, 미지정(표시값)이거나 잘못된 필드는 null로 둠.
+        /// 잘못된 필드(범위 밖 값, 위치 한 성분만 지정)는 Issues에 표시해 호출부가 경고를 남기게 함.
+        /// 제한 시간이 최소값(1초)보다 작으면 최소값으로 올려 적용하고 역시 Issues에 표시함.
+        /// </summary>
+        public static bool TryResolve(CloseSetting setting, out ResolvedCloseSetting resolved)
+        {
+            if (setting == null || setting.numToClose <= 0)
+            {
+                resolved = default;
+                return false;
+            }
+
+            CloseSettingIssues issues = CloseSettingIssues.None;
+            float? clickTimeWindow = ResolveResetClickTime(setting.resetClickTime, ref issues);
+            float? imageAlpha = ResolveImageAlpha(setting.imageAlpha, ref issues);
+            Vector2? position = ResolvePosition(setting.position, ref issues);
+
+            resolved = new ResolvedCloseSetting(setting.numToClose, clickTimeWindow, imageAlpha, position, issues);
+            return true;
+        }
+
+        /// <summary>
+        /// 제한 시간이 최소값(1초) 이상이면 그 값을, 미지정이면 null을 반환함.
+        /// 양수지만 최소값보다 작으면 최소값으로 올리고, 0 이하를 명시했으면 null과 함께 문제로 표시함.
+        /// </summary>
+        private static float? ResolveResetClickTime(float value, ref CloseSettingIssues issues)
+        {
+            if (IsUnset(value)) return null;
+
+            if (value <= 0f)
+            {
+                issues |= CloseSettingIssues.InvalidResetClickTime;
+                return null;
+            }
+
+            if (value < MinClickTimeWindow)
+            {
+                issues |= CloseSettingIssues.ResetClickTimeBelowMinimum;
+                return MinClickTimeWindow;
+            }
+
+            return value;
+        }
+
+        /// <summary>
+        /// 해석 결과와 현재 값으로 최종 클릭 횟수·제한 시간을 계산함. 클릭 횟수가 0 이하인 결과
+        /// (TryResolve 실패 시의 default 등)는 거부해 false를 반환함. 0이 적용되면 숨은 버튼을
+        /// 한 번만 눌러도 앱이 종료되기 때문임. 제한 시간이 없으면 현재 값을 그대로 둠.
+        /// </summary>
+        public static bool TryGetClickSettings(ResolvedCloseSetting resolved, float currentClickTimeWindow,
+            out int targetClickCount, out float clickTimeWindow)
+        {
+            if (resolved.TargetClickCount <= 0)
+            {
+                targetClickCount = 0;
+                clickTimeWindow = currentClickTimeWindow;
+                return false;
+            }
+
+            targetClickCount = resolved.TargetClickCount;
+            clickTimeWindow = resolved.ClickTimeWindow ?? currentClickTimeWindow;
+            return true;
+        }
+
+        /// <summary>
+        /// 투명도가 0~1이면 그 값을, 미지정이면 null을 반환함. 범위를 벗어나면 null과 함께 문제로 표시함.
+        /// 0은 완전히 투명한 숨은 버튼을 뜻하는 정상 값임.
+        /// </summary>
+        private static float? ResolveImageAlpha(float value, ref CloseSettingIssues issues)
+        {
+            if (IsUnset(value)) return null;
+            if (IsNormalized(value)) return value;
+
+            issues |= CloseSettingIssues.ImageAlphaOutOfRange;
+            return null;
+        }
+
+        /// <summary>
+        /// 두 성분이 모두 0~1이면 그 위치를, 둘 다 미지정이면 null을 반환함.
+        /// 한 성분만 지정했거나 범위를 벗어나면 null과 함께 문제로 표시함(부분 적용은 하지 않음).
+        /// </summary>
+        private static Vector2? ResolvePosition(Vector2 value, ref CloseSettingIssues issues)
+        {
+            bool isXUnset = IsUnset(value.x);
+            bool isYUnset = IsUnset(value.y);
+
+            if (isXUnset && isYUnset) return null;
+
+            if (isXUnset || isYUnset)
+            {
+                issues |= CloseSettingIssues.PartialPosition;
+                return null;
+            }
+
+            if (IsNormalized(value.x) && IsNormalized(value.y)) return value;
+
+            issues |= CloseSettingIssues.PositionOutOfRange;
+            return null;
+        }
+
+        /// <summary>
+        /// 인스펙터(직렬화) 값을 최소값 규칙에 맞게 보정함. [Min]은 인스펙터에서 편집할 때만 동작해,
+        /// 이미 저장된 값(씬 재정의 등)은 그대로 남으므로 실행 시에도 같은 규칙을 적용하기 위함.
+        /// 보정한 항목은 반환 값에 표시해 호출부가 경고를 남기게 함.
+        /// </summary>
+        public static InspectorValueCorrections ClampInspectorValues(ref int targetClickCount, ref float clickTimeWindow)
+        {
+            InspectorValueCorrections corrections = InspectorValueCorrections.None;
+
+            if (targetClickCount < MinClickCount)
+            {
+                targetClickCount = MinClickCount;
+                corrections |= InspectorValueCorrections.ClickCountRaised;
+            }
+
+            if (clickTimeWindow < MinClickTimeWindow)
+            {
+                clickTimeWindow = MinClickTimeWindow;
+                corrections |= InspectorValueCorrections.ClickTimeWindowRaised;
+            }
+
+            return corrections;
+        }
+
+        /// <summary>
+        /// 최종 적용된 클릭 횟수가 권장 최소값(3회)보다 작아 오터치로 앱이 꺼질 위험이 있는지 확인함.
+        /// </summary>
+        public static bool IsBelowRecommendedClickCount(int targetClickCount)
+        {
+            return targetClickCount < RecommendedMinClickCount;
+        }
+
+        /// <summary>
+        /// 값이 "미지정" 표시값인지 확인함. JSON에 적지 않은 필드에는 초기값 -1이 그대로 남음.
+        /// </summary>
+        private static bool IsUnset(float value)
+        {
+            return Mathf.Approximately(value, CloseSetting.UnsetValue);
+        }
+
+        /// <summary>
+        /// 값이 0~1 정규화 범위 안인지 확인함.
+        /// </summary>
+        private static bool IsNormalized(float value)
+        {
+            return value >= 0f && value <= 1f;
+        }
+    }
+}

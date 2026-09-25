@@ -3,6 +3,11 @@ using UnityEngine;
 
 namespace HuliacDev.Data
 {
+    // "JSON에서 미지정" 표기 규칙 (JsonUtility는 null·키 없음을 표현하지 못하고, 빠진 필드에 C# 필드 초기값을 남김):
+    // - 0이 의미 없는 값인 필드(글자 크기, 클릭 횟수 등)는 "0 이하면 미지정"으로 봄. 초기값은 따로 두지 않음.
+    // - 0이 정상 값일 수 있는 필드(투명도, 정규화 좌표 등)는 필드 초기값을 표시값 -1로 두고, 그 값이면 미지정으로 봄.
+    // 새 설정 필드를 추가할 때도 이 둘 중 하나를 따르고, 필드 summary에 어느 규칙인지 적을 것.
+
     [Serializable]
     public class UISettingBase
     {
@@ -22,13 +27,34 @@ namespace HuliacDev.Data
         Filled
     }
 
+    /// <summary>
+    /// GameCloser 설정. 필드 초기값 -1은 "JSON에서 미지정"을 뜻하는 표시값임(파일 상단 표기 규칙 참고).
+    /// JsonUtility는 JSON에 없는 필드(중첩 객체 키가 통째로 없는 경우 포함)에 초기값을 그대로 남기므로,
+    /// GameCloser는 미지정이거나 잘못 지정된 필드를 건너뛰고 인스펙터 기본값을 유지함(잘못 지정된 경우 경고).
+    /// </summary>
     [Serializable]
     public class CloseSetting
     {
-        public Vector2 position;
+        /// <summary>
+        /// "JSON에서 미지정"을 뜻하는 표시값. 필드 초기값과 CloseSettingResolver의 판정이 모두 이 상수를 씀.
+        /// JSON에 이 값(-1)을 직접 적어도 미지정과 구분되지 않음.
+        /// </summary>
+        public const float UnsetValue = -1f;
+
+        /// <summary>
+        /// 버튼 모서리 위치(0~1 정규화 좌표). 표시값 (-1, -1)이면 미지정.
+        /// 한 성분만 적었거나 0~1을 벗어나면 적용하지 않고 경고함.
+        /// </summary>
+        public Vector2 position = new Vector2(UnsetValue, UnsetValue);
+
+        /// <summary>앱 종료에 필요한 연속 클릭 횟수. 0 이하면 미지정이며, 이때는 closeSetting 전체를 무시함. 3 미만이면 오터치로 꺼질 수 있어 경고함(적용은 함).</summary>
         public int numToClose;
-        public float resetClickTime;
-        public float imageAlpha;
+
+        /// <summary>연속 클릭으로 인정하는 제한 시간(초, 최소 1초). 표시값 -1이면 미지정. 0 이하를 적으면 적용하지 않고 경고하며, 1초 미만 양수는 1초로 올려 적용하고 경고함.</summary>
+        public float resetClickTime = UnsetValue;
+
+        /// <summary>버튼 이미지 투명도(0~1). 표시값 -1이면 미지정. 0은 완전히 투명한 정상 값이며, 0~1을 벗어나면 적용하지 않고 경고함.</summary>
+        public float imageAlpha = UnsetValue;
     }
 
     /// <summary>

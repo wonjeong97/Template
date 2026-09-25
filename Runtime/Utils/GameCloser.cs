@@ -22,10 +22,10 @@ namespace HuliacDev.Utils
     public class GameCloser : MonoBehaviour
     {
         [Header("Close Settings (Overwritten by JSON)")]
-        [SerializeField, Tooltip("앱을 종료하기 위해 필요한 연속 클릭 횟수")]
+        [SerializeField, Min(CloseSettingResolver.MinClickCount), Tooltip("앱을 종료하기 위해 필요한 연속 클릭 횟수")]
         private int targetClickCount = 10;
 
-        [SerializeField, Tooltip("연속 클릭으로 인정되는 최대 대기 시간 (초)")]
+        [SerializeField, Min(CloseSettingResolver.MinClickTimeWindow), Tooltip("연속 클릭으로 인정되는 최대 대기 시간 (초, 최소 1초)")]
         private float clickTimeWindow = 3.0f;
 
         private int _currentClickCount;
@@ -66,10 +66,15 @@ namespace HuliacDev.Utils
         }
 
         /// <summary>
-        /// 시작 시 비동기로 설정 파일을 읽어와 버튼의 레이아웃과 색상, 클릭 조건을 적용함.
+        /// 시작 시 인스펙터 값을 최소값 규칙에 맞게 보정하고, 비동기로 설정 파일을 읽어와
+        /// 버튼의 레이아웃과 색상, 클릭 조건을 적용함.
         /// </summary>
         private void Start()
         {
+            // [Min]은 인스펙터 편집 시에만 동작하므로, 이미 저장된 값(씬 재정의 등)도 실행 시 최소값으로 맞춤.
+            // 설정 로드가 실패하거나 주입이 없어도 이 값으로 동작하므로 가장 먼저 수행함.
+            LogInspectorCorrections(CloseSettingResolver.ClampInspectorValues(ref targetClickCount, ref clickTimeWindow));
+
             // 주입 없이 컴포넌트만 붙인 경우 원인을 알기 어려운 NullReferenceException이 발생하므로
             // 무엇을 빠뜨렸는지 알려주고 중단함.
             if (_settingsProvider == null)
@@ -82,6 +87,7 @@ namespace HuliacDev.Utils
                 {
                     Debug.LogError("[GameCloser] Dependencies were not injected. Check that RegisterComponentInHierarchy<GameCloser>() is registered on the LifetimeScope.");
                 }
+                WarnIfLowClickCount();
                 return;
             }
 
@@ -90,7 +96,7 @@ namespace HuliacDev.Utils
 
        /// <summary>
         /// JsonLoader를 통해 프레임 드랍 없이 Settings.json을 읽어와
-        /// 버튼의 작동 로직(클릭 횟수, 시간)과 UI(위치, 투명도)를 동적으로 덮어씌움.
+        /// 버튼의 작동 로직(클릭 횟수, 시간)과 UI(위치, 투명도) 중 JSON에 지정된 값만 덮어씌움.
         /// </summary>
         private async UniTaskVoid ApplySettingsAsync(CancellationToken cancellationToken)
         {
@@ -98,56 +104,153 @@ namespace HuliacDev.Utils
             {
                 Settings settings = await _settingsProvider.GetAsync(cancellationToken);
 
-                // JsonUtility는 JSON에 "closeSetting" 키가 없어도 null 대신 모든 값이 0인 기본 인스턴스를
-                // 만들므로 null 검사로는 누락을 알 수 없음. 그대로 적용하면 클릭 횟수·시간·투명도가 0으로
-                // 인스펙터 기본값을 덮어쓰므로, 유효한 클릭 횟수가 없으면 누락으로 보고 기본값을 유지함.
-                // 단, numToClose가 양수면 closeSetting 전체(resetClickTime, imageAlpha, position)를 적용하므로
-                // JSON에서 일부 필드만 빼면 그 필드는 0으로 덮어써짐.
-                if (settings == null || settings.closeSetting == null || settings.closeSetting.numToClose <= 0)
+                // 해석 규칙(누락 판정, 필드별 미지정·검증)은 CloseSettingResolver가 담당하고,
+                // 여기서는 경고를 남기고 결과를 컴포넌트에 적용하는 일만 함.
+                if (!CloseSettingResolver.TryResolve(settings?.closeSetting, out ResolvedCloseSetting resolved))
                 {
                     if (_logger != null)
                     {
                         _logger.ZLogWarning($"[GameCloser] closeSetting is missing or numToClose is not positive in settings. Using inspector defaults: Target({targetClickCount}), Window({clickTimeWindow}s)");
                     }
+                    WarnIfLowClickCount();
+                    return;
                 }
-                else
-                {
-                    // 1. 작동 로직 동기화
-                    targetClickCount = settings.closeSetting.numToClose;
-                    clickTimeWindow = settings.closeSetting.resetClickTime;
 
-                    // 2. UI 위치 동기화 (0~1 비율의 정규화 좌표 적용)
-                    if (TryGetComponent(out RectTransform rt))
-                    {
-                        Vector2 normalizedPos = settings.closeSetting.position;
-                        
-                        // 앵커(기준점)와 피벗(중심점)을 세팅값(예: 0,0 또는 1,1)으로 맞춰서 모서리를 지정함
-                        rt.anchorMin = normalizedPos;
-                        rt.anchorMax = normalizedPos;
-                        rt.pivot = normalizedPos;
-                        
-                        // 기준점에 완전히 밀착하도록 로컬 좌표를 0으로 초기화
-                        rt.anchoredPosition = Vector2.zero;
-                    }
-
-                    // 3. UI 투명도 동기화
-                    if (TryGetComponent(out Image img))
-                    {
-                        Color c = img.color;
-                        c.a = settings.closeSetting.imageAlpha;
-                        img.color = c;
-                    }
-
-                    if (_logger != null)
-                    {
-                        _logger.ZLogInformation($"[GameCloser] Settings applied from JSON: Pos({settings.closeSetting.position}), Alpha({settings.closeSetting.imageAlpha}), Target({targetClickCount}), Window({clickTimeWindow}s)");
-                    }
-                }
+                LogSettingIssues(resolved.Issues);
+                ApplyResolvedSettings(resolved);
+                WarnIfLowClickCount();
             }
             catch (OperationCanceledException)
             {
                 // 오브젝트 파괴 시 정상적으로 취소됨
             }
+        }
+
+        /// <summary>
+        /// 설정 해석 중 발견한 문제(범위 밖 값, 위치 한 성분만 지정)를 필드별 경고로 남김.
+        /// 해당 필드는 적용되지 않고 인스펙터 값이 유지되므로, 원인을 로그로 알 수 있게 하기 위함.
+        /// 최소값 미만이라 올려 적용한 JSON 제한 시간도 함께 알림.
+        /// </summary>
+        private void LogSettingIssues(CloseSettingIssues issues)
+        {
+            if (issues == CloseSettingIssues.None || _logger == null) return;
+
+            if ((issues & CloseSettingIssues.InvalidResetClickTime) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] closeSetting.resetClickTime must be positive. Using inspector value: Window({clickTimeWindow}s)");
+            }
+
+            if ((issues & CloseSettingIssues.ResetClickTimeBelowMinimum) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] closeSetting.resetClickTime is below the minimum ({CloseSettingResolver.MinClickTimeWindow}s). Using the minimum instead.");
+            }
+
+            if ((issues & CloseSettingIssues.ImageAlphaOutOfRange) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] closeSetting.imageAlpha must be between 0 and 1. Keeping current image alpha.");
+            }
+
+            if ((issues & CloseSettingIssues.PartialPosition) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] closeSetting.position must specify both x and y (-1 is reserved as 'unspecified' and cannot be used as a coordinate). Keeping current position.");
+            }
+
+            if ((issues & CloseSettingIssues.PositionOutOfRange) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] closeSetting.position must be between 0 and 1 (normalized). Keeping current position.");
+            }
+        }
+
+        /// <summary>
+        /// 실행 시 최소값으로 올린 인스펙터(직렬화) 값을 경고로 남김. [Min]은 편집할 때만 동작해
+        /// 저장된 값이 조용히 바뀌면 원인을 알기 어려우므로 알림.
+        /// </summary>
+        private void LogInspectorCorrections(InspectorValueCorrections corrections)
+        {
+            if (corrections == InspectorValueCorrections.None || _logger == null) return;
+
+            if ((corrections & InspectorValueCorrections.ClickCountRaised) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] Inspector targetClickCount on {gameObject.name} was below {CloseSettingResolver.MinClickCount}. Raised to {targetClickCount}.");
+            }
+
+            if ((corrections & InspectorValueCorrections.ClickTimeWindowRaised) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] Inspector clickTimeWindow on {gameObject.name} was below the minimum ({CloseSettingResolver.MinClickTimeWindow}s). Raised to {clickTimeWindow}s.");
+            }
+        }
+
+        /// <summary>
+        /// 최종 적용된 클릭 횟수가 권장 최소값(3회)보다 작으면 오터치 위험을 경고함. 값은 바꾸지 않음.
+        /// JSON과 인스펙터 중 어느 쪽 값이 쓰였든 같은 기준으로 한 번만 알리기 위해, 값이 확정된 뒤 호출함.
+        /// </summary>
+        private void WarnIfLowClickCount()
+        {
+            if (_logger == null || !CloseSettingResolver.IsBelowRecommendedClickCount(targetClickCount)) return;
+
+            _logger.ZLogWarning($"[GameCloser] Click count to close ({targetClickCount}) is below the recommended minimum ({CloseSettingResolver.RecommendedMinClickCount}). Visitors may close the app by accidental taps.");
+        }
+
+        /// <summary>
+        /// 해석된 설정을 클릭 조건과 RectTransform·Image에 적용함.
+        /// 값이 없는(미지정이거나 잘못 지정된) 필드는 바꾸지 않고 인스펙터에서 정한 값을 그대로 둠.
+        /// 클릭 횟수가 0 이하인 결과(TryResolve 실패 시의 default 등)는 CloseSettingResolver.TryGetClickSettings가
+        /// 거부하므로 아무것도 적용하지 않음. 0이 들어가면 숨은 버튼을 한 번만 눌러도 앱이 종료되기 때문임.
+        /// </summary>
+        internal void ApplyResolvedSettings(ResolvedCloseSetting resolved)
+        {
+            if (!CloseSettingResolver.TryGetClickSettings(resolved, clickTimeWindow, out int newTargetClickCount, out float newClickTimeWindow))
+            {
+                if (_logger != null) _logger.ZLogError($"[GameCloser] Resolved closeSetting has non-positive click count ({resolved.TargetClickCount}). Settings were not applied.");
+                return;
+            }
+
+            targetClickCount = newTargetClickCount;
+            clickTimeWindow = newClickTimeWindow;
+
+            bool isPositionApplied = resolved.Position.HasValue && TryApplyPosition(resolved.Position.Value);
+            bool isAlphaApplied = resolved.ImageAlpha.HasValue && TryApplyImageAlpha(resolved.ImageAlpha.Value);
+
+            if (_logger != null)
+            {
+                _logger.ZLogInformation($"[GameCloser] Settings applied from JSON: Target({targetClickCount}), Window({clickTimeWindow}s), PositionFromJson({isPositionApplied}), AlphaFromJson({isAlphaApplied})");
+            }
+        }
+
+        /// <summary>
+        /// 앵커(기준점)와 피벗(중심점)을 0~1 정규화 좌표(예: 0,0 또는 1,1)로 맞춰 모서리를 지정하고,
+        /// 기준점에 완전히 밀착하도록 로컬 좌표를 0으로 초기화함. RectTransform이 없으면 경고 후 false를 반환함.
+        /// </summary>
+        private bool TryApplyPosition(Vector2 position)
+        {
+            if (!TryGetComponent(out RectTransform rt))
+            {
+                if (_logger != null) _logger.ZLogWarning($"[GameCloser] RectTransform is missing on {gameObject.name}. closeSetting.position was not applied.");
+                return false;
+            }
+
+            rt.anchorMin = position;
+            rt.anchorMax = position;
+            rt.pivot = position;
+            rt.anchoredPosition = Vector2.zero;
+            return true;
+        }
+
+        /// <summary>
+        /// 버튼 Image의 투명도만 바꾸고 색상은 유지함. Image가 없으면 경고 후 false를 반환함.
+        /// </summary>
+        private bool TryApplyImageAlpha(float alpha)
+        {
+            if (!TryGetComponent(out Image img))
+            {
+                if (_logger != null) _logger.ZLogWarning($"[GameCloser] Image is missing on {gameObject.name}. closeSetting.imageAlpha was not applied.");
+                return false;
+            }
+
+            Color c = img.color;
+            c.a = alpha;
+            img.color = c;
+            return true;
         }
 
         /// <summary>
@@ -203,8 +306,9 @@ namespace HuliacDev.Utils
 
         /// <summary>
         /// 플랫폼 환경(에디터 및 빌드)에 맞춰 안전하게 종료 명령을 호출함.
+        /// 파생 클래스는 종료 방식(예: 종료 전 확인 화면)을 바꾸기 위해 재정의할 수 있음.
         /// </summary>
-        private void QuitApplication()
+        protected virtual void QuitApplication()
         {
             // ApiManagerBase가 종료 로그 메시지에 "누가 종료시켰는지" 반영할 수 있도록,
             // Application.Quit()을 부르기 직전에 남겨둠.
