@@ -4,7 +4,7 @@
 ## [26.9.25-1] - 2026-09-25
 
 ### Fixed
-- **`SoundManager` 늦게 끝난 BGM 로드가 정지·교체 요청을 덮어쓰던 문제 수정(`Runtime/UI`):** 캐시에 없는 BGM은 다운로드 완료 후 무조건 재생되어, 로드 중 `StopBGM`/`FadeOutBGM`을 호출하면 정지한 BGM이 되살아나고, 로드 중 다른 BGM을 요청하면 늦게 도착한 이전 BGM이 새 BGM을 덮어썼음. 재생 직전에 이 요청이 아직 현재 BGM(`_currentBGMKey`)인지 확인해 무효가 된 요청은 건너뜀. `SoundManagerTests`에 회귀 테스트 2건 추가.
+- **`SoundManager` 늦게 끝난 BGM 로드가 정지·교체 요청을 덮어쓰던 문제 수정(`Runtime/UI`):** 캐시에 없는 BGM은 다운로드 완료 후 무조건 재생되어, 로드 중 `StopBGM`/`FadeOutBGM`을 호출하면 정지한 BGM이 되살아나고, 로드 중 다른 BGM을 요청하면 늦게 도착한 이전 BGM이 새 BGM을 덮어썼음. 재생 직전에 이 요청이 아직 현재 BGM(`_currentBGMKey`)인지 확인해 무효가 된 요청은 건너뜀. `SoundManagerTests`에 회귀 테스트 1건 추가(로드 중 `StopBGM` 시나리오, 수정 전 코드에서 실패함을 확인). 세 시나리오가 같은 확인 한 줄을 공유하며, "캐시된 BGM으로 교체" 시나리오는 이 에디터 환경에서 로드가 동기적으로 끝나 재현이 불가능해 테스트로 고정하지 못함.
 - **`UIManager.SetButton` 배경이 있는 버튼에 텍스트가 붙지 않던 문제 수정(`Runtime/UI`):** 자식에 `Text`가 없으면 버튼 자신에 `Text`를 추가했는데, 이미 배경 `Image`가 붙어 있으면 `Graphic` 계열 컴포넌트 충돌로 `AddComponent`가 null을 반환해 텍스트가 조용히 사라졌음. 버튼 텍스트를 직계 자식 `"Text"`(`UIManager.ButtonTextChildName`)에 두도록 바꾸고, 금지 API인 `GetComponentInChildren`도 제거함. `UIManagerTests`에 테스트 1건 추가.
   - **Breaking:** 버튼 텍스트 탐색이 "모든 하위 계층의 첫 `Text`"에서 "버튼 자신 → 직계 자식 `Text`"로 바뀜. 텍스트 자식 이름이 `"Text (Legacy)"` 등 다른 버튼에 `SetButton`으로 텍스트를 설정하면 `"Text"` 자식이 새로 생겨 글자가 겹칠 수 있으므로, 소비 프로젝트는 해당 자식 이름을 `"Text"`로 바꿔야 함.
 - **`ArduinoManager` 연결 해제 경합으로 인한 NullReferenceException 방지(`Runtime/Hardware`):** `IsConnected`와 `Send`가 `_serialPort` 필드를 검사와 사용 시점에 따로 읽어, 그 사이 읽기 스레드의 연결 해제가 필드를 null로 바꾸면 NRE가 날 수 있었음. 필드를 지역 변수에 한 번 복사해 검사·사용하도록 수정함.
@@ -16,6 +16,7 @@
 - **`JsonLoader.LoadAsync`/`SaveAsync`에 선택적 로거 인자 추가(`Runtime/Utils`):** 정적 클래스라 로거를 주입받지 못해 실패 로그가 항상 `Debug.Log`로 나가던 것을, 호출자가 `ILogger`를 넘기면 ZLogger로 남기도록 함. 넘기지 않으면 기존과 동일하게 Unity 콘솔로 출력함. `AppSettingsProvider`(생성자 주입 추가)와 `ShutdownScheduler`가 자신의 로거를 넘김. 기존 호출부는 수정 없이 동작함.
 - **`PackageUpdater` `var` 제거(`Editor`):** 2곳을 명시 타입으로 교정함.
 - **`SoundManager` 테스트 헬퍼 공용화(`Tests/Runtime`):** `UIManagerTests`의 private 리플렉션 헬퍼(사운드 설정 등록, 로거 주입)를 `SoundManagerTestHelper`로 옮겨 `SoundManagerTests`와 함께 재사용함(새 리플렉션 코드 추가 없음).
+- **`UIManagerTests.버튼_클릭시_buttonSound가_SoundManager로_전달된다` 순서 의존 제거(`Tests/Runtime`):** "로컬 파일 미존재 실패는 동기적으로 확정된다"는 가정에 기대 프레임을 넘기지 않던 테스트가, 앞선 테스트에서 실제 오디오를 로드하면 실패 로그를 놓쳤음. `[UnityTest]`로 바꿔 두 매니저의 `Start()` 오류를 먼저 흘려보낸 뒤 클릭하고 실시간으로 잠시 기다리도록 함(`LogAssert.Expect`는 등록 순서대로 대조하므로 로그 순서를 고정함).
 
 ## [26.9.23-2] - 2026-09-23
 

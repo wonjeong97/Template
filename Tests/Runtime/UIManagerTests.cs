@@ -178,13 +178,19 @@ namespace HuliacDev.Tests
         /// SetButton으로 등록한 buttonSound가 클릭 시 SoundManager.PlaySFX로 실제 전달되는지 검증.
         /// PlaySFX는 키를 찾으면 비동기 로드를 시작하는데, 존재하지 않는 clipPath를 넣어 로드가
         /// 실패하도록 만들고 그 실패 로그(클립 경로 포함)를 관찰함으로써 클릭→SoundManager 연결을
-        /// 검증함. 로컬 파일 미존재는 UnityWebRequest가 프레임 진행 없이 동기적으로 실패를
-        /// 확정하므로 프레임을 넘기지 않아도 됨 — 일부러 프레임을 넘기지 않아 이 테스트가
-        /// _uiManager(DI 없이 생성됨)의 Start()를 건드리지 않도록 함(다른 로그와 순서 충돌 방지).
+        /// 검증함. 로컬 파일 미존재 실패가 동기적으로 확정된다고 가정하고 프레임을 넘기지 않던 예전
+        /// 방식은, 앞선 테스트가 실제 오디오를 로드한 뒤에는 실패가 비동기로 확정되어 로그를 놓쳤음.
+        /// 그래서 클릭 후 실시간으로 잠시 기다림. LogAssert.Expect는 등록 순서대로 대조하므로, 두 매니저
+        /// (DI 없이 생성됨)의 Start()가 출력하는 의존성 누락 오류를 클릭 전에 먼저 나오게 해 순서를 고정함.
+        /// 두 Start()의 호출 순서는 보장되지 않으므로 각 예상은 어느 쪽 메시지든 받아들임.
         /// </summary>
-        [Test]
-        public void 버튼_클릭시_buttonSound가_SoundManager로_전달된다()
+        [UnityTest]
+        public IEnumerator 버튼_클릭시_buttonSound가_SoundManager로_전달된다() => UniTask.ToCoroutine(async () =>
         {
+            Regex missingDependency = new Regex(@"\[UIManager\] Dependencies were not injected|\[SoundManager\] AppSettingsProvider was not injected");
+            LogAssert.Expect(LogType.Error, missingDependency);
+            LogAssert.Expect(LogType.Error, missingDependency);
+
             GameObject soundGo = new GameObject("SoundManagerForButtonTest");
             _spawned.Add(soundGo);
             SoundManager soundManager = soundGo.AddComponent<SoundManager>();
@@ -199,10 +205,16 @@ namespace HuliacDev.Tests
             ButtonSetting setting = new ButtonSetting { name = "SoundButton", buttonSound = "click" };
             _uiManager.SetButton(buttonGo, setting);
 
+            // 두 매니저의 Start()가 실행되어 의존성 누락 오류가 먼저 출력되도록 프레임을 넘김.
+            await UniTask.Yield();
+            await UniTask.Yield();
+
             LogAssert.Expect(LogType.Error, new Regex("Failed to load sound.*UIManagerTests_존재하지않는파일"));
 
             buttonGo.GetComponent<Button>().onClick.Invoke();
-        }
+
+            await UniTask.Delay(500, DelayType.UnscaledDeltaTime);
+        });
 
         /// <summary>
         /// 배경 Image가 붙은 버튼에 텍스트를 설정하면, Graphic 충돌로 버튼 자신에는 Text를 붙일 수
