@@ -12,7 +12,7 @@
 ### Changed
 - **`GameCloser` 설정 해석 로직을 순수 계산 유틸리티로 분리(`Runtime/Utils/CloseSettingResolver.cs`):** `CloseSetting`에서 적용할 값만 골라내는 계산(미지정 판정, 범위 검증)을 Unity 오브젝트·`AppSettingsProvider`·인스펙터 값에 의존하지 않는 `internal` 정적 클래스 `CloseSettingResolver`로 옮김. 결과는 미지정·잘못된 필드를 null로 두는 nullable 값과 문제 플래그(`CloseSettingIssues`)로 돌려주고, `GameCloser`는 경고를 남긴 뒤 값이 있는 필드만 `RectTransform`/`Image`에 적용함. 26.9.25-1에서 가짜 설정을 넣을 방법이 없어 생략했던 회귀 테스트를 새 리플렉션 없이 작성하기 위함이며, 테스트 어셈블리 접근을 위해 `Runtime/AssemblyInfo.cs`에 `InternalsVisibleTo("HuliacDev.Template.Tests")`를 추가함. 표시값은 `CloseSetting.UnsetValue` 공개 상수 하나로 정의해 필드 초기값과 판정이 함께 쓰도록 함(공개 API 변화는 이 상수 추가뿐).
 - **설정 데이터의 "미지정" 표기 규칙 문서화(`Runtime/Data/TemplateData.cs`):** 0이 의미 없는 필드는 "0 이하면 미지정"(`TextSetting.fontSize`, `CloseSetting.numToClose`), 0이 정상 값일 수 있는 필드는 "초기값 표시값 -1"(`CloseSetting`의 나머지 필드)로 나뉘는 규칙을 파일 상단에 적어, 새 필드를 추가할 때 따르도록 함.
-- **`GameCloser` 기본 클릭 횟수 5회, 인스펙터 최소값 지정(`Runtime/Utils/GameCloser.cs`, `Runtime/Prefabs/SystemCanvas.prefab`):** `targetClickCount` 기본값을 10에서 5로 바꾸고, 인스펙터에서 클릭 횟수는 1 미만, 제한 시간은 1초 미만으로 설정할 수 없도록 `[Min]`을 붙임. `SystemCanvas.prefab`의 GameCloser 직렬화 값도 10회/0.5초에서 5회/3초로 바꿈(0.5초 안에 10번 누르기는 사실상 불가능해, `closeSetting`이 없으면 앱을 끌 수 없었음). **Breaking:** `Settings.json`에 `closeSetting`이 없는 프로젝트는 이제 3초 안에 5번 누르면 앱이 종료됨. 씬에서 이 값을 재정의한 인스턴스는 기존 값이 유지됨.
+- **`GameCloser` 인스펙터 최소값 지정과 프리팹 제한 시간 수정(`Runtime/Utils/GameCloser.cs`, `Runtime/Prefabs/SystemCanvas.prefab`):** 인스펙터에서 클릭 횟수는 1 미만, 제한 시간은 1초 미만으로 설정할 수 없도록 `[Min]`을 붙임. `SystemCanvas.prefab`의 GameCloser 제한 시간은 새 최소값(1초)에 맞춰 0.5초에서 3초(코드 기본값)로 바꿈(클릭 횟수 10회는 유지). 0.5초 안에 10번 누르기는 사실상 불가능해, `closeSetting`이 없으면 앱을 끌 수 없었음. **Breaking:** `Settings.json`에 `closeSetting`이 없는 프로젝트는 이제 3초 안에 10번 누르면 앱이 종료됨. 씬에서 이 값을 재정의한 인스턴스는 기존 값이 유지됨.
 
 ## [26.9.25-1] - 2026-09-25
 

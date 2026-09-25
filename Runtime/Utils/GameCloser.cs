@@ -23,7 +23,7 @@ namespace HuliacDev.Utils
     {
         [Header("Close Settings (Overwritten by JSON)")]
         [SerializeField, Min(1), Tooltip("앱을 종료하기 위해 필요한 연속 클릭 횟수")]
-        private int targetClickCount = 5;
+        private int targetClickCount = 10;
 
         [SerializeField, Min(CloseSettingResolver.MinClickTimeWindow), Tooltip("연속 클릭으로 인정되는 최대 대기 시간 (초, 최소 1초)")]
         private float clickTimeWindow = 3.0f;
