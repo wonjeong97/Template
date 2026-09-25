@@ -22,7 +22,7 @@ namespace HuliacDev.Utils
     public class GameCloser : MonoBehaviour
     {
         [Header("Close Settings (Overwritten by JSON)")]
-        [SerializeField, Min(1), Tooltip("앱을 종료하기 위해 필요한 연속 클릭 횟수")]
+        [SerializeField, Min(CloseSettingResolver.MinClickCount), Tooltip("앱을 종료하기 위해 필요한 연속 클릭 횟수")]
         private int targetClickCount = 10;
 
         [SerializeField, Min(CloseSettingResolver.MinClickTimeWindow), Tooltip("연속 클릭으로 인정되는 최대 대기 시간 (초, 최소 1초)")]
@@ -66,10 +66,15 @@ namespace HuliacDev.Utils
         }
 
         /// <summary>
-        /// 시작 시 비동기로 설정 파일을 읽어와 버튼의 레이아웃과 색상, 클릭 조건을 적용함.
+        /// 시작 시 인스펙터 값을 최소값 규칙에 맞게 보정하고, 비동기로 설정 파일을 읽어와
+        /// 버튼의 레이아웃과 색상, 클릭 조건을 적용함.
         /// </summary>
         private void Start()
         {
+            // [Min]은 인스펙터 편집 시에만 동작하므로, 이미 저장된 값(씬 재정의 등)도 실행 시 최소값으로 맞춤.
+            // 설정 로드가 실패하거나 주입이 없어도 이 값으로 동작하므로 가장 먼저 수행함.
+            LogSettingIssues(CloseSettingResolver.ClampInspectorValues(ref targetClickCount, ref clickTimeWindow));
+
             // 주입 없이 컴포넌트만 붙인 경우 원인을 알기 어려운 NullReferenceException이 발생하므로
             // 무엇을 빠뜨렸는지 알려주고 중단함.
             if (_settingsProvider == null)
@@ -121,6 +126,7 @@ namespace HuliacDev.Utils
         /// <summary>
         /// 설정 해석 중 발견한 문제(범위 밖 값, 위치 한 성분만 지정)를 필드별 경고로 남김.
         /// 해당 필드는 적용되지 않고 인스펙터 값이 유지되므로, 원인을 로그로 알 수 있게 하기 위함.
+        /// 최소값 미만이라 올려 적용한 값(JSON·인스펙터)과 권장값보다 작은 클릭 횟수도 함께 알림.
         /// </summary>
         private void LogSettingIssues(CloseSettingIssues issues)
         {
@@ -149,6 +155,21 @@ namespace HuliacDev.Utils
             if ((issues & CloseSettingIssues.PositionOutOfRange) != 0)
             {
                 _logger.ZLogWarning($"[GameCloser] closeSetting.position must be between 0 and 1 (normalized). Keeping current position.");
+            }
+
+            if ((issues & CloseSettingIssues.LowNumToClose) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] closeSetting.numToClose is below the recommended minimum ({CloseSettingResolver.RecommendedMinNumToClose}). Visitors may close the app by accidental taps.");
+            }
+
+            if ((issues & CloseSettingIssues.InspectorClickCountBelowMinimum) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] Inspector targetClickCount on {gameObject.name} was below {CloseSettingResolver.MinClickCount}. Raised to {targetClickCount}.");
+            }
+
+            if ((issues & CloseSettingIssues.InspectorClickTimeWindowBelowMinimum) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] Inspector clickTimeWindow on {gameObject.name} was below the minimum ({CloseSettingResolver.MinClickTimeWindow}s). Raised to {clickTimeWindow}s.");
             }
         }
 
@@ -267,8 +288,9 @@ namespace HuliacDev.Utils
 
         /// <summary>
         /// 플랫폼 환경(에디터 및 빌드)에 맞춰 안전하게 종료 명령을 호출함.
+        /// 파생 클래스는 종료 방식(예: 종료 전 확인 화면)을 바꾸기 위해 재정의할 수 있음.
         /// </summary>
-        private void QuitApplication()
+        protected virtual void QuitApplication()
         {
             // ApiManagerBase가 종료 로그 메시지에 "누가 종료시켰는지" 반영할 수 있도록,
             // Application.Quit()을 부르기 직전에 남겨둠.

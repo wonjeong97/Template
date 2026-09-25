@@ -230,6 +230,100 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
+        /// numToClose가 권장 최소값(3회)보다 작으면 그대로 적용하되, 오터치 위험을 경고하도록 문제로 표시해야 함.
+        /// </summary>
+        [Test]
+        public void numToClose가_3회_미만이면_적용하되_경고로_표시한다()
+        {
+            Settings settings = JsonUtility.FromJson<Settings>("{\"closeSetting\":{\"numToClose\":2}}");
+
+            Assert.IsTrue(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting resolved));
+            Assert.AreEqual(2, resolved.TargetClickCount, "경고만 하고 값은 그대로 적용해야 함");
+            Assert.AreEqual(CloseSettingIssues.LowNumToClose, resolved.Issues);
+        }
+
+        /// <summary>
+        /// numToClose가 권장 최소값(3회) 이상이면 경고하지 않아야 함.
+        /// </summary>
+        [Test]
+        public void numToClose가_3회_이상이면_경고하지_않는다()
+        {
+            Settings settings = JsonUtility.FromJson<Settings>("{\"closeSetting\":{\"numToClose\":3}}");
+
+            Assert.IsTrue(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting resolved));
+            Assert.AreEqual(CloseSettingIssues.None, resolved.Issues);
+        }
+
+        /// <summary>
+        /// [Min]은 인스펙터 편집 시에만 동작하므로, 이미 저장된 최소값 미만 값(클릭 0회, 0.5초 등)은
+        /// 실행 시 최소값으로 올리고 문제로 표시해야 함.
+        /// </summary>
+        [Test]
+        public void 인스펙터_값이_최소값_미만이면_최소값으로_올린다()
+        {
+            int targetClickCount = 0;
+            float clickTimeWindow = 0.5f;
+
+            CloseSettingIssues issues = CloseSettingResolver.ClampInspectorValues(ref targetClickCount, ref clickTimeWindow);
+
+            Assert.AreEqual(CloseSettingResolver.MinClickCount, targetClickCount);
+            Assert.AreEqual(CloseSettingResolver.MinClickTimeWindow, clickTimeWindow, 0.0001f);
+            Assert.AreEqual(
+                CloseSettingIssues.InspectorClickCountBelowMinimum | CloseSettingIssues.InspectorClickTimeWindowBelowMinimum,
+                issues);
+        }
+
+        /// <summary>
+        /// 최소값 이상인 인스펙터 값은 바꾸지 않아야 함.
+        /// </summary>
+        [Test]
+        public void 인스펙터_값이_최소값_이상이면_그대로_둔다()
+        {
+            int targetClickCount = 10;
+            float clickTimeWindow = 3f;
+
+            CloseSettingIssues issues = CloseSettingResolver.ClampInspectorValues(ref targetClickCount, ref clickTimeWindow);
+
+            Assert.AreEqual(10, targetClickCount);
+            Assert.AreEqual(3f, clickTimeWindow, 0.0001f);
+            Assert.AreEqual(CloseSettingIssues.None, issues);
+        }
+
+        /// <summary>
+        /// ApplyResolvedSettings가 해석된 클릭 횟수를 실제 종료 조건에 반영해야 함.
+        /// 3회로 적용하면 두 번째 클릭까지는 종료되지 않고 세 번째 클릭에 종료되어야 함.
+        /// </summary>
+        [Test]
+        public void 적용한_클릭_횟수만큼_눌러야_종료된다()
+        {
+            QuitRecordingGameCloser closer = CreateRecordingCloser(out Button button);
+
+            closer.ApplyResolvedSettings(new ResolvedCloseSetting(3, 2f, null, null, CloseSettingIssues.None));
+
+            button.onClick.Invoke();
+            button.onClick.Invoke();
+            Assert.AreEqual(0, closer.QuitCount, "적용한 클릭 횟수보다 먼저 종료됨");
+
+            button.onClick.Invoke();
+            Assert.AreEqual(1, closer.QuitCount, "적용한 클릭 횟수에 도달했는데 종료되지 않음(설정이 반영되지 않음)");
+        }
+
+        /// <summary>
+        /// 해석 실패 시의 default 결과(클릭 횟수 0)를 적용해도 종료 조건이 바뀌지 않아,
+        /// 한 번 클릭으로 종료되면 안 됨(인스펙터 기본값 10회 유지).
+        /// </summary>
+        [Test]
+        public void 클릭_횟수_0_결과를_적용해도_한_번_클릭에_종료되지_않는다()
+        {
+            QuitRecordingGameCloser closer = CreateRecordingCloser(out Button button);
+
+            closer.ApplyResolvedSettings(default);
+            button.onClick.Invoke();
+
+            Assert.AreEqual(0, closer.QuitCount, "클릭 횟수 0이 적용되어 한 번 클릭에 종료됨");
+        }
+
+        /// <summary>
         /// 위치가 없고 투명도만 있으면, RectTransform은 그대로 두고 Image 투명도만 바꿔야 함.
         /// </summary>
         [Test]
@@ -293,6 +387,35 @@ namespace HuliacDev.Tests
             img.color = Color.red;
 
             return go.AddComponent<GameCloser>();
+        }
+
+        /// <summary>
+        /// 실제로 앱을 끄지 않고 종료 요청만 기록하는 GameCloser를 만듦(Button은 RequireComponent로 자동 추가).
+        /// </summary>
+        private QuitRecordingGameCloser CreateRecordingCloser(out Button button)
+        {
+            GameObject go = new GameObject("RecordingCloser", typeof(RectTransform));
+            _spawned.Add(go);
+
+            QuitRecordingGameCloser closer = go.AddComponent<QuitRecordingGameCloser>();
+            Assert.IsTrue(go.TryGetComponent(out button), "Button이 자동으로 추가되어야 함");
+            return closer;
+        }
+    }
+
+    /// <summary>
+    /// 에디터에서 플레이 모드를 끄는 실제 종료 대신 종료 요청 횟수만 기록하는 테스트용 GameCloser.
+    /// </summary>
+    internal class QuitRecordingGameCloser : GameCloser
+    {
+        public int QuitCount;
+
+        /// <summary>
+        /// 앱을 끄지 않고 종료 요청 횟수만 늘림.
+        /// </summary>
+        protected override void QuitApplication()
+        {
+            QuitCount++;
         }
     }
 }

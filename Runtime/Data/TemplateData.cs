@@ -47,10 +47,10 @@ namespace HuliacDev.Data
         /// </summary>
         public Vector2 position = new Vector2(UnsetValue, UnsetValue);
 
-        /// <summary>앱 종료에 필요한 연속 클릭 횟수. 0 이하면 미지정이며, 이때는 closeSetting 전체를 무시함.</summary>
+        /// <summary>앱 종료에 필요한 연속 클릭 횟수. 0 이하면 미지정이며, 이때는 closeSetting 전체를 무시함. 3 미만이면 오터치로 꺼질 수 있어 경고함(적용은 함).</summary>
         public int numToClose;
 
-        /// <summary>연속 클릭으로 인정하는 제한 시간(초). 표시값 -1이면 미지정. 0 이하를 적으면 적용하지 않고 경고함.</summary>
+        /// <summary>연속 클릭으로 인정하는 제한 시간(초, 최소 1초). 표시값 -1이면 미지정. 0 이하를 적으면 적용하지 않고 경고하며, 1초 미만 양수는 1초로 올려 적용하고 경고함.</summary>
         public float resetClickTime = UnsetValue;
 
         /// <summary>버튼 이미지 투명도(0~1). 표시값 -1이면 미지정. 0은 완전히 투명한 정상 값이며, 0~1을 벗어나면 적용하지 않고 경고함.</summary>

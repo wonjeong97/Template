@@ -25,7 +25,16 @@ namespace HuliacDev.Utils
         PositionOutOfRange = 1 << 3,
 
         /// <summary>resetClickTime이 양수지만 최소값(1초)보다 작아 최소값으로 올려 적용함.</summary>
-        ResetClickTimeBelowMinimum = 1 << 4
+        ResetClickTimeBelowMinimum = 1 << 4,
+
+        /// <summary>numToClose가 권장 최소값(3회)보다 작음. 관람객이 우연히 눌러 앱이 꺼질 수 있어 경고만 하고 그대로 적용함.</summary>
+        LowNumToClose = 1 << 5,
+
+        /// <summary>인스펙터(직렬화)의 클릭 횟수가 1보다 작아 1로 올림.</summary>
+        InspectorClickCountBelowMinimum = 1 << 6,
+
+        /// <summary>인스펙터(직렬화)의 제한 시간이 최소값(1초)보다 작아 최소값으로 올림.</summary>
+        InspectorClickTimeWindowBelowMinimum = 1 << 7
     }
 
     /// <summary>
@@ -67,10 +76,21 @@ namespace HuliacDev.Utils
         internal const float MinClickTimeWindow = 1f;
 
         /// <summary>
+        /// 클릭 횟수의 최소값. 0 이하면 숨은 버튼을 한 번만 눌러도 앱이 종료됨.
+        /// </summary>
+        internal const int MinClickCount = 1;
+
+        /// <summary>
+        /// 오터치로 인한 종료를 막기 위한 numToClose 권장 최소값. 이보다 작으면 경고만 하고 그대로 적용함.
+        /// </summary>
+        internal const int RecommendedMinNumToClose = 3;
+
+        /// <summary>
         /// numToClose가 양수가 아니면(closeSetting 키 누락 포함) 설정 전체를 무시하도록 false를 반환함.
         /// 그 외에는 JSON에서 올바르게 지정된 필드만 값으로 채우고, 미지정(표시값)이거나 잘못된 필드는 null로 둠.
         /// 잘못된 필드(범위 밖 값, 위치 한 성분만 지정)는 Issues에 표시해 호출부가 경고를 남기게 함.
         /// 제한 시간이 최소값(1초)보다 작으면 최소값으로 올려 적용하고 역시 Issues에 표시함.
+        /// numToClose가 권장 최소값(3회)보다 작으면 그대로 적용하되 Issues에 표시해 경고하게 함.
         /// </summary>
         public static bool TryResolve(CloseSetting setting, out ResolvedCloseSetting resolved)
         {
@@ -81,6 +101,8 @@ namespace HuliacDev.Utils
             }
 
             CloseSettingIssues issues = CloseSettingIssues.None;
+            if (setting.numToClose < RecommendedMinNumToClose) issues |= CloseSettingIssues.LowNumToClose;
+
             float? clickTimeWindow = ResolveResetClickTime(setting.resetClickTime, ref issues);
             float? imageAlpha = ResolveImageAlpha(setting.imageAlpha, ref issues);
             Vector2? position = ResolvePosition(setting.position, ref issues);
@@ -166,6 +188,30 @@ namespace HuliacDev.Utils
 
             issues |= CloseSettingIssues.PositionOutOfRange;
             return null;
+        }
+
+        /// <summary>
+        /// 인스펙터(직렬화) 값을 최소값 규칙에 맞게 보정함. [Min]은 인스펙터에서 편집할 때만 동작해,
+        /// 이미 저장된 값(씬 재정의 등)은 그대로 남으므로 실행 시에도 같은 규칙을 적용하기 위함.
+        /// 보정한 항목은 반환 값에 표시해 호출부가 경고를 남기게 함.
+        /// </summary>
+        public static CloseSettingIssues ClampInspectorValues(ref int targetClickCount, ref float clickTimeWindow)
+        {
+            CloseSettingIssues issues = CloseSettingIssues.None;
+
+            if (targetClickCount < MinClickCount)
+            {
+                targetClickCount = MinClickCount;
+                issues |= CloseSettingIssues.InspectorClickCountBelowMinimum;
+            }
+
+            if (clickTimeWindow < MinClickTimeWindow)
+            {
+                clickTimeWindow = MinClickTimeWindow;
+                issues |= CloseSettingIssues.InspectorClickTimeWindowBelowMinimum;
+            }
+
+            return issues;
         }
 
         /// <summary>
