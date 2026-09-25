@@ -9,7 +9,9 @@
         "UnityEditor.TestRunner",
         "ZLogger.Unity",
         "R3.Unity",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "Unity.InputSystem",
+        "Unity.InputSystem.TestFramework"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
