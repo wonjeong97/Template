@@ -98,10 +98,9 @@ namespace HuliacDev.Utils
             {
                 Settings settings = await _settingsProvider.GetAsync(cancellationToken);
 
-                // 병합 규칙(누락 판정, 필드별 미지정 처리)은 CloseSettingResolver가 담당하고,
-                // 여기서는 그 결과를 컴포넌트에 적용하는 일만 함.
-                if (!CloseSettingResolver.TryResolve(settings?.closeSetting, targetClickCount, clickTimeWindow,
-                        out ResolvedCloseSetting resolved))
+                // 해석 규칙(누락 판정, 필드별 미지정·검증)은 CloseSettingResolver가 담당하고,
+                // 여기서는 경고를 남기고 결과를 컴포넌트에 적용하는 일만 함.
+                if (!CloseSettingResolver.TryResolve(settings?.closeSetting, out ResolvedCloseSetting resolved))
                 {
                     if (_logger != null)
                     {
@@ -110,6 +109,7 @@ namespace HuliacDev.Utils
                     return;
                 }
 
+                LogSettingIssues(resolved.Issues);
                 ApplyResolvedSettings(resolved);
             }
             catch (OperationCanceledException)
@@ -119,35 +119,86 @@ namespace HuliacDev.Utils
         }
 
         /// <summary>
-        /// 병합된 설정을 클릭 조건과 RectTransform·Image에 적용함.
-        /// 위치·투명도는 JSON에서 지정된 경우에만 바꾸고, 미지정이면 인스펙터에서 정한 값을 그대로 둠.
+        /// 설정 해석 중 발견한 문제(범위 밖 값, 위치 한 성분만 지정)를 필드별 경고로 남김.
+        /// 해당 필드는 적용되지 않고 인스펙터 값이 유지되므로, 원인을 로그로 알 수 있게 하기 위함.
         /// </summary>
-        private void ApplyResolvedSettings(ResolvedCloseSetting resolved)
+        private void LogSettingIssues(CloseSettingIssues issues)
+        {
+            if (issues == CloseSettingIssues.None || _logger == null) return;
+
+            if ((issues & CloseSettingIssues.InvalidResetClickTime) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] closeSetting.resetClickTime must be positive. Using inspector value: Window({clickTimeWindow}s)");
+            }
+
+            if ((issues & CloseSettingIssues.ImageAlphaOutOfRange) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] closeSetting.imageAlpha must be between 0 and 1. Keeping current image alpha.");
+            }
+
+            if ((issues & CloseSettingIssues.PartialPosition) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] closeSetting.position must specify both x and y. Keeping current position.");
+            }
+
+            if ((issues & CloseSettingIssues.PositionOutOfRange) != 0)
+            {
+                _logger.ZLogWarning($"[GameCloser] closeSetting.position must be between 0 and 1 (normalized). Keeping current position.");
+            }
+        }
+
+        /// <summary>
+        /// 해석된 설정을 클릭 조건과 RectTransform·Image에 적용함.
+        /// 값이 없는(미지정이거나 잘못 지정된) 필드는 바꾸지 않고 인스펙터에서 정한 값을 그대로 둠.
+        /// </summary>
+        internal void ApplyResolvedSettings(ResolvedCloseSetting resolved)
         {
             targetClickCount = resolved.TargetClickCount;
-            clickTimeWindow = resolved.ClickTimeWindow;
+            if (resolved.ClickTimeWindow.HasValue) clickTimeWindow = resolved.ClickTimeWindow.Value;
 
-            // 앵커(기준점)와 피벗(중심점)을 세팅값(0~1 정규화 좌표, 예: 0,0 또는 1,1)으로 맞춰서 모서리를 지정하고,
-            // 기준점에 완전히 밀착하도록 로컬 좌표를 0으로 초기화함.
-            if (resolved.HasPosition && TryGetComponent(out RectTransform rt))
-            {
-                rt.anchorMin = resolved.Position;
-                rt.anchorMax = resolved.Position;
-                rt.pivot = resolved.Position;
-                rt.anchoredPosition = Vector2.zero;
-            }
-
-            if (resolved.HasImageAlpha && TryGetComponent(out Image img))
-            {
-                Color c = img.color;
-                c.a = resolved.ImageAlpha;
-                img.color = c;
-            }
+            bool isPositionApplied = resolved.Position.HasValue && TryApplyPosition(resolved.Position.Value);
+            bool isAlphaApplied = resolved.ImageAlpha.HasValue && TryApplyImageAlpha(resolved.ImageAlpha.Value);
 
             if (_logger != null)
             {
-                _logger.ZLogInformation($"[GameCloser] Settings applied from JSON: Pos({(resolved.HasPosition ? resolved.Position.ToString() : "inspector")}), Alpha({(resolved.HasImageAlpha ? resolved.ImageAlpha.ToString() : "inspector")}), Target({targetClickCount}), Window({clickTimeWindow}s)");
+                _logger.ZLogInformation($"[GameCloser] Settings applied from JSON: Target({targetClickCount}), Window({clickTimeWindow}s), PositionFromJson({isPositionApplied}), AlphaFromJson({isAlphaApplied})");
             }
+        }
+
+        /// <summary>
+        /// 앵커(기준점)와 피벗(중심점)을 0~1 정규화 좌표(예: 0,0 또는 1,1)로 맞춰 모서리를 지정하고,
+        /// 기준점에 완전히 밀착하도록 로컬 좌표를 0으로 초기화함. RectTransform이 없으면 경고 후 false를 반환함.
+        /// </summary>
+        private bool TryApplyPosition(Vector2 position)
+        {
+            if (!TryGetComponent(out RectTransform rt))
+            {
+                if (_logger != null) _logger.ZLogWarning($"[GameCloser] RectTransform is missing on {gameObject.name}. closeSetting.position was not applied.");
+                return false;
+            }
+
+            rt.anchorMin = position;
+            rt.anchorMax = position;
+            rt.pivot = position;
+            rt.anchoredPosition = Vector2.zero;
+            return true;
+        }
+
+        /// <summary>
+        /// 버튼 Image의 투명도만 바꾸고 색상은 유지함. Image가 없으면 경고 후 false를 반환함.
+        /// </summary>
+        private bool TryApplyImageAlpha(float alpha)
+        {
+            if (!TryGetComponent(out Image img))
+            {
+                if (_logger != null) _logger.ZLogWarning($"[GameCloser] Image is missing on {gameObject.name}. closeSetting.imageAlpha was not applied.");
+                return false;
+            }
+
+            Color c = img.color;
+            c.a = alpha;
+            img.color = c;
+            return true;
         }
 
         /// <summary>

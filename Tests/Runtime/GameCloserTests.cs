@@ -1,22 +1,33 @@
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.UI;
 using HuliacDev.Data;
 using HuliacDev.Utils;
 
 namespace HuliacDev.Tests
 {
     /// <summary>
-    /// GameCloser 설정 병합 규칙(CloseSettingResolver) 검증.
+    /// GameCloser 설정 해석 규칙(CloseSettingResolver)과 컴포넌트 적용(ApplyResolvedSettings) 검증.
     ///
     /// 배경: JsonUtility는 "closeSetting" 키가 없어도 null 대신 기본 인스턴스를 만들고, JSON에 없는 필드에는
     /// 필드 초기값을 남김. 예전 CloseSetting은 초기값이 없어 빠진 필드가 0이 되었고, numToClose만 적어도
-    /// 제한 시간·투명도·위치가 0으로 인스펙터 기본값을 덮어썼음. 이제 초기값을 "미지정" 표시값으로 두고,
-    /// 표시값인 필드는 인스펙터 값을 유지함.
+    /// 제한 시간·투명도·위치가 0으로 인스펙터 기본값을 덮어썼음. 이제 초기값을 "미지정" 표시값(-1)으로 두고,
+    /// 미지정이거나 잘못 지정된 필드는 적용하지 않음.
     /// </summary>
     public class GameCloserTests
     {
-        private const int InspectorTargetClickCount = 10;
-        private const float InspectorClickTimeWindow = 3f;
+        private readonly List<GameObject> _spawned = new List<GameObject>();
+
+        [TearDown]
+        public void TearDown()
+        {
+            foreach (GameObject go in _spawned)
+            {
+                if (go) Object.DestroyImmediate(go);
+            }
+            _spawned.Clear();
+        }
 
         /// <summary>
         /// 이 규칙의 전제인 JsonUtility 동작: 중첩 객체 안의 빠진 필드와, 중첩 객체 키 자체가 빠진 경우
@@ -37,51 +48,42 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
-        /// closeSetting 키가 없으면 numToClose가 0이므로 설정 전체를 무시하고 인스펙터 값을 유지해야 함.
+        /// closeSetting 키가 없으면 numToClose가 0이므로 설정 전체를 무시해야 함(GameCloser는 인스펙터 값 유지).
         /// </summary>
         [Test]
-        public void closeSetting_키가_없으면_인스펙터_값을_유지한다()
+        public void closeSetting_키가_없으면_설정_전체를_무시한다()
         {
             Settings settings = JsonUtility.FromJson<Settings>("{}");
 
-            bool applied = Resolve(settings.closeSetting, out ResolvedCloseSetting resolved);
-
-            Assert.IsFalse(applied, "numToClose가 없으면 설정을 적용하면 안 됨");
-            Assert.AreEqual(InspectorTargetClickCount, resolved.TargetClickCount);
-            Assert.AreEqual(InspectorClickTimeWindow, resolved.ClickTimeWindow);
-            Assert.IsFalse(resolved.HasPosition);
-            Assert.IsFalse(resolved.HasImageAlpha);
+            Assert.IsFalse(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting _),
+                "numToClose가 없으면 설정을 적용하면 안 됨");
         }
 
         /// <summary>
-        /// Settings 자체나 closeSetting이 null이어도 설정 전체를 무시하고 인스펙터 값을 유지해야 함.
+        /// closeSetting이 null이면 설정 전체를 무시해야 함.
+        /// GameCloser는 Settings 자체가 null일 때도 settings?.closeSetting으로 이 경로에 null을 넘김.
         /// </summary>
         [Test]
-        public void closeSetting이_null이면_인스펙터_값을_유지한다()
+        public void closeSetting이_null이면_설정_전체를_무시한다()
         {
-            bool applied = Resolve(null, out ResolvedCloseSetting resolved);
-
-            Assert.IsFalse(applied);
-            Assert.AreEqual(InspectorTargetClickCount, resolved.TargetClickCount);
-            Assert.AreEqual(InspectorClickTimeWindow, resolved.ClickTimeWindow);
+            Assert.IsFalse(CloseSettingResolver.TryResolve(null, out ResolvedCloseSetting _));
         }
 
         /// <summary>
-        /// numToClose만 지정하면 클릭 횟수만 바뀌고, 나머지(제한 시간·투명도·위치)는 인스펙터 값을 유지해야 함.
-        /// 예전에는 빠진 필드가 0으로 덮어써졌음.
+        /// numToClose만 지정하면 클릭 횟수만 채워지고, 나머지(제한 시간·투명도·위치)는 값이 없어야 함.
+        /// 미지정은 설정 실수가 아니므로 문제로 표시하지 않음. 예전에는 빠진 필드가 0으로 덮어써졌음.
         /// </summary>
         [Test]
-        public void numToClose만_지정하면_나머지는_인스펙터_값을_유지한다()
+        public void numToClose만_지정하면_나머지는_미지정으로_남는다()
         {
             Settings settings = JsonUtility.FromJson<Settings>("{\"closeSetting\":{\"numToClose\":5}}");
 
-            bool applied = Resolve(settings.closeSetting, out ResolvedCloseSetting resolved);
-
-            Assert.IsTrue(applied);
+            Assert.IsTrue(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting resolved));
             Assert.AreEqual(5, resolved.TargetClickCount);
-            Assert.AreEqual(InspectorClickTimeWindow, resolved.ClickTimeWindow, "제한 시간이 0으로 덮어써짐");
-            Assert.IsFalse(resolved.HasImageAlpha, "투명도가 0으로 덮어써짐");
-            Assert.IsFalse(resolved.HasPosition, "위치가 (0,0)으로 덮어써짐");
+            Assert.IsFalse(resolved.ClickTimeWindow.HasValue, "제한 시간이 0으로 덮어써짐");
+            Assert.IsFalse(resolved.ImageAlpha.HasValue, "투명도가 0으로 덮어써짐");
+            Assert.IsFalse(resolved.Position.HasValue, "위치가 (0,0)으로 덮어써짐");
+            Assert.AreEqual(CloseSettingIssues.None, resolved.Issues);
         }
 
         /// <summary>
@@ -95,39 +97,111 @@ namespace HuliacDev.Tests
             Settings settings = JsonUtility.FromJson<Settings>(
                 "{\"closeSetting\":{\"position\":{\"x\":0,\"y\":0},\"numToClose\":7,\"resetClickTime\":2.5,\"imageAlpha\":0}}");
 
-            bool applied = Resolve(settings.closeSetting, out ResolvedCloseSetting resolved);
-
-            Assert.IsTrue(applied);
+            Assert.IsTrue(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting resolved));
             Assert.AreEqual(7, resolved.TargetClickCount);
-            Assert.AreEqual(2.5f, resolved.ClickTimeWindow);
-            Assert.IsTrue(resolved.HasImageAlpha, "투명도 0은 정상 값으로 적용되어야 함");
-            Assert.AreEqual(0f, resolved.ImageAlpha);
-            Assert.IsTrue(resolved.HasPosition, "위치 (0,0)은 정상 값으로 적용되어야 함");
-            Assert.AreEqual(Vector2.zero, resolved.Position);
+            Assert.AreEqual(2.5f, resolved.ClickTimeWindow.Value, 0.0001f);
+            Assert.AreEqual(0f, resolved.ImageAlpha.Value, 0.0001f, "투명도 0은 정상 값으로 적용되어야 함");
+            Assert.AreEqual(Vector2.zero, resolved.Position.Value, "위치 (0,0)은 정상 값으로 적용되어야 함");
+            Assert.AreEqual(CloseSettingIssues.None, resolved.Issues);
         }
 
         /// <summary>
-        /// 위치는 두 성분이 모두 지정된 경우에만 적용함. 한 성분만 적으면 나머지가 표시값(-1)으로 남으므로
-        /// 위치 전체를 미지정으로 보고 인스펙터 값을 유지해야 함.
+        /// 위치의 한 성분만 적으면 나머지가 표시값(-1)으로 남으므로 위치를 적용하지 않고,
+        /// 설정 실수로 표시해 GameCloser가 경고를 남기게 해야 함.
         /// </summary>
         [Test]
-        public void 위치의_한_성분만_지정하면_위치는_적용하지_않는다()
+        public void 위치의_한_성분만_지정하면_적용하지_않고_문제로_표시한다()
         {
             Settings settings = JsonUtility.FromJson<Settings>(
                 "{\"closeSetting\":{\"position\":{\"x\":1},\"numToClose\":5}}");
 
-            bool applied = Resolve(settings.closeSetting, out ResolvedCloseSetting resolved);
-
-            Assert.IsTrue(applied);
-            Assert.IsFalse(resolved.HasPosition, "한 성분만 지정된 위치가 적용됨");
+            Assert.IsTrue(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting resolved));
+            Assert.IsFalse(resolved.Position.HasValue, "한 성분만 지정된 위치가 적용됨");
+            Assert.AreEqual(CloseSettingIssues.PartialPosition, resolved.Issues);
         }
 
         /// <summary>
-        /// 테스트용 인스펙터 값으로 CloseSettingResolver를 호출함.
+        /// 명시했지만 잘못된 값(제한 시간 0 이하, 투명도·위치가 0~1 밖)은 적용하지 않고 각각 문제로 표시해야 함.
         /// </summary>
-        private static bool Resolve(CloseSetting setting, out ResolvedCloseSetting resolved)
+        [Test]
+        public void 잘못된_값은_적용하지_않고_문제로_표시한다()
         {
-            return CloseSettingResolver.TryResolve(setting, InspectorTargetClickCount, InspectorClickTimeWindow, out resolved);
+            Settings settings = JsonUtility.FromJson<Settings>(
+                "{\"closeSetting\":{\"position\":{\"x\":2,\"y\":0.5},\"numToClose\":5,\"resetClickTime\":0,\"imageAlpha\":1.5}}");
+
+            Assert.IsTrue(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting resolved));
+            Assert.IsFalse(resolved.ClickTimeWindow.HasValue);
+            Assert.IsFalse(resolved.ImageAlpha.HasValue);
+            Assert.IsFalse(resolved.Position.HasValue);
+            Assert.AreEqual(
+                CloseSettingIssues.InvalidResetClickTime | CloseSettingIssues.ImageAlphaOutOfRange | CloseSettingIssues.PositionOutOfRange,
+                resolved.Issues);
+        }
+
+        /// <summary>
+        /// 위치가 없고 투명도만 있으면, RectTransform은 그대로 두고 Image 투명도만 바꿔야 함.
+        /// </summary>
+        [Test]
+        public void 위치가_없으면_RectTransform은_그대로_두고_투명도만_적용한다()
+        {
+            GameCloser closer = CreateCloser(out RectTransform rt, out Image img);
+
+            closer.ApplyResolvedSettings(new ResolvedCloseSetting(5, null, 0f, null, CloseSettingIssues.None));
+
+            Assert.AreEqual(new Vector2(0.5f, 0.5f), rt.anchorMin, "위치 미지정인데 앵커가 바뀜");
+            Assert.AreEqual(new Vector2(0.5f, 0.5f), rt.pivot);
+            Assert.AreEqual(0f, img.color.a, 0.0001f, "투명도가 적용되지 않음");
+            Assert.AreEqual(Color.red.r, img.color.r, 0.0001f, "투명도 외 색상이 바뀜");
+        }
+
+        /// <summary>
+        /// 위치가 있고 투명도가 없으면, 앵커·피벗을 위치로 맞추고 Image 투명도는 그대로 두어야 함.
+        /// </summary>
+        [Test]
+        public void 투명도가_없으면_Image는_그대로_두고_위치만_적용한다()
+        {
+            GameCloser closer = CreateCloser(out RectTransform rt, out Image img);
+
+            closer.ApplyResolvedSettings(new ResolvedCloseSetting(5, null, null, new Vector2(1f, 1f), CloseSettingIssues.None));
+
+            Assert.AreEqual(Vector2.one, rt.anchorMin);
+            Assert.AreEqual(Vector2.one, rt.anchorMax);
+            Assert.AreEqual(Vector2.one, rt.pivot);
+            Assert.AreEqual(Vector2.zero, rt.anchoredPosition);
+            Assert.AreEqual(1f, img.color.a, 0.0001f, "투명도 미지정인데 바뀜");
+        }
+
+        /// <summary>
+        /// Image가 없는 버튼에 투명도가 지정돼도 예외 없이 건너뛰어야 함(경고는 로거가 있을 때 남음).
+        /// </summary>
+        [Test]
+        public void Image가_없어도_투명도_적용에서_예외가_발생하지_않는다()
+        {
+            GameObject go = new GameObject("CloserWithoutImage", typeof(RectTransform));
+            _spawned.Add(go);
+            GameCloser closer = go.AddComponent<GameCloser>();
+
+            Assert.DoesNotThrow(() =>
+                closer.ApplyResolvedSettings(new ResolvedCloseSetting(5, null, 0f, null, CloseSettingIssues.None)));
+        }
+
+        /// <summary>
+        /// 앵커·피벗이 가운데이고 빨간 불투명 Image를 가진 GameCloser를 만듦(Button은 RequireComponent로 자동 추가).
+        /// </summary>
+        private GameCloser CreateCloser(out RectTransform rt, out Image img)
+        {
+            GameObject go = new GameObject("Closer", typeof(RectTransform));
+            _spawned.Add(go);
+
+            rt = (RectTransform)go.transform;
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+
+            img = go.AddComponent<Image>();
+            img.color = Color.red;
+
+            return go.AddComponent<GameCloser>();
         }
     }
 }
