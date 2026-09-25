@@ -213,7 +213,7 @@ namespace HuliacDev.Tests
 
             buttonGo.GetComponent<Button>().onClick.Invoke();
 
-            await UniTask.Delay(500, DelayType.UnscaledDeltaTime);
+            await UniTask.Delay(1000, DelayType.UnscaledDeltaTime);
         });
 
         /// <summary>
@@ -242,6 +242,35 @@ namespace HuliacDev.Tests
             Assert.IsTrue(child.TryGetComponent(out Text text), "자식에 Text가 있어야 함");
             Assert.AreEqual("확인", text.text);
             Assert.AreEqual(1, buttonGo.transform.childCount, "재설정 시 텍스트 자식이 중복 생성되면 안 됨");
+        }
+
+        /// <summary>
+        /// Unity 메뉴(UI > Legacy > Button)로 만든 버튼은 텍스트 자식 이름이 "Text (Legacy)"임.
+        /// 이런 기존 버튼에 SetButton을 하면 새 "Text" 자식을 만들지 않고 기존 Text에 적용해야 함.
+        /// 새로 만들면 두 텍스트가 겹쳐 보임.
+        /// </summary>
+        [Test]
+        public void 이름이_다른_기존_텍스트_자식이_있으면_새로_만들지_않고_재사용한다()
+        {
+            GameObject buttonGo = new GameObject("LegacyButton");
+            _spawned.Add(buttonGo);
+
+            GameObject legacyTextGo = new GameObject("Text (Legacy)", typeof(RectTransform));
+            legacyTextGo.transform.SetParent(buttonGo.transform, false);
+            Text legacyText = legacyTextGo.AddComponent<Text>();
+            legacyText.text = "Button";
+
+            ButtonSetting setting = new ButtonSetting
+            {
+                name = "LegacyButton",
+                buttonBackgroundImage = new ImageSetting { name = "Bg" },
+                buttonText = new TextSetting { name = "Label", text = "확인" }
+            };
+
+            _uiManager.SetButton(buttonGo, setting);
+
+            Assert.AreEqual(1, buttonGo.transform.childCount, "기존 텍스트 자식이 있으면 새 자식을 만들면 안 됨");
+            Assert.AreEqual("확인", legacyText.text, "기존 Text에 설정이 적용되어야 함");
         }
 
         /// <summary>

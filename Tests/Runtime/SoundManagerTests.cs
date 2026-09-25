@@ -38,11 +38,8 @@ namespace HuliacDev.Tests
             _soundManager = _go.AddComponent<SoundManager>();
             SoundManagerTestHelper.SetLogger(_soundManager);
 
+            // 5MB WAV는 실제 로드가 필요한 테스트에서만 PrepareSilentClip으로 만듦.
             _clipPath = Path.Combine(Application.temporaryCachePath, "SoundManagerTests.wav").Replace("\\", "/");
-            WriteSilentWav(_clipPath);
-
-            // clipPath가 절대 경로면 Path.Combine이 StreamingAssets 경로를 무시하므로 임시 파일을 그대로 가리킴.
-            SoundManagerTestHelper.SetSoundSetting(_soundManager, "a", _clipPath);
         }
 
         [TearDown]
@@ -62,6 +59,7 @@ namespace HuliacDev.Tests
         {
             ExpectMissingSettingsProviderError();
             AudioSource bgmSource = GetBgmSource();
+            PrepareSilentClip("a");
 
             // Start()의 의존성 누락 오류가 먼저 출력되게 한 프레임 넘김(아래 Assume으로 끝나도 예상 로그가 남도록).
             await UniTask.Yield();
@@ -79,6 +77,32 @@ namespace HuliacDev.Tests
         });
 
         /// <summary>
+        /// 재생 중인 BGM이 없는 상태(부팅 직후 첫 로드 등)에서 로드 중에 FadeOutBGM을 호출하면,
+        /// 페이드할 대상은 없지만 요청은 취소되어 로드가 끝나도 BGM이 재생(할당)되면 안 됨.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 첫_로드_중_FadeOutBGM을_호출하면_로드가_끝나도_재생하지_않는다() => UniTask.ToCoroutine(async () =>
+        {
+            ExpectMissingSettingsProviderError();
+            AudioSource bgmSource = GetBgmSource();
+            PrepareSilentClip("a");
+
+            // Start()의 의존성 누락 오류가 먼저 출력되게 한 프레임 넘김(아래 Assume으로 끝나도 예상 로그가 남도록).
+            await UniTask.Yield();
+
+            _soundManager.PlayBGM("a");
+            AssumeLoadIsPending(!bgmSource.clip);
+            _soundManager.FadeOutBGM(1f);
+
+            await UniTask.Delay(TimeSpan.FromSeconds(LoadSettleSeconds), DelayType.UnscaledDeltaTime);
+            Assert.IsFalse(bgmSource.clip, "로드 중 페이드아웃한 BGM이 로드 완료 후 재생됨");
+
+            // 대조군: 같은 파일이 실제로 로드 가능해야 위 검증이 의미가 있음.
+            _soundManager.PlayBGM("a");
+            await WaitUntilBgmClipAsync(bgmSource, "a");
+        });
+
+        /// <summary>
         /// 설정 로드 전에 들어온 재생 요청은 무시되더라도 원인을 알 수 있는 경고를 남겨야 함.
         /// </summary>
         [Test]
@@ -87,6 +111,16 @@ namespace HuliacDev.Tests
             LogAssert.Expect(LogType.Warning, new Regex("not loaded yet.*PlaySFX.*unknown_key"));
 
             _soundManager.PlaySFX("unknown_key");
+        }
+
+        /// <summary>
+        /// 임시 폴더에 무음 WAV를 만들고 지정한 키로 등록함.
+        /// clipPath가 절대 경로면 Path.Combine이 StreamingAssets 경로를 무시하므로 임시 파일을 그대로 가리킴.
+        /// </summary>
+        private void PrepareSilentClip(string key)
+        {
+            WriteSilentWav(_clipPath);
+            SoundManagerTestHelper.SetSoundSetting(_soundManager, key, _clipPath);
         }
 
         /// <summary>

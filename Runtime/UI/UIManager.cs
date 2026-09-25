@@ -478,24 +478,41 @@ namespace HuliacDev.UI
 
         /// <summary>
         /// 버튼의 텍스트 컴포넌트 설정을 적용함.
-        /// 텍스트는 버튼 자신 또는 직계 자식 "Text"에서 찾고, 둘 다 없으면 그 이름의 자식을 새로 만듦.
-        /// 버튼 자신에 Text를 붙이지 않는 이유: 배경 Image가 이미 붙어 있으면 Graphic 컴포넌트는
-        /// 한 오브젝트에 둘을 둘 수 없어 AddComponent가 null을 반환하고 텍스트가 사라짐.
+        /// 기존 텍스트를 찾지 못했을 때만 "Text" 자식을 새로 만듦. 버튼 자신에 Text를 붙이지 않는 이유:
+        /// 배경 Image가 이미 붙어 있으면 Graphic 컴포넌트는 한 오브젝트에 둘을 둘 수 없어
+        /// AddComponent가 null을 반환하고 텍스트가 사라짐.
         /// </summary>
         private void ApplyButtonText(GameObject target, TextSetting textSetting)
         {
             if (textSetting == null) return;
 
-            if (!target.TryGetComponent(out Text btnText))
+            Text btnText = FindButtonText(target);
+            if (!btnText)
             {
-                Transform child = target.transform.Find(ButtonTextChildName);
-                if (!child || !child.TryGetComponent(out btnText))
-                {
-                    btnText = CreateButtonTextChild(target);
-                }
+                btnText = CreateButtonTextChild(target);
             }
 
             ApplyTextSettings(btnText, textSetting);
+        }
+
+        /// <summary>
+        /// 버튼 자신 → 직계 자식 "Text" → 그 밖의 직계 자식 순으로 Text를 찾고, 없으면 null을 반환함.
+        /// 마지막 단계는 Unity 메뉴(UI > Legacy > Button)가 만드는 "Text (Legacy)"처럼 이름이 다른
+        /// 기존 버튼에서 새 자식이 생겨 글자가 겹치지 않도록 하기 위함. 손자 이하 계층은 보지 않음.
+        /// </summary>
+        private static Text FindButtonText(GameObject target)
+        {
+            if (target.TryGetComponent(out Text selfText)) return selfText;
+
+            Transform named = target.transform.Find(ButtonTextChildName);
+            if (named && named.TryGetComponent(out Text namedText)) return namedText;
+
+            foreach (Transform child in target.transform)
+            {
+                if (child.TryGetComponent(out Text childText)) return childText;
+            }
+
+            return null;
         }
 
         /// <summary>

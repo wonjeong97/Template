@@ -292,9 +292,12 @@ namespace HuliacDev.UI
         /// </summary>
         public void FadeOutBGM(float duration)
         {
+            // 재생 중이 아니어도 키는 먼저 지움. 첫 로드가 진행 중일 때 호출되면 재생 중인 BGM이 없어
+            // 아래 가드에서 반환되는데, 키가 남아 있으면 로드 완료 후 LoadAndPlayAsync가 재생해 버림.
+            _currentBGMKey = null;
+
             if (!_bgmSource || !_bgmSource.isPlaying) return;
 
-            _currentBGMKey = null;
             CancelFadeRoutine();
             _bgmFadeCts = CancellationTokenSource.CreateLinkedTokenSource(this.GetCancellationTokenOnDestroy());
 
