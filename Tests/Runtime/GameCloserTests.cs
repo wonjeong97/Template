@@ -230,28 +230,30 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
-        /// numToClose가 권장 최소값(3회)보다 작으면 그대로 적용하되, 오터치 위험을 경고하도록 문제로 표시해야 함.
+        /// numToClose가 권장 최소값(3회)보다 작아도 설정 오류가 아니므로 그대로 적용해야 함.
+        /// 오터치 경고는 JSON·인스펙터 구분 없이 최종 클릭 횟수 기준으로 GameCloser가 따로 남김.
         /// </summary>
         [Test]
-        public void numToClose가_3회_미만이면_적용하되_경고로_표시한다()
+        public void numToClose가_3회_미만이어도_그대로_적용한다()
         {
             Settings settings = JsonUtility.FromJson<Settings>("{\"closeSetting\":{\"numToClose\":2}}");
 
             Assert.IsTrue(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting resolved));
             Assert.AreEqual(2, resolved.TargetClickCount, "경고만 하고 값은 그대로 적용해야 함");
-            Assert.AreEqual(CloseSettingIssues.LowNumToClose, resolved.Issues);
+            Assert.AreEqual(CloseSettingIssues.None, resolved.Issues);
         }
 
         /// <summary>
-        /// numToClose가 권장 최소값(3회) 이상이면 경고하지 않아야 함.
+        /// 최종 클릭 횟수가 권장 최소값(3회)보다 작으면 오터치 위험으로 판정해야 함.
+        /// 값의 출처(JSON·인스펙터)와 관계없이 같은 기준을 씀.
         /// </summary>
         [Test]
-        public void numToClose가_3회_이상이면_경고하지_않는다()
+        public void 최종_클릭_횟수가_3회_미만이면_오터치_위험으로_판정한다()
         {
-            Settings settings = JsonUtility.FromJson<Settings>("{\"closeSetting\":{\"numToClose\":3}}");
-
-            Assert.IsTrue(CloseSettingResolver.TryResolve(settings.closeSetting, out ResolvedCloseSetting resolved));
-            Assert.AreEqual(CloseSettingIssues.None, resolved.Issues);
+            Assert.IsTrue(CloseSettingResolver.IsBelowRecommendedClickCount(1));
+            Assert.IsTrue(CloseSettingResolver.IsBelowRecommendedClickCount(2));
+            Assert.IsFalse(CloseSettingResolver.IsBelowRecommendedClickCount(3));
+            Assert.IsFalse(CloseSettingResolver.IsBelowRecommendedClickCount(10));
         }
 
         /// <summary>
@@ -264,13 +266,13 @@ namespace HuliacDev.Tests
             int targetClickCount = 0;
             float clickTimeWindow = 0.5f;
 
-            CloseSettingIssues issues = CloseSettingResolver.ClampInspectorValues(ref targetClickCount, ref clickTimeWindow);
+            InspectorValueCorrections corrections = CloseSettingResolver.ClampInspectorValues(ref targetClickCount, ref clickTimeWindow);
 
             Assert.AreEqual(CloseSettingResolver.MinClickCount, targetClickCount);
             Assert.AreEqual(CloseSettingResolver.MinClickTimeWindow, clickTimeWindow, 0.0001f);
             Assert.AreEqual(
-                CloseSettingIssues.InspectorClickCountBelowMinimum | CloseSettingIssues.InspectorClickTimeWindowBelowMinimum,
-                issues);
+                InspectorValueCorrections.ClickCountRaised | InspectorValueCorrections.ClickTimeWindowRaised,
+                corrections);
         }
 
         /// <summary>
@@ -282,11 +284,11 @@ namespace HuliacDev.Tests
             int targetClickCount = 10;
             float clickTimeWindow = 3f;
 
-            CloseSettingIssues issues = CloseSettingResolver.ClampInspectorValues(ref targetClickCount, ref clickTimeWindow);
+            InspectorValueCorrections corrections = CloseSettingResolver.ClampInspectorValues(ref targetClickCount, ref clickTimeWindow);
 
             Assert.AreEqual(10, targetClickCount);
             Assert.AreEqual(3f, clickTimeWindow, 0.0001f);
-            Assert.AreEqual(CloseSettingIssues.None, issues);
+            Assert.AreEqual(InspectorValueCorrections.None, corrections);
         }
 
         /// <summary>

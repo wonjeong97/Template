@@ -73,7 +73,7 @@ namespace HuliacDev.Utils
         {
             // [Min]은 인스펙터 편집 시에만 동작하므로, 이미 저장된 값(씬 재정의 등)도 실행 시 최소값으로 맞춤.
             // 설정 로드가 실패하거나 주입이 없어도 이 값으로 동작하므로 가장 먼저 수행함.
-            LogSettingIssues(CloseSettingResolver.ClampInspectorValues(ref targetClickCount, ref clickTimeWindow));
+            LogInspectorCorrections(CloseSettingResolver.ClampInspectorValues(ref targetClickCount, ref clickTimeWindow));
 
             // 주입 없이 컴포넌트만 붙인 경우 원인을 알기 어려운 NullReferenceException이 발생하므로
             // 무엇을 빠뜨렸는지 알려주고 중단함.
@@ -87,6 +87,7 @@ namespace HuliacDev.Utils
                 {
                     Debug.LogError("[GameCloser] Dependencies were not injected. Check that RegisterComponentInHierarchy<GameCloser>() is registered on the LifetimeScope.");
                 }
+                WarnIfLowClickCount();
                 return;
             }
 
@@ -111,11 +112,13 @@ namespace HuliacDev.Utils
                     {
                         _logger.ZLogWarning($"[GameCloser] closeSetting is missing or numToClose is not positive in settings. Using inspector defaults: Target({targetClickCount}), Window({clickTimeWindow}s)");
                     }
+                    WarnIfLowClickCount();
                     return;
                 }
 
                 LogSettingIssues(resolved.Issues);
                 ApplyResolvedSettings(resolved);
+                WarnIfLowClickCount();
             }
             catch (OperationCanceledException)
             {
@@ -126,7 +129,7 @@ namespace HuliacDev.Utils
         /// <summary>
         /// 설정 해석 중 발견한 문제(범위 밖 값, 위치 한 성분만 지정)를 필드별 경고로 남김.
         /// 해당 필드는 적용되지 않고 인스펙터 값이 유지되므로, 원인을 로그로 알 수 있게 하기 위함.
-        /// 최소값 미만이라 올려 적용한 값(JSON·인스펙터)과 권장값보다 작은 클릭 횟수도 함께 알림.
+        /// 최소값 미만이라 올려 적용한 JSON 제한 시간도 함께 알림.
         /// </summary>
         private void LogSettingIssues(CloseSettingIssues issues)
         {
@@ -156,21 +159,36 @@ namespace HuliacDev.Utils
             {
                 _logger.ZLogWarning($"[GameCloser] closeSetting.position must be between 0 and 1 (normalized). Keeping current position.");
             }
+        }
 
-            if ((issues & CloseSettingIssues.LowNumToClose) != 0)
-            {
-                _logger.ZLogWarning($"[GameCloser] closeSetting.numToClose is below the recommended minimum ({CloseSettingResolver.RecommendedMinNumToClose}). Visitors may close the app by accidental taps.");
-            }
+        /// <summary>
+        /// 실행 시 최소값으로 올린 인스펙터(직렬화) 값을 경고로 남김. [Min]은 편집할 때만 동작해
+        /// 저장된 값이 조용히 바뀌면 원인을 알기 어려우므로 알림.
+        /// </summary>
+        private void LogInspectorCorrections(InspectorValueCorrections corrections)
+        {
+            if (corrections == InspectorValueCorrections.None || _logger == null) return;
 
-            if ((issues & CloseSettingIssues.InspectorClickCountBelowMinimum) != 0)
+            if ((corrections & InspectorValueCorrections.ClickCountRaised) != 0)
             {
                 _logger.ZLogWarning($"[GameCloser] Inspector targetClickCount on {gameObject.name} was below {CloseSettingResolver.MinClickCount}. Raised to {targetClickCount}.");
             }
 
-            if ((issues & CloseSettingIssues.InspectorClickTimeWindowBelowMinimum) != 0)
+            if ((corrections & InspectorValueCorrections.ClickTimeWindowRaised) != 0)
             {
                 _logger.ZLogWarning($"[GameCloser] Inspector clickTimeWindow on {gameObject.name} was below the minimum ({CloseSettingResolver.MinClickTimeWindow}s). Raised to {clickTimeWindow}s.");
             }
+        }
+
+        /// <summary>
+        /// 최종 적용된 클릭 횟수가 권장 최소값(3회)보다 작으면 오터치 위험을 경고함. 값은 바꾸지 않음.
+        /// JSON과 인스펙터 중 어느 쪽 값이 쓰였든 같은 기준으로 한 번만 알리기 위해, 값이 확정된 뒤 호출함.
+        /// </summary>
+        private void WarnIfLowClickCount()
+        {
+            if (_logger == null || !CloseSettingResolver.IsBelowRecommendedClickCount(targetClickCount)) return;
+
+            _logger.ZLogWarning($"[GameCloser] Click count to close ({targetClickCount}) is below the recommended minimum ({CloseSettingResolver.RecommendedMinClickCount}). Visitors may close the app by accidental taps.");
         }
 
         /// <summary>
