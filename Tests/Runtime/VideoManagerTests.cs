@@ -152,6 +152,18 @@ namespace HuliacDev.Tests
             Assert.AreEqual(0, GetTrackedCount());
         }
 
+        /// <summary>
+        /// 영상용 RenderTexture는 깊이 버퍼 없이 만들어야 함.
+        /// (VideoPlayer는 프레임을 복사만 하고 RawImage는 색만 샘플링하므로, 깊이 버퍼는 VRAM만 차지함)
+        /// </summary>
+        [Test]
+        public void 영상용_RenderTexture는_깊이_버퍼_없이_생성한다()
+        {
+            VideoPlayer vp = CreateWiredVideo("NoDepth");
+
+            Assert.AreEqual(0, vp.targetTexture.depth, "깊이 버퍼가 붙으면 영상 레이어마다 VRAM이 낭비됨");
+        }
+
         private VideoPlayer CreateWiredVideo(string name)
         {
             GameObject go = new GameObject(name);

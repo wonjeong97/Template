@@ -13,3 +13,5 @@
 - [ ] `TemplateInputActions`의 `System` 디버그 단축키(ToggleDebug `D`·ToggleInspector `I`·ToggleMouse `M`)가 조합 없는 문자 키 하나라, 키보드처럼 문자를 입력하는 USB 바코드·QR 스캐너로 영문 대문자가 든 값을 읽으면 디버그 UI·런타임 인스펙터·커서가 켜짐(바인딩이 Shift를 보지 않음). 빌드 조건 없이 모든 씬에서 켜져 있어 릴리스 빌드에도 해당. 재현: `D`가 든 값을 스캔하면 Reporter 컨트롤이 나타남. 스캐너는 Ctrl을 보내지 않으므로 `OneModifier`(Ctrl+키) 조합 바인딩으로 바꾸는 것을 검토(Shift+키는 스캐너 대문자와 겹쳐 안 됨). 바꾸면 소비 프로젝트가 런타임에 첫 번째 바인딩을 덮어쓰는 방식으로 이미 우회했을 수 있으니 CHANGELOG에 Breaking으로 알릴 것 — 발견일: 2026-10-07
 
 ## 완료
+
+- [x] `VideoManager.WireRawImageAndRenderTexture`가 영상용 RenderTexture를 24비트 깊이 버퍼와 함께 만들어, 깊이 테스트가 없는 영상 표시에 VRAM만 낭비함(1920x1080 기준 장당 약 8MB 이상). 깊이 0으로 생성하도록 수정 — 완료: 2026-10-09 (#55)
