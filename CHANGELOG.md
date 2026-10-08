@@ -1,6 +1,12 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.10.9-1] - 2026-10-09
+
+### Fixed
+- **`VideoManager.WireRawImageAndRenderTexture` 영상용 RenderTexture의 불필요한 깊이 버퍼 제거(`Runtime/UI`):** 영상 텍스처를 24비트 깊이 버퍼와 함께 만들었는데, `VideoPlayer`는 디코딩한 프레임을 `targetTexture`에 복사만 하고 `RawImage`는 색만 샘플링해 깊이 테스트가 일어나지 않으므로 깊이 버퍼는 VRAM만 차지했음(1920x1080 기준 장당 약 8MB 이상, 영상 레이어를 여러 장 쓰는 화면에서는 수십 MB. 확인한 에디터 환경에서는 24비트 요청이 32비트 깊이로 잡혔음). 깊이 0으로 만들도록 바꿈. `UIManager.SetVideo`를 포함해 템플릿 안에서는 이 텍스처를 깊이가 필요한 용도로 쓰지 않으므로 영상 표시 결과는 같음. `VideoManagerTests`에 테스트 1건 추가(깊이 24에서 실패하고 0에서 통과함을 확인).
+  - **Breaking:** 반환된 `RenderTexture`를 카메라 렌더 타깃(`Camera.targetTexture`) 등 깊이 버퍼가 필요한 용도로 함께 쓰던 프로젝트는 깊이 테스트에 기대던 렌더링 결과가 달라질 수 있으므로, 그 용도에는 깊이를 지정한 `RenderTexture`를 따로 만들어 써야 함.
+
 ## [26.9.25-3] - 2026-09-25
 
 ### Fixed

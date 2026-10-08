@@ -88,7 +88,8 @@ namespace HuliacDev.UI
             
             int rtW = Mathf.Max(2, size.x);
             int rtH = Mathf.Max(2, size.y);
-            RenderTexture rTex = new RenderTexture(rtW, rtH, 24);
+            // VideoPlayer는 프레임을 복사만 하고 RawImage는 색만 샘플링해 깊이 테스트가 없으므로, 깊이 버퍼 없이 만들어 VRAM을 아낌.
+            RenderTexture rTex = new RenderTexture(rtW, rtH, 0);
             rTex.Create();
             _activeRenderTextures.Add(rTex);
             _renderTextureOwners[rTex] = vp;
