@@ -80,6 +80,7 @@ namespace HuliacDev.App
             ConfigureMessagePipe(builder);
             ConfigureSettings(builder);
             ConfigureNetwork(builder);
+            ConfigureWindowFocus(builder);
             ConfigureCoreComponents(builder);
             ConfigureOptionalComponents(builder);
         }
@@ -93,6 +94,16 @@ namespace HuliacDev.App
         }
 
         /// <summary>
+        /// 앱 창이 포커스를 잃으면 다시 앞으로 가져오는 WindowFocusRestorer를 엔트리포인트로 등록함.
+        /// Settings.json의 useFocusRestore가 true이고 Windows 스탠드얼론 빌드일 때만 실제로 동작하므로(기본값 꺼짐),
+        /// 사용하는 프로젝트는 씬 배치나 등록 코드 없이 설정 값만 켜면 됨.
+        /// </summary>
+        protected virtual void ConfigureWindowFocus(IContainerBuilder builder)
+        {
+            builder.RegisterEntryPoint<WindowFocusRestorer>(Lifetime.Singleton);
+        }
+
+        /// <summary>
         /// 모든 프로젝트에 공통으로 포함되는 씬 컴포넌트를 등록함.
         /// 각 프로젝트의 파생 스코프마다 반복 등록하던 것을 베이스로 일원화함.
         /// <para>
@@ -103,9 +114,23 @@ namespace HuliacDev.App
         /// </summary>
         protected virtual void ConfigureCoreComponents(IContainerBuilder builder)
         {
-            builder.Register<TemplateInputActions>(Lifetime.Singleton);
+            builder.Register(_ =>
+            {
+                TemplateInputActions inputActions = new TemplateInputActions();
+                ConfigureInputBindings(inputActions);
+                return inputActions;
+            }, Lifetime.Singleton);
             builder.RegisterComponentInHierarchy<SystemCanvas>();
             builder.RegisterComponentInHierarchy<GameCloser>();
+        }
+
+        /// <summary>
+        /// 컨테이너가 TemplateInputActions를 만든 직후, 어떤 소비자가 받아 켜기 전에 호출됨.
+        /// 기본 단축키(System 맵의 ToggleDebug·ToggleInspector·ToggleMouse·ToggleFocusRestore)를 프로젝트에서
+        /// 바꾸려면 override해 ApplyBindingOverride나 바인딩 교체를 쓸 것. 기본 구현은 아무것도 바꾸지 않음.
+        /// </summary>
+        protected virtual void ConfigureInputBindings(TemplateInputActions inputActions)
+        {
         }
 
         /// <summary>

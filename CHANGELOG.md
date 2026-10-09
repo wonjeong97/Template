@@ -1,6 +1,17 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.10.10-1] - 2026-10-10
+
+### Added
+- **창 포커스 복구 서비스 `WindowFocusRestorer` 추가(`Runtime/Core/WindowFocusRestorer.cs`, `Runtime/Core/FocusRestoreSchedule.cs`, `Runtime/App/RootLifetimeScope.cs`):** 전체 화면으로 켜 둔 앱이 알림·업데이트 창·다른 프로그램에 포커스를 빼앗기면, Windows가 키보드 입력을 포커스가 있는 창에만 보내 키보드형 USB 바코드·QR 스캐너 입력이 누가 화면을 터치할 때까지 끊겼음(Input System의 Background Behavior로는 키보드 장치의 백그라운드 입력을 받을 수 없음). 앱이 포커스를 잃으면(`Application.focusChanged`) 설정한 시간 뒤 앱 창을 다시 앞으로 가져오고, 포커스가 돌아올 때까지 일정 간격으로 다시 시도함. Windows 포그라운드 잠금 때문에 `SetForegroundWindow`만으로는 거부되는 경우가 많아, 현재 포그라운드 창의 스레드에 `AttachThreadInput`으로 입력을 잠시 붙인 채 `BringWindowToTop`·`SetForegroundWindow`를 호출하고 바로 분리함(최소화된 경우에만 `ShowWindow(SW_RESTORE)`). 창 핸들은 포커스가 있을 때 `GetActiveWindow`로 기억하고, 한 번도 포커스를 얻지 못한 채 시작된 경우에는 이 프로세스의 Unity 플레이어 창(`UnityWndClass`)을 프로세스 ID로 찾음. 실패하면 포커스를 잃을 때마다 처음 한 번만 경고를 남김. Windows 스탠드얼론 빌드에서만 동작하고(`UNITY_STANDALONE_WIN && !UNITY_EDITOR`), 앱 종료 중에는 시도하지 않음. `RootLifetimeScope.ConfigureWindowFocus`가 엔트리포인트로 자동 등록하므로 씬 배치나 등록 코드는 필요 없음. 시작 시 켜져 있고, 운영자가 유지보수 중 다른 프로그램을 쓸 수 있도록 새 입력 액션 `System/ToggleFocusRestore`(기본 `F` 키)로 끄고 켬(앱을 다시 시작하면 켜진 상태). `Settings.json`에는 타이밍만 둠: `focusRestoreDelay`(첫 시도까지 대기, 초)와 `focusRestoreRetryInterval`(재시도 간격, 초), 0 이하·생략 시 기본값 3초, 1초 미만 양수는 1초로 올림. user32 호출은 테스트할 수 없어 '언제 다시 시도할지' 판단을 순수 클래스 `FocusRestoreSchedule`로 분리하고 `FocusRestoreScheduleTests`에 테스트 9건 추가(포커스 이탈 전 미시도, 대기 시간 뒤 첫 시도, 재시도 간격, 포커스 복귀 시 중단, 중복 이탈 기록, 재이탈 시 초기화, 실패 보고 1회, 설정 값 보정, Settings.json 키). Run In Background가 꺼져 있으면 포커스를 잃은 동안 플레이어가 멈춰 동작할 수 없으므로 시작 시 경고함.
+  - **Breaking:** Windows 스탠드얼론 빌드에서는 업데이트만으로 이 기능이 켜짐. 다른 창이 앞에 뜨면 3초 뒤 앱이 다시 앞으로 오므로, 유지보수 중에는 `F`로 끌 것. 기능을 아예 쓰지 않으려면 `RootLifetimeScope` 파생 클래스에서 `ConfigureWindowFocus`를 빈 본문으로 override할 것.
+  - **Breaking:** `F` 키가 포커스 복구 토글에 쓰이므로, 프로젝트가 `F` 키를 다른 용도로 쓰거나 키보드형 스캐너로 대문자 `F`가 든 값을 읽으면 포커스 복구가 꺼지거나 켜짐. 아래 `ConfigureInputBindings`로 다른 키나 Ctrl+F 같은 조합으로 바꿀 것(스캐너는 Ctrl을 보내지 않음).
+- **`RootLifetimeScope.ConfigureInputBindings` 추가(`Runtime/App/RootLifetimeScope.cs`):** 기본 단축키(`System` 맵의 ToggleDebug `D`·ToggleInspector `I`·ToggleMouse `M`·ToggleFocusRestore `F`)를 패키지 파일을 고치지 않고 프로젝트에서 바꿀 수 있도록, 컨테이너가 `TemplateInputActions`를 만든 직후 어떤 소비자가 받아 켜기 전에 호출하는 가상 메서드를 둠(기본 구현은 아무것도 바꾸지 않음). README에 단일 키 교체(`ApplyBindingOverride`)와 Ctrl+F 조합 교체 예시를 적음. `TemplateInputBindingTests`에 테스트 2건 추가(기본 `F` 바인딩, Ctrl+F로 바꾼 뒤 `F` 단독 입력에는 실행되지 않음).
+
+### Fixed
+- **Reporter 로그 뷰어가 앱 실행 내내 메모리를 늘리던 문제 수정(`Runtime/ThirdParty/LogViewer/Reporter/Reporter.cs`):** `AddLog`가 로그 문장·스택 문자열을 `cachedString` 사전에 넣는데, 로그 용량이 `maxSize`(기본 20MB)를 넘거나 지우기를 누를 때 부르는 `Clear()`는 이 사전을 비우지 않았음. `RootLifetimeScope`의 Unity 콘솔 로그가 줄마다 시각 접두사를 붙여 거의 모든 줄이 새 키가 되므로, 로그를 많이 남기는 앱에서는 용량 계산(`logsMemUsage`)이 0으로 돌아간 뒤에도 사전이 계속 커지고 크기를 늘릴 때마다 큰 배열을 다시 할당했음. `Clear()`에서 `cachedString`도 비우도록 함(사전 용량은 유지되어 다음 주기에 다시 늘리지 않음). `logsMemUsage`는 새 문자열을 캐시 몫과 로그 몫으로 두 번 더하고 객체 오버헤드는 빼는 근사치지만, 이제 합산한 메모리를 `Clear()`가 모두 해제하므로 상한 역할은 맞게 됨. 나머지 컬렉션(`logs`·`collapsedLogs`·`currentLog`·`logsDic`·`samples`)은 `Clear()`에서 비워지고, `threadedLogs`는 매 프레임 비워짐. 회귀 테스트는 추가하지 않음: `cachedString`·`AddLog`·`Clear`가 모두 private이고 사전 크기를 드러내는 공개 동작이 없으며, `GC.GetTotalMemory` 측정은 결과가 흔들려 회귀를 잡지 못하고, 외부 코드에 테스트용 API를 넣거나 새 리플렉션을 쓰는 것은 저장소 규칙에 어긋나기 때문.
+
 ## [26.10.9-1] - 2026-10-09
 
 ### Fixed
