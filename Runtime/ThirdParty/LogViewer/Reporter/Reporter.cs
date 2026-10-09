@@ -719,6 +719,9 @@ namespace HuliacDev.Reporter
             collapsedLogs.Clear();
             currentLog.Clear();
             logsDic.Clear();
+            // logsMemUsage에는 AddLog가 cachedString에 새로 넣은 문자열 크기도 합산되므로, 그 값을 0으로 되돌릴 때 캐시도 함께 비움.
+            // 비우지 않으면 로그마다 시각 접두사가 달라 거의 모든 줄이 새 키가 되어, 용량 계산에 잡히지 않은 채 앱 실행 내내 커짐.
+            cachedString.Clear();
             //selectedIndex = -1;
             selectedLog = null;
             numOfLogs = 0;
