@@ -202,6 +202,7 @@ Runtime/
 ├─ Core/       GameManagerBase      — 순수 DI 게임 매니저 기반 클래스
 │              InactivityTimer      — 무입력 감지 및 복귀 이벤트
 │              ShutdownScheduler    — 자동 종료 스케줄러
+│              WindowFocusRestorer  — 포커스를 잃은 앱 창 복구 (Windows)
 ├─ Data/       Settings 스키마 + AppSettingsProvider
 ├─ Hardware/   ArduinoManager       — 시리얼 통신 및 자동 재연결 (WebGL은 스텁)
 ├─ Input/      TemplateInputActions
@@ -221,6 +222,7 @@ Runtime/
 | **Core** | `GameManagerBase` | 앱 수명주기 총괄, VContainer DI 기반 비동기 초기화, `OnSettingsLoaded` 가상 훅 제공 |
 | | `InactivityTimer` | 키오스크 무입력 시간 감지 및 자동 복귀 이벤트(`InactivityTimeoutEvent`) 발행 |
 | | `ShutdownScheduler` | 일별/요일별 자동 종료 스케줄링 및 사전 알림(`BeforeShutdownEvent`) 발행 |
+| | `WindowFocusRestorer` | 앱 창이 포커스를 잃으면 다시 앞으로 가져와 키보드형 스캐너 입력 유지 (Windows 스탠드얼론, `F` 키로 끄고 켬) |
 | **UI & Media** | `UIManager` | uGUI/TextMeshPro 비동기 폰트 프리로드/일괄 적용, 텍스처 VRAM 압축(`compress`) 제어 |
 | | `FadeManager` | 화면 페이드 인/아웃(DOTween/UniTask), 커스텀 색상(`Color? color`) 및 `SortingOrder` 제어 |
 | | `SoundManager` | BGM/SFX 비동기 재생, 마스터/BGM/SFX 개별 볼륨 및 음소거(`Mute`), DOTween 페이드 충돌 방어 |
@@ -339,15 +341,51 @@ _externalApiReturnPublisher.Publish(new ExternalApiReturnEvent(true));
 _externalApiReturnPublisher.Publish(new ExternalApiReturnEvent(false, "HTTP 500"));
 ```
 
+### 창 포커스 복구 (WindowFocusRestorer, Windows 전용)
+
+전시 앱을 전체 화면으로 켜 두고 USB 바코드·QR 스캐너를 키보드 장치로 읽는 경우를 위한 기능입니다. Windows는 키보드 입력을 포커스가 있는 창에만 보내므로, 알림·업데이트 창·다른 프로그램이 포커스를 가져가면 누가 화면을 터치할 때까지 스캐너 입력이 앱에 들어오지 않습니다. Input System의 Background Behavior로는 해결되지 않습니다(키보드 장치는 백그라운드 입력을 받지 못함).
+
+`RootLifetimeScope`가 `WindowFocusRestorer`를 자동으로 만들므로 씬 배치나 등록 코드는 필요 없습니다. 앱이 포커스를 잃으면 `focusRestoreDelay`초 뒤 앱 창을 다시 앞으로 가져오고, 포커스가 돌아올 때까지 `focusRestoreRetryInterval`초마다 다시 시도합니다.
+
+- **Windows 스탠드얼론 빌드에서만 동작합니다.** 에디터와 다른 플랫폼에서는 아무것도 하지 않습니다.
+- **앱을 켜면 켜진 상태로 시작하고, `F` 키(ToggleFocusRestore)로 끄고 켭니다.** 유지보수 중 다른 프로그램을 써야 하면 앱에서 `F`를 눌러 끄고, 끝나면 다시 눌러 켭니다. 앱을 다시 시작하면 켜진 상태로 돌아갑니다. 끄고 켤 때 로그가 남습니다.
+- `Settings.json`에서는 타이밍만 조정합니다(아래 Settings.json 절 참고). 파일을 읽지 못하면 기본 타이밍(3초/3초)으로 동작합니다.
+- Player Settings의 **Run In Background**가 켜져 있어야 합니다. 꺼져 있으면 포커스를 잃은 동안 플레이어가 멈춰 복구할 수 없으며, 시작 시 경고 로그가 남습니다.
+- Windows의 포그라운드 잠금 때문에 `SetForegroundWindow`만으로는 거부되는 경우가 많아, 현재 포그라운드 창의 스레드에 입력을 잠시 붙여(`AttachThreadInput`) 창을 올립니다. 그래도 잠금 화면, UAC 확인 창, 관리자 권한으로 실행된 창이 앞에 있으면 Windows가 막을 수 있습니다. 실패하면 포커스를 잃을 때마다 처음 한 번만 경고 로그를 남기고 계속 재시도합니다.
+- 앱 종료 중에는 시도하지 않습니다.
+
+> **바코드·QR 스캐너 주의:** 스캐너는 읽은 값을 키 입력으로 보내므로, 값에 대문자 `F`가 있으면 포커스 복구가 꺼집니다(`D`·`I`·`M` 단축키도 같은 문제가 있습니다). 스캐너를 쓰는 프로젝트는 아래처럼 Ctrl 조합으로 바꾸세요. 스캐너는 Ctrl을 보내지 않습니다.
+
 ### 단축키 (기본 제공)
 
-| 키 | 동작 |
+| 키 | 동작 (System 맵 액션) |
 |---|---|
-| `F1` 계열 (ToggleDebug) | Reporter 로그 뷰어 토글 |
-| `I` (ToggleInspector) | 런타임 인스펙터 토글 |
-| ToggleMouse | 커서 표시 토글 |
+| `D` | Reporter 로그 뷰어 토글 (ToggleDebug) |
+| `I` | 런타임 인스펙터 토글 (ToggleInspector) |
+| `M` | 커서 표시 토글 (ToggleMouse) |
+| `F` | 창 포커스 복구 끄기/켜기 (ToggleFocusRestore) |
 
-> 실제 바인딩은 `Runtime/Input/TemplateInputActions.inputactions`에서 확인·수정하세요.
+> 기본 바인딩은 `Runtime/Input/TemplateInputActions.inputactions`에 있습니다. 패키지 파일을 고치지 말고, 프로젝트의 `RootLifetimeScope` 파생 클래스에서 `ConfigureInputBindings`를 override해 바꾸세요. 컨테이너가 `TemplateInputActions`를 만든 직후, 어떤 컴포넌트가 받아 켜기 전에 호출됩니다.
+
+```csharp
+public class GameLifetimeScope : RootLifetimeScope
+{
+    protected override void ConfigureInputBindings(TemplateInputActions inputActions)
+    {
+        // 다른 키 하나로 바꾸기
+        inputActions.System.ToggleDebug.ApplyBindingOverride("<Keyboard>/f12");
+
+        // Ctrl+F 조합으로 바꾸기 (스캐너 입력과 겹치지 않게)
+        InputAction toggleFocus = inputActions.System.ToggleFocusRestore;
+        toggleFocus.ChangeBinding(0).Erase();
+        toggleFocus.AddCompositeBinding("OneModifier")
+            .With("Modifier", "<Keyboard>/ctrl")
+            .With("Binding", "<Keyboard>/f");
+    }
+}
+```
+
+> `RootLifetimeScope`를 쓰지 않거나 `ConfigureCoreComponents`에서 `TemplateInputActions` 등록을 뺀 프로젝트는 `GameManagerBase`가 입력 액션을 직접 만들므로 이 override가 적용되지 않고, 포커스 복구 토글 키도 동작하지 않습니다(포커스 복구는 켜진 채로 동작).
 
 ---
 
@@ -362,6 +400,8 @@ _externalApiReturnPublisher.Publish(new ExternalApiReturnEvent(false, "HTTP 500"
   "resetTime": 90,
   "fadeTime": 0.5,
   "targetFrameRate": 60,
+  "focusRestoreDelay": 3,
+  "focusRestoreRetryInterval": 3,
   "closeSetting": {
     "position": { "x": 0, "y": 1 },
     "numToClose": 10,
@@ -381,6 +421,7 @@ _externalApiReturnPublisher.Publish(new ExternalApiReturnEvent(false, "HTTP 500"
 
 - `useInactivityTimer`가 `true`이고 `resetTime`(초)이 0보다 크면 `InactivityTimer`가 활성화됩니다. `warningTime`/`fadeTime`은 향후 경고 단계·전환 연출용으로 예약된 필드이며 아직 `InactivityTimer`에서 사용하지 않습니다.
 - `targetFrameRate`는 0 이하(또는 생략)면 적용되지 않고, 이 경우 실제 FPS는 현재 활성 품질 레벨의 `vSyncCount`에 좌우됩니다(본 템플릿 기준 Performant=0→무제한, Balanced/High Fidelity=1→디스플레이 주사율 고정). 품질 레벨이 바뀌면 미설정 시 동작도 함께 바뀌므로, 특정 FPS를 보장하려면 값을 명시적으로 지정하세요. 값을 지정하면 `vSyncCount`를 0으로 끄고 해당 FPS로 캡을 겁니다. 장시간 구동되는 키오스크 환경에서 발열·전력 소모를 줄이려면 30~60 사이 값을 권장합니다.
+- `focusRestoreDelay`(초)는 포커스를 잃은 뒤 첫 복구 시도까지 기다리는 시간, `focusRestoreRetryInterval`(초)은 포커스가 돌아오지 않았을 때 다시 시도하는 간격입니다. 0 이하(또는 생략)면 기본값 3초를 쓰고, 1초 미만 양수는 1초로 올려 적용합니다. 기능을 켜고 끄는 키는 Settings.json에 없고 `F` 키로 전환합니다([창 포커스 복구](#창-포커스-복구-windowfocusrestorer-windows-전용) 참고).
 - `closeSetting.position`은 **정규화 좌표(0~1)** 입니다. `(0,0)`이 좌하단, `(1,1)`이 우상단.
 - `fonts[].address`는 **Addressables 주소**이고, `sounds[].clipPath`는 **StreamingAssets 기준 상대 경로**입니다.
 - `fonts[].key`는 자유롭게 명명할 수 있으며 `TextSetting.fontName`에서 이 키로 참조합니다.

@@ -118,6 +118,15 @@ public partial class @TemplateInputActions: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""ToggleFocusRestore"",
+                    ""type"": ""Button"",
+                    ""id"": ""4ce01818-c00f-4d6c-b634-3ac13aa7e527"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -153,6 +162,17 @@ public partial class @TemplateInputActions: IInputActionCollection2, IDisposable
                     ""action"": ""ToggleMouse"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""0ef183e1-35cc-4a4f-8800-10003f046729"",
+                    ""path"": ""<Keyboard>/f"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""ToggleFocusRestore"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -164,6 +184,7 @@ public partial class @TemplateInputActions: IInputActionCollection2, IDisposable
         m_System_ToggleDebug = m_System.FindAction("ToggleDebug", throwIfNotFound: true);
         m_System_ToggleInspector = m_System.FindAction("ToggleInspector", throwIfNotFound: true);
         m_System_ToggleMouse = m_System.FindAction("ToggleMouse", throwIfNotFound: true);
+        m_System_ToggleFocusRestore = m_System.FindAction("ToggleFocusRestore", throwIfNotFound: true);
     }
 
     ~@TemplateInputActions()
@@ -247,6 +268,7 @@ public partial class @TemplateInputActions: IInputActionCollection2, IDisposable
     private readonly InputAction m_System_ToggleDebug;
     private readonly InputAction m_System_ToggleInspector;
     private readonly InputAction m_System_ToggleMouse;
+    private readonly InputAction m_System_ToggleFocusRestore;
     /// <summary>
     /// Provides access to input actions defined in input action map "System".
     /// </summary>
@@ -270,6 +292,10 @@ public partial class @TemplateInputActions: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "System/ToggleMouse".
         /// </summary>
         public InputAction @ToggleMouse => m_Wrapper.m_System_ToggleMouse;
+        /// <summary>
+        /// Provides access to the underlying input action "System/ToggleFocusRestore".
+        /// </summary>
+        public InputAction @ToggleFocusRestore => m_Wrapper.m_System_ToggleFocusRestore;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -305,6 +331,9 @@ public partial class @TemplateInputActions: IInputActionCollection2, IDisposable
             @ToggleMouse.started += instance.OnToggleMouse;
             @ToggleMouse.performed += instance.OnToggleMouse;
             @ToggleMouse.canceled += instance.OnToggleMouse;
+            @ToggleFocusRestore.started += instance.OnToggleFocusRestore;
+            @ToggleFocusRestore.performed += instance.OnToggleFocusRestore;
+            @ToggleFocusRestore.canceled += instance.OnToggleFocusRestore;
         }
 
         /// <summary>
@@ -325,6 +354,9 @@ public partial class @TemplateInputActions: IInputActionCollection2, IDisposable
             @ToggleMouse.started -= instance.OnToggleMouse;
             @ToggleMouse.performed -= instance.OnToggleMouse;
             @ToggleMouse.canceled -= instance.OnToggleMouse;
+            @ToggleFocusRestore.started -= instance.OnToggleFocusRestore;
+            @ToggleFocusRestore.performed -= instance.OnToggleFocusRestore;
+            @ToggleFocusRestore.canceled -= instance.OnToggleFocusRestore;
         }
 
         /// <summary>
@@ -386,5 +418,12 @@ public partial class @TemplateInputActions: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnToggleMouse(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "ToggleFocusRestore" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnToggleFocusRestore(InputAction.CallbackContext context);
     }
 }

@@ -197,5 +197,18 @@ namespace HuliacDev.Data
         /// ApiManager가 message 값만 이어붙여 GET 요청을 보냄. 비어 있으면 전송하지 않음.
         /// </summary>
         public string apiUrl;
+
+        /// <summary>
+        /// 앱 창이 포커스를 잃은 뒤 첫 복구를 시도하기까지 기다리는 시간(초)(WindowFocusRestorer, Windows 스탠드얼론 빌드 전용).
+        /// 0 이하면 미지정으로 보고 기본값 3초를 씀. 1초 미만 양수는 1초로 올려 적용함.
+        /// 기능 자체는 앱 시작 시 켜져 있고 ToggleFocusRestore 키(기본 F)로 끄고 켬.
+        /// </summary>
+        public float focusRestoreDelay;
+
+        /// <summary>
+        /// 포커스가 돌아오지 않았을 때 다시 시도하는 간격(초). 0 이하면 미지정으로 보고 기본값 3초를 씀.
+        /// 1초 미만 양수는 1초로 올려 적용함.
+        /// </summary>
+        public float focusRestoreRetryInterval;
     }
 }
