@@ -14,10 +14,11 @@
 - [ ] `Runtime/ThirdParty/LogViewer/Reporter/Test.meta`가 빈 폴더의 .meta라 git에는 폴더가 없어, git URL로 패키지를 받는 프로젝트가 패키지를 가져올 때마다 ".meta exists but its folder ... can't be found, and has been created" 경고가 콘솔에 남음. 재현: lock 해시를 바꿔 새 커밋을 받거나 PackageCache를 지우고 프로젝트를 열면 경고 1건. 쓰지 않는 폴더면 .meta를 지우고, 필요한 폴더면 파일을 하나 둘 것 — 발견일: 2026-10-09
 - [ ] `GameCloser` 의 "제한 시간 안에 N번 누르면 동작" 판정이 `OnClicked` 안에 묶여 있어, 같은 방식의 숨은 버튼(예: 운영자용 설정 화면 진입)을 만드는 프로젝트가 판정 로직을 따로 다시 짜게 됨. 연속 클릭 카운터를 순수 C# 클래스로 분리해 공개하고 GameCloser도 그것을 쓰면 재사용과 단위 테스트가 쉬워짐 — 발견일: 2026-10-09
 - [ ] `ApiRetryUtil.SendGetRequestWithRetryAsync` 가 성공 여부(bool)만 돌려주고 응답 본문을 주지 않으며, 에디터·Development 빌드에서는 전송 자체를 건너뜀. 그래서 응답 본문을 해석해야 하는 API(예: 사용자 확인·진행도 조회)는 재시도·시간 초과 로직을 프로젝트에서 따로 구현하게 되고, 개발 중 실제 서버로 확인할 방법도 없음. 본문을 돌려주고 건너뛰기를 선택할 수 있는 오버로드 추가를 검토 — 발견일: 2026-10-09
-- [ ] `RootLifetimeScope.ConfigureWindowFocus`의 summary 주석이 "Settings.json의 useFocusRestore가 true일 때만 동작(기본값 꺼짐)"이라고 적혀 있으나, 실제로는 `useFocusRestore` 키가 없고 Windows 스탠드얼론 빌드에서 시작 시 켜지며 `F` 키(ToggleFocusRestore)로 끄고 켬. 주석을 보고 설정 파일에 `useFocusRestore`를 찾거나 기본값이 꺼져 있다고 오해할 수 있으니 실제 동작에 맞게 고칠 것 — 발견일: 2026-10-10
 
 ## 완료
 
+- [x] `RootLifetimeScope.ConfigureWindowFocus`의 summary 주석이 "Settings.json의 useFocusRestore가 true일 때만 동작(기본값 꺼짐)"이라고 적혀 있으나, 실제로는 `useFocusRestore` 키가 없고 Windows 스탠드얼론 빌드에서 시작 시 켜지며 `F` 키(ToggleFocusRestore)로 끄고 켬. 주석을 보고 설정 파일에 `useFocusRestore`를 찾거나 기본값이 꺼져 있다고 오해할 수 있으니 실제 동작에 맞게 고칠 것 — 완료: 2026-10-10 (#58)
+- [x] 패키지 전체 코드 주석을 실제 동작과 대조해 틀린 설명 정리: 삭제된 `GameManagerBase<T>` 참조, 실제와 다른 호출 경로·이벤트 발행 시점·로그 출력 방식, `PacketUtility`의 "박싱 없음" 설명(제네릭 Marshal API도 내부에서 박싱함), `DestroyUtil`의 Destroy 시점·오류 메시지, SoundManager·UIManager의 캐시·볼륨 설명, 테스트 주석 2건, README·package.json의 `ApiRetryUtil` "지수 백오프" 표기(실제는 고정 간격) — 완료: 2026-10-10 (#58)
 - [x] Windows 전시 PC에서 알림·업데이트 창·다른 프로그램이 포커스를 가져가면, 키보드형 바코드·QR 스캐너 입력이 누가 화면을 터치할 때까지 앱에 들어오지 않음(Input System Background Behavior로는 해결 불가). 포커스를 잃으면 설정 시간 뒤 창을 다시 앞으로 가져오는 `WindowFocusRestorer` 추가(시작 시 켜짐, `F` 키로 끄고 켬, Settings.json은 타이밍만), 단축키를 프로젝트에서 바꾸는 `ConfigureInputBindings` 추가 — 완료: 2026-10-10 (#57)
 - [x] Reporter 로그 뷰어의 `Clear()`가 `cachedString`을 비우지 않아, 줄마다 시각 접두사가 붙는 로그 환경에서 사전이 앱 실행 내내 커짐(로그를 많이 남기는 앱에서 하루 수십 MB, 사전 크기 변경 시 순간 끊김). `Clear()`에서 함께 비우도록 수정 — 완료: 2026-10-10 (#57)
 - [x] `TemplateInputActions.cs` 생성 헤더가 Input System 1.14.2 기준으로 남아 있어, 패키지가 요구하는 1.19.0으로 로컬 경로 참조하면 열 때마다 파일이 다시 생성돼 변경으로 잡힘. 1.19.0 기준으로 다시 생성한 파일을 커밋 — 완료: 2026-10-09 (#56)

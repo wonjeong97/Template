@@ -190,7 +190,7 @@ namespace HuliacDev.UI
         }
 
         /// <summary>
-        /// 마스터/BGM/SFX 볼륨과 음소거 설정을 오디오 소스에 반영함.
+        /// 마스터/BGM 볼륨을 BGM 소스에, 음소거 설정을 BGM·SFX 소스에 반영함. SFX 볼륨은 재생 시점(PlayOneShot)에 적용됨.
         /// </summary>
         private void UpdateAudioSourceVolumes()
         {
@@ -426,8 +426,8 @@ namespace HuliacDev.UI
         }
 
         /// <summary>
-        /// 로컬 경로에서 오디오 클립을 비동기로 다운로드하고 캐시에 저장함.
-        /// 여러 스레드나 프레임에서 동일한 파일을 동시에 요청할 경우 중복 로드를 방지함.
+        /// StreamingAssets에서 오디오 클립을 비동기로 다운로드하고 캐시에 저장함.
+        /// 메인 스레드에서 여러 호출이 동일한 파일을 동시에 요청하면 진행 중인 로드를 공유해 중복 로드를 방지함.
         /// </summary>
         private async UniTask<AudioClip> DownloadAndCacheClipAsync(SoundSetting setting,
             CancellationToken cancellationToken)
@@ -468,9 +468,7 @@ namespace HuliacDev.UI
                 try
                 {
                     // ToUniTask는 www.result가 Success가 아니면 결과를 반환하는 대신
-                    // UnityWebRequestException을 던짐. 그 결과 아래의 www.result 체크는
-                    // 사실상 도달 불가능한 코드였으므로, 실패를 예외로 잡아 동일한 방식으로
-                    // 로그를 남기도록 함.
+                    // UnityWebRequestException을 던지므로, 실패는 예외로 잡아 로그를 남김.
                     await www.SendWebRequest().ToUniTask(cancellationToken: cancellationToken);
 
                     AudioClip clip = DownloadHandlerAudioClip.GetContent(www);
@@ -527,7 +525,7 @@ namespace HuliacDev.UI
         }
 
         /// <summary>
-        /// 루프 및 볼륨 설정에 맞춰 BGM 클립을 교체하거나 이어서 재생함.
+        /// 볼륨 설정에 맞춰 BGM 클립을 교체하거나, 같은 클립이 재생 중이면 볼륨만 갱신하고 이어서 재생함.
         /// </summary>
         private void PlayBGMClip(AudioClip clip, SoundSetting setting, AudioSource source)
         {

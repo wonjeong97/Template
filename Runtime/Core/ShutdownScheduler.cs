@@ -36,7 +36,7 @@ namespace HuliacDev.Core
 
         private const string ShutdownSettingsFileName = "ShutdownSettings.json";
 
-        /// <summary>편집 도구가 파일을 만들지 못했을 때를 대비한 종료 인수 기본값.</summary>
+        /// <summary>ShutdownSettings.json에 스케줄은 있지만 shutdownArguments가 비었거나 없을 때(직접 편집했거나 예전 형식의 파일) 쓰는 종료 인수 기본값.</summary>
         private const string DefaultShutdownArguments = "-s -f -t 45";
 
         [SerializeField, Tooltip("예정 시각 도달 여부를 확인하는 주기(초).")]

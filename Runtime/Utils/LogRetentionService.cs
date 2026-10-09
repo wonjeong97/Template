@@ -43,7 +43,7 @@ namespace HuliacDev.Utils
 
         /// <summary>
         /// 정리 대상 로그 디렉터리와 보관 기간(일)을 받아 서비스를 구성함.
-        /// 로거를 넘기지 않으면 정리 결과와 실패를 Debug.Log로 대체 출력함.
+        /// 로거를 넘기지 않으면 정리 실패 경고를 Debug.LogWarning으로 대체 출력함.
         /// </summary>
         public LogRetentionService(string logDirectory, int retentionDays, ILogger<LogRetentionService> logger = null)
         {

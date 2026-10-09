@@ -23,7 +23,7 @@ namespace HuliacDev.Network
     /// 콘텐츠마다 호출해야 하는 API가 다를 수 있으므로, 프로젝트별 클래스가 이 클래스를
     /// 상속해 Start()를 override하고 <see cref="ApiRetryUtil.SendGetRequestWithRetryAsync"/>를
     /// 재사용하면 여기서 다루는 로그 외의 다른 API 호출에도 동일한 재시도/네트워크 확인/
-    /// 에디터·디벨롭 빌드 스킵 정책을 그대로 적용할 수 있음(GameManagerBase&lt;T&gt;와 동일하게,
+    /// 에디터·디벨롭 빌드 스킵 정책을 그대로 적용할 수 있음(GameManagerBase와 동일하게,
     /// abstract이므로 씬에는 이 클래스를 상속한 프로젝트 전용 클래스를 배치할 것).
     /// <para>
     /// Settings.json의 apiUrl은 idx_content_device, uid 등 콘텐츠별 쿼리 파라미터가
@@ -529,8 +529,8 @@ namespace HuliacDev.Network
         }
 
         /// <summary>
-        /// 시작/종료 로그처럼 재시도·시간 상한 정책이 특별히 필요하지 않은 단발성 상태
-        /// 메시지를 ApiRetryUtil의 기본 정책(최대 10회, 3초 간격)으로 전송하는 공통 경로.
+        /// 종료 로그와 달리 재시도·시간 상한 정책이 특별히 필요하지 않은 단발성 상태 메시지
+        /// (move_idle·외부 API 호출/반환 로그 등)를 ApiRetryUtil의 기본 정책(최대 10회, 3초 간격)으로 전송하는 공통 경로.
         /// </summary>
         private async UniTask SendSimpleLogAsync(string message, CancellationToken cancellationToken)
         {

@@ -242,7 +242,7 @@ namespace HuliacDev.Core
         }
         
         /// <summary>
-        /// 런타임 인스펙터 UI의 활성화 상태를 토글하고 이벤트를 발행함.
+        /// 런타임 인스펙터 UI의 활성화 상태를 토글하고, 닫을 때 InspectorEvent를 발행함.
         /// </summary>
         private void ToggleInspectorUI()
         {

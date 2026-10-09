@@ -229,7 +229,7 @@ Runtime/
 | | `VideoManager` | 비디오 비동기 프리로드/재생, 고아 RenderTexture 메모리 최적 해제 ($O(N+M)$) |
 | **Network** | `NetworkStatusService` | R3 기반 실시간 네트워크 도달성/끊김/복구 모니터링 (오프라인 키오스크 초기 알림 억제) |
 | | `ApiManagerBase` | 시작/종료/비활동/외부 API 호출 이력 사내 서버 전송 추상 베이스 클래스 |
-| | `ApiRetryUtil` | 지수 백오프 및 소켓/DNS 네트워크 예외 격리를 지원하는 WebRequest 안정적 재시도 |
+| | `ApiRetryUtil` | 고정 간격 재시도 및 소켓/DNS 네트워크 예외 격리를 지원하는 WebRequest 안정적 재시도 |
 | **Logging** | `LogRetentionService` | 일별 로그 파일 회전(`AddZLoggerRollingFile`) 및 30일 보관 주기 만료 파일 자동 정리 |
 | **Hardware** | `ArduinoManager` | 시리얼 통신, 읽기 스레드 예외 격리 및 메인 스레드 마샬링 기반 자동 재연결(`AutoReconnect`) |
 | **Data & Utils**| `AppSettingsProvider` | `Settings.json` 단일 로드/캐싱 및 런타임 핫 리로드(`ReloadAsync`) 지원 |
