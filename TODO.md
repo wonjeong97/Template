@@ -14,6 +14,7 @@
 - [ ] `Runtime/ThirdParty/LogViewer/Reporter/Test.meta`가 빈 폴더의 .meta라 git에는 폴더가 없어, git URL로 패키지를 받는 프로젝트가 패키지를 가져올 때마다 ".meta exists but its folder ... can't be found, and has been created" 경고가 콘솔에 남음. 재현: lock 해시를 바꿔 새 커밋을 받거나 PackageCache를 지우고 프로젝트를 열면 경고 1건. 쓰지 않는 폴더면 .meta를 지우고, 필요한 폴더면 파일을 하나 둘 것 — 발견일: 2026-10-09
 - [ ] `GameCloser` 의 "제한 시간 안에 N번 누르면 동작" 판정이 `OnClicked` 안에 묶여 있어, 같은 방식의 숨은 버튼(예: 운영자용 설정 화면 진입)을 만드는 프로젝트가 판정 로직을 따로 다시 짜게 됨. 연속 클릭 카운터를 순수 C# 클래스로 분리해 공개하고 GameCloser도 그것을 쓰면 재사용과 단위 테스트가 쉬워짐 — 발견일: 2026-10-09
 - [ ] `ApiRetryUtil.SendGetRequestWithRetryAsync` 가 성공 여부(bool)만 돌려주고 응답 본문을 주지 않으며, 에디터·Development 빌드에서는 전송 자체를 건너뜀. 그래서 응답 본문을 해석해야 하는 API(예: 사용자 확인·진행도 조회)는 재시도·시간 초과 로직을 프로젝트에서 따로 구현하게 되고, 개발 중 실제 서버로 확인할 방법도 없음. 본문을 돌려주고 건너뛰기를 선택할 수 있는 오버로드 추가를 검토 — 발견일: 2026-10-09
+- [ ] `RootLifetimeScope.ConfigureWindowFocus`의 summary 주석이 "Settings.json의 useFocusRestore가 true일 때만 동작(기본값 꺼짐)"이라고 적혀 있으나, 실제로는 `useFocusRestore` 키가 없고 Windows 스탠드얼론 빌드에서 시작 시 켜지며 `F` 키(ToggleFocusRestore)로 끄고 켬. 주석을 보고 설정 파일에 `useFocusRestore`를 찾거나 기본값이 꺼져 있다고 오해할 수 있으니 실제 동작에 맞게 고칠 것 — 발견일: 2026-10-10
 
 ## 완료
 
