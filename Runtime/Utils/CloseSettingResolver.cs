@@ -5,7 +5,8 @@ using HuliacDev.Data;
 namespace HuliacDev.Utils
 {
     /// <summary>
-    /// CloseSetting을 해석하다 발견한 설정 문제. 해당 필드는 적용하지 않고, 호출부가 경고로 남김.
+    /// CloseSetting을 해석하다 발견한 설정 문제. 호출부가 경고로 남김. 대부분은 해당 필드를 적용하지 않지만,
+    /// ResetClickTimeBelowMinimum은 최소값으로 올려 적용함.
     /// </summary>
     [Flags]
     internal enum CloseSettingIssues

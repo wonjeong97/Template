@@ -51,7 +51,7 @@ namespace HuliacDev.Network
         }
 
         /// <summary>
-        /// 구조체를 기존 바이트 배열에 직렬화하여 GC 할당을 방지함. 기록한 바이트 수를 반환함.
+        /// 구조체를 기존 바이트 배열에 직렬화해 새 바이트 배열 할당을 피함. 기록한 바이트 수를 반환함.
         /// </summary>
         /// <typeparam name="T">구조체 타입</typeparam>
         public static int ToBytes<T>(in T packet, byte[] destination, int offset = 0) where T : struct
@@ -71,7 +71,7 @@ namespace HuliacDev.Network
             GCHandle handle = GCHandle.Alloc(destination, GCHandleType.Pinned);
             try
             {
-                // 제네릭 오버로드가 선택되므로 값 타입 박싱은 발생하지 않음.
+                // 제네릭 오버로드도 내부에서 object로 박싱하므로 호출마다 작은 GC 할당이 생김(배열·비관리 힙 할당만 생략됨).
                 Marshal.StructureToPtr(packet, IntPtr.Add(handle.AddrOfPinnedObject(), offset), false);
                 return size;
             }

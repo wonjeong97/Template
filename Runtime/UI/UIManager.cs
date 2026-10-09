@@ -227,7 +227,7 @@ namespace HuliacDev.UI
                 AsyncOperationHandle<UnityEngine.Object> handle = Addressables.LoadAssetAsync<UnityEngine.Object>(address);
                 _fontHandles.Add(handle);
 
-                // 제네릭 반환 타입(void) 에러 방지를 위해 대기와 결과 추출을 분리함.
+                // 로드 완료를 기다린 뒤 handle.Result로 결과를 읽음.
                 await handle.ToUniTask(cancellationToken: cancellationToken);
 
                 UnityEngine.Object loadedAsset = handle.Result;
@@ -528,7 +528,7 @@ namespace HuliacDev.UI
         /// <summary>
         /// 한 오브젝트에서 legacy Text를 먼저, 없으면 TMP_Text를 찾음.
         /// 둘 다 Graphic이라 한 오브젝트에 함께 붙을 수 없으므로 실제로 둘이 겹칠 일은 없고,
-        /// 순서는 이 메서드가 새로 만드는 쪽(legacy "Text")과 맞춘 것일 뿐임.
+        /// 순서는 텍스트를 찾지 못했을 때 CreateButtonTextChild가 새로 만드는 쪽(legacy "Text")과 맞춘 것일 뿐임.
         /// </summary>
         private static bool TryGetTextComponent(Transform candidate, out Text legacyText, out TMP_Text tmpText)
         {
@@ -904,7 +904,7 @@ namespace HuliacDev.UI
         /// <summary>
         /// 캐시된 모든 스프라이트와 텍스처를 VRAM에서 해제함.
         /// <para>
-        /// 주의: SoundManager의 오디오 캐시와 달리 용량 초과 시 자동 축출(LRU)을 적용하지 않음.
+        /// 주의: SoundManager의 오디오 캐시와 마찬가지로 용량 초과 시 자동 축출(LRU)을 적용하지 않음.
         /// 스프라이트는 화면에 표시 중인 Image가 직접 참조하고 있으므로, 사용 중인 항목을
         /// 임의로 파괴하면 해당 UI가 렌더링되지 않는 더 심각한 문제가 발생하기 때문임.
         /// 따라서 캐시 해제 시점은 씬 전환 등 안전한 지점에서 호출자가 명시적으로 결정해야 함.

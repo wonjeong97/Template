@@ -32,7 +32,7 @@ namespace HuliacDev.App
     /// 이 문제는 <c>RootLifetimeScope.ConfigureLogging</c>에서 ZLogger의 수동 스택 기능(PrettyStacktrace)을
     /// 꺼서 해결하며, 그렇게 하면 ZLogger도 여기서 정한 Unity 네이티브 정책을 그대로 따르게 된다.
     /// (Unity 네이티브는 이 값을 런타임에 매 로그마다 읽으므로, 직접 호출하는 UnityEngine.Debug.Log 계열은
-    ///  실행 시점의 영향을 받지 않는다. 여기서는 가장 이른 AfterAssembliesLoaded에 걸어 초기 로그까지 커버한다.)
+    ///  실행 시점의 영향을 받지 않는다. 여기서는 SubsystemRegistration 다음으로 이른 AfterAssembliesLoaded에 걸어 초기 로그까지 커버한다.)
     /// </para>
     /// </summary>
     public static class LogStackTraceConfig

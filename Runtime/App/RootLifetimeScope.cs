@@ -95,8 +95,9 @@ namespace HuliacDev.App
 
         /// <summary>
         /// 앱 창이 포커스를 잃으면 다시 앞으로 가져오는 WindowFocusRestorer를 엔트리포인트로 등록함.
-        /// Settings.json의 useFocusRestore가 true이고 Windows 스탠드얼론 빌드일 때만 실제로 동작하므로(기본값 꺼짐),
-        /// 사용하는 프로젝트는 씬 배치나 등록 코드 없이 설정 값만 켜면 됨.
+        /// Windows 스탠드얼론 빌드에서만 동작하며 앱 시작 시 켜져 있고, 운영자가 ToggleFocusRestore 키(기본 F)로 끄고 켬.
+        /// Settings.json에서는 focusRestoreDelay·focusRestoreRetryInterval로 타이밍만 조정함.
+        /// 씬 배치나 등록 코드는 필요 없으며, 기능을 아예 쓰지 않으려면 이 메서드를 빈 본문으로 override할 것.
         /// </summary>
         protected virtual void ConfigureWindowFocus(IContainerBuilder builder)
         {
@@ -188,7 +189,7 @@ namespace HuliacDev.App
         
         /// <summary>
         /// ZLogger를 기반으로 전역 로깅 시스템을 설정함.
-        /// 에디터에서는 콘솔, 빌드 환경에서는 파일 형태로 로그를 출력하도록 분기 처리함.
+        /// Unity 콘솔 출력은 항상 등록하고, 에디터·WebGL을 제외한 빌드에서는 날짜·용량 단위로 회전하는 파일 로그를 추가로 등록함.
         /// </summary>
         protected virtual void ConfigureLogging(IContainerBuilder builder)
         {

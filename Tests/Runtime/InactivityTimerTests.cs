@@ -228,7 +228,7 @@ namespace HuliacDev.Tests
 
         /// <summary>
         /// 발동을 폴링하되, 결함이 있는 구현에서 테스트가 무한 대기로 멈추지 않도록
-        /// 실시간 기준 제한 시간을 둠(FadeManagerTests의 AwaitWithRealtimeTimeout과 동일한 이유).
+        /// 실시간 기준 제한 시간을 둠(TestTaskExtensions.AwaitWithRealtimeTimeout과 동일한 이유).
         /// </summary>
         private async UniTask AwaitInvocation(float timeoutSeconds = 3f)
         {

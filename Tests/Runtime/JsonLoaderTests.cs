@@ -17,7 +17,7 @@ namespace HuliacDev.Tests
 
     /// <summary>
     /// JsonLoader의 동기 Load/Save API 검증.
-    /// 메인 스레드 블로킹 I/O이므로 EditMode에서 실행 가능하며, 별도의 프레임 진행이 필요 없음.
+    /// 동기 I/O라 프레임 진행 없이 [Test]로 검증할 수 있음(이 테스트 어셈블리는 PlayMode에서 실행됨).
     /// </summary>
     public class JsonLoaderTests
     {

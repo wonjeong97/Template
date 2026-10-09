@@ -5,7 +5,7 @@ namespace HuliacDev.Core
 {
     /// <summary>
     /// 상태 전이 및 생명주기를 관리하는 제네릭 상태 머신.
-    /// 상태 인스턴스를 재사용하여 런타임 힙 할당(GC)을 발생시키지 않습니다.
+    /// 전환 시 상태를 새로 만들지 않고 호출부가 미리 만든 인스턴스의 참조만 바꾸므로, 전환 자체는 힙 할당(GC)을 발생시키지 않습니다.
     /// </summary>
     /// <typeparam name="TContext">상태 머신을 소유하는 주체 타입</typeparam>
     public class StateMachine<TContext> : IDisposable

@@ -132,7 +132,7 @@ namespace HuliacDev.Hardware
         private Thread _readThread;
         private volatile bool _isRunning;
 
-        // Disconnect()는 메인 스레드(OnDestroy/OnApplicationQuit)와 읽기 스레드(읽기 오류) 양쪽에서
+        // DisconnectInternal()은 메인 스레드(OnDestroy/OnApplicationQuit/Disconnect)와 읽기 스레드(읽기 오류) 양쪽에서
         // 호출될 수 있으므로 상태 전이를 직렬화함.
         private readonly object _connectionLock = new object();
 
@@ -602,7 +602,7 @@ namespace HuliacDev.Hardware
         /// </summary>
         private void ReadSerialLoop()
         {
-            // Disconnect()가 다른 스레드에서 _serialPort를 null로 만들 수 있으므로
+            // DisconnectInternal()이 다른 스레드에서 _serialPort를 null로 만들 수 있으므로
             // 루프가 사용할 참조는 시작 시점에 지역 변수로 고정함.
             SerialPort port = _serialPort;
 
@@ -683,7 +683,7 @@ namespace HuliacDev.Hardware
         }
 
         /// <summary>
-        /// 애플리케이션 강제 종료 시 시리얼 포트 점유를 즉시 해제함.
+        /// 애플리케이션 종료 시 시리얼 포트 점유를 즉시 해제함.
         /// 다음 실행 시 포트 충돌을 방지하기 위함.
         /// </summary>
         private void OnApplicationQuit()

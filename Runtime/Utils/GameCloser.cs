@@ -15,7 +15,7 @@ using UnityEditor;
 namespace HuliacDev.Utils
 {
     /// <summary>
-    /// 지정된 UI 요소(주로 투명 버튼)를 연속 클릭하여 앱을 강제 종료하는 유틸리티 클래스.
+    /// 지정된 UI 요소(주로 투명 버튼)를 연속 클릭하여 앱을 종료하는 유틸리티 클래스.
     /// 런타임 시 Settings.json을 읽어와 자체적으로 작동 로직(클릭 횟수, 제한 시간)과 UI(위치, 투명도)를 세팅함.
     /// </summary>
     [RequireComponent(typeof(Button))]
