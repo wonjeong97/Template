@@ -8,17 +8,16 @@
 
 ## 할 일
 
-- [ ] `JsonLoader.LoadAsync`가 파일 없음·형식 오류(끝 쉼표 등)도 `new T()`로 돌려줘, `Settings.json`이 깨지면 `useInactivityTimer=false`·`resetTime=0`·`sounds=null`로 비활동 복귀·효과음이 조용히 꺼지고 로그는 영어 경고 한 줄과 "Disabled (useInactivityTimer is false)"뿐이라 일부러 끈 것과 구별되지 않음. 재현: `Settings.json` 끝에 쉼표를 넣고 실행 → 비활동 타임아웃이 오지 않음. 읽기 실패와 '값이 false'를 구분해(성공 여부를 돌려주는 오버로드 등) 실패면 오류 로그와 안전한 기본값(타이머 켬)을 쓰기 — 발견일: 2026-10-10
-- [ ] `JsonLoader.SaveAsync`가 대상 파일을 바로 덮어써(`WriteAllTextAsync`) 저장 도중 전원이 꺼지거나 디스크가 가득 차면 파일이 비거나 잘린 채 남고, 다음 실행부터 기본값으로 읽힘(예: 관리자 비밀번호가 조용히 기본값으로 돌아감). 재현: 쓰기 도중 프로세스 강제 종료. 임시 파일에 쓴 뒤 `File.Replace`(또는 Move)로 바꾸기 — 발견일: 2026-10-10
-- [ ] `JsonLoader.LoadAsync`가 취소(`OperationCanceledException`)도 삼키고 `new T()`를 돌려줘, 호출부가 오브젝트 파괴 뒤에도 기본값으로 초기화를 계속함. 재현: `GetCancellationTokenOnDestroy()` 토큰으로 로드하는 동안 씬을 다시 불러오면, 파괴된 컴포넌트가 이어서 이미 해제된 R3 Subject·StateMachine에 접근해 `ObjectDisposedException`이 나고 null 경고가 연쇄로 남음. 취소는 다시 던지거나(최소한 summary에 "취소돼도 new T()를 반환하므로 호출부가 토큰을 확인해야 함"을 명시) — 발견일: 2026-10-03
-- [ ] `JsonLoader.SaveAsync`/`Save`가 쓰기 실패(읽기 전용 폴더, 권한 없음 등)를 로그로만 남기고 호출자에게 알리지 않아, 설정 저장 결과를 사용자에게 보여 주려면 저장 직후 파일을 다시 읽어 비교해야 함. 재현: 쓰기 권한이 없는 위치의 StreamingAssets JSON에 SaveAsync 후 호출부에서는 성공과 구분할 방법이 없음. 성공 여부(bool)를 돌려주거나 예외를 다시 던지는 오버로드 추가 — 발견일: 2026-10-07
-- [ ] `TemplateInputActions`의 `System` 디버그 단축키(ToggleDebug `D`·ToggleInspector `I`·ToggleMouse `M`)가 조합 없는 문자 키 하나라, 키보드처럼 문자를 입력하는 USB 바코드·QR 스캐너로 영문 대문자가 든 값을 읽으면 디버그 UI·런타임 인스펙터·커서가 켜짐(바인딩이 Shift를 보지 않음). 빌드 조건 없이 모든 씬에서 켜져 있어 릴리스 빌드에도 해당. 재현: `D`가 든 값을 스캔하면 Reporter 컨트롤이 나타남. 스캐너는 Ctrl을 보내지 않으므로 `OneModifier`(Ctrl+키) 조합 바인딩으로 바꾸는 것을 검토(Shift+키는 스캐너 대문자와 겹쳐 안 됨). 바꾸면 소비 프로젝트가 런타임에 첫 번째 바인딩을 덮어쓰는 방식으로 이미 우회했을 수 있으니 CHANGELOG에 Breaking으로 알릴 것. 26.10.10-1부터 `RootLifetimeScope.ConfigureInputBindings`를 override해 프로젝트별로 바꿀 수 있고, 같은 방식으로 추가된 ToggleFocusRestore `F`도 같은 문제가 있음(기본 바인딩은 아직 단일 키) — 발견일: 2026-10-07
-- [ ] `Runtime/ThirdParty/LogViewer/Reporter/Test.meta`가 빈 폴더의 .meta라 git에는 폴더가 없어, git URL로 패키지를 받는 프로젝트가 패키지를 가져올 때마다 ".meta exists but its folder ... can't be found, and has been created" 경고가 콘솔에 남음. 재현: lock 해시를 바꿔 새 커밋을 받거나 PackageCache를 지우고 프로젝트를 열면 경고 1건. 쓰지 않는 폴더면 .meta를 지우고, 필요한 폴더면 파일을 하나 둘 것 — 발견일: 2026-10-09
-- [ ] `GameCloser` 의 "제한 시간 안에 N번 누르면 동작" 판정이 `OnClicked` 안에 묶여 있어, 같은 방식의 숨은 버튼(예: 운영자용 설정 화면 진입)을 만드는 프로젝트가 판정 로직을 따로 다시 짜게 됨. 연속 클릭 카운터를 순수 C# 클래스로 분리해 공개하고 GameCloser도 그것을 쓰면 재사용과 단위 테스트가 쉬워짐 — 발견일: 2026-10-09
-- [ ] `ApiRetryUtil.SendGetRequestWithRetryAsync` 가 성공 여부(bool)만 돌려주고 응답 본문을 주지 않으며, 에디터·Development 빌드에서는 전송 자체를 건너뜀. 그래서 응답 본문을 해석해야 하는 API(예: 사용자 확인·진행도 조회)는 재시도·시간 초과 로직을 프로젝트에서 따로 구현하게 되고, 개발 중 실제 서버로 확인할 방법도 없음. 본문을 돌려주고 건너뛰기를 선택할 수 있는 오버로드 추가를 검토 — 발견일: 2026-10-09
-
 ## 완료
 
+- [x] `JsonLoader.LoadAsync`가 파일 없음·형식 오류에도 `new T()`를 돌려줘, `Settings.json`이 깨지면 비활동 복귀·효과음이 조용히 꺼지고 일부러 끈 것과 구별되지 않던 문제. 읽기 결과를 `(bool isSuccess, T data)`로 돌려주는 `TryLoadAsync`를 추가하고, `AppSettingsProvider`가 실패 시 오류 로그와 비활동 타이머(90초)를 켠 대체 설정을 쓰도록 함 — 완료: 2026-10-10 (#59)
+- [x] `JsonLoader.SaveAsync`가 대상 파일을 바로 덮어써 저장 도중 끊기면 파일이 비거나 잘리던 문제. 임시 파일(`.tmp`)에 쓰고 `Flush(true)` 뒤 `File.Replace`로 교체하도록 수정(실패·취소 시 기존 파일 유지) — 완료: 2026-10-10 (#59)
+- [x] `JsonLoader.LoadAsync`가 취소를 삼키고 `new T()`를 돌려줘 파괴된 호출부가 초기화를 이어가던 문제. `LoadAsync`·`TryLoadAsync`·`SaveAsync`가 `OperationCanceledException`을 다시 던지도록 수정 — 완료: 2026-10-10 (#59)
+- [x] `JsonLoader.SaveAsync`/`Save`가 쓰기 실패를 호출자에게 알리지 않던 문제. `UniTask<bool>`/`bool`로 성공 여부를 반환하도록 수정 — 완료: 2026-10-10 (#59)
+- [x] `Runtime/ThirdParty/LogViewer/Reporter/Test.meta`가 빈 폴더의 .meta라 git URL로 패키지를 받을 때마다 경고가 나던 문제. 쓰지 않는 폴더라 .meta 삭제 — 완료: 2026-10-10 (#59)
+- [x] `GameCloser`의 "제한 시간 안에 N번 누르면 동작" 판정을 공개 순수 클래스 `ConsecutiveClickCounter`로 분리해 운영자용 숨은 버튼에 재사용할 수 있게 함(GameCloser 동작은 같음) — 완료: 2026-10-10 (#59)
+- [x] `ApiRetryUtil`에 응답 본문을 돌려주는 `GetTextWithRetryAsync` 추가. 기본값으로 에디터·Development 빌드에서도 실제 전송하고, `skipInEditorAndDevelopmentBuild`로 건너뛸 수 있음 — 완료: 2026-10-10 (#59)
+- [x] `TemplateInputActions`의 디버그 단축키(`D`·`I`·`M`·`F`)가 조합 없는 문자 키라 키보드형 바코드·QR 스캐너 입력과 겹치는 문제. 스캐너를 쓰는 특수한 경우에만 해당하므로 기본 바인딩은 유지하고, 해당 프로젝트는 `RootLifetimeScope.ConfigureInputBindings`를 override해 Ctrl 조합 등으로 바꾸기로 함(26.10.10-1에서 추가, README에 예시) — 완료: 2026-10-10 (코드 변경 없음)
 - [x] `RootLifetimeScope.ConfigureWindowFocus`의 summary 주석이 "Settings.json의 useFocusRestore가 true일 때만 동작(기본값 꺼짐)"이라고 적혀 있으나, 실제로는 `useFocusRestore` 키가 없고 Windows 스탠드얼론 빌드에서 시작 시 켜지며 `F` 키(ToggleFocusRestore)로 끄고 켬. 주석을 보고 설정 파일에 `useFocusRestore`를 찾거나 기본값이 꺼져 있다고 오해할 수 있으니 실제 동작에 맞게 고칠 것 — 완료: 2026-10-10 (#58)
 - [x] 패키지 전체 코드 주석을 실제 동작과 대조해 틀린 설명 정리: 삭제된 `GameManagerBase<T>` 참조, 실제와 다른 호출 경로·이벤트 발행 시점·로그 출력 방식, `PacketUtility`의 "박싱 없음" 설명(제네릭 Marshal API도 내부에서 박싱함), `DestroyUtil`의 Destroy 시점·오류 메시지, SoundManager·UIManager의 캐시·볼륨 설명, 테스트 주석 2건, README·package.json의 `ApiRetryUtil` "지수 백오프" 표기(실제는 고정 간격) — 완료: 2026-10-10 (#58)
 - [x] Windows 전시 PC에서 알림·업데이트 창·다른 프로그램이 포커스를 가져가면, 키보드형 바코드·QR 스캐너 입력이 누가 화면을 터치할 때까지 앱에 들어오지 않음(Input System Background Behavior로는 해결 불가). 포커스를 잃으면 설정 시간 뒤 창을 다시 앞으로 가져오는 `WindowFocusRestorer` 추가(시작 시 켜짐, `F` 키로 끄고 켬, Settings.json은 타이밍만), 단축키를 프로젝트에서 바꾸는 `ConfigureInputBindings` 추가 — 완료: 2026-10-10 (#57)
