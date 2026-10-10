@@ -30,6 +30,7 @@ namespace HuliacDev.Network
         /// 지정한 URL로 GET 요청을 보내고, 실패 시 지정된 횟수만큼 지연을 두고 재시도함.
         /// 실제로 전송을 시도해 성공하면 true를 반환하고, 에디터·디벨롭 빌드이거나 네트워크가
         /// 연결돼 있지 않아 전송을 생략했거나 재시도를 모두 소진하면 false를 반환함.
+        /// 응답 본문은 버리므로, 본문을 해석해야 하면 <see cref="GetTextWithRetryAsync"/>를 쓸 것.
         /// logLabel은 로그에 표시할 요청 식별용 라벨이며, logger가 null이면 로그를 남기지 않음.
         /// </summary>
         // 에디터/디벨롭 빌드 분기는 await 없이 즉시 반환하므로 이 컴파일 변형에서만 CS1998이
@@ -48,15 +49,75 @@ namespace HuliacDev.Network
 // 에디터/디벨롭 빌드에서 매 플레이·테스트마다 서버로 로그가 나가면 실제 운영 로그가
 // 오염되므로, 이 두 환경에서는 전송을 생략하고 무엇을 보냈을지만 콘솔에 남김.
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-            if (logger != null) logger.ZLogInformation($"[ApiRetryUtil] Editor/development build; skipping send: {logLabel}");
+            LogSkipped(logger, logLabel);
             return false;
 #else
+            (bool isSuccess, string responseText) result = await SendWithRetryAsync(url, logLabel, logger, cancellationToken, maxAttemptCount, retryDelaySeconds);
+            return result.isSuccess;
+#endif
+        }
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+#pragma warning restore CS1998
+#endif
+
+        /// <summary>
+        /// 지정한 URL로 GET 요청을 보내 응답 본문을 받아오고, 실패 시 지정된 횟수만큼 지연을 두고 재시도함.
+        /// 사용자 확인·진행도 조회처럼 응답을 해석해야 하는 API용이며, 재시도·네트워크 미연결 판정 정책은
+        /// <see cref="SendGetRequestWithRetryAsync"/>와 같음. 성공하면 (true, 본문)을, 네트워크가 연결돼 있지 않거나
+        /// 재시도를 모두 소진하면 (false, null)을 반환함.
+        /// 기본값으로는 에디터·디벨롭 빌드에서도 실제로 전송해 개발 중에 서버 응답을 확인할 수 있음.
+        /// 운영 서버에 기록이 남는 요청이라 개발 중에는 보내면 안 되면 skipInEditorAndDevelopmentBuild를 true로 넘기며,
+        /// 이때 두 환경에서는 전송 없이 로그만 남기고 (false, null)을 반환함.
+        /// 취소되면 OperationCanceledException을 던짐.
+        /// </summary>
+        // skipInEditorAndDevelopmentBuild 분기만 await 없이 반환하므로 CS1998은 발생하지 않음.
+        public static async UniTask<(bool isSuccess, string responseText)> GetTextWithRetryAsync(
+            string url,
+            string logLabel,
+            Microsoft.Extensions.Logging.ILogger logger,
+            CancellationToken cancellationToken,
+            int maxAttemptCount = DefaultMaxAttemptCount,
+            float retryDelaySeconds = DefaultRetryDelaySeconds,
+            bool skipInEditorAndDevelopmentBuild = false)
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (skipInEditorAndDevelopmentBuild)
+            {
+                LogSkipped(logger, logLabel);
+                return (false, null);
+            }
+#endif
+            return await SendWithRetryAsync(url, logLabel, logger, cancellationToken, maxAttemptCount, retryDelaySeconds);
+        }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        /// <summary>
+        /// 에디터·디벨롭 빌드라서 전송을 생략했음을 로그로 남김. 호출부가 모두 이 두 환경 전용이라 함께 컴파일 조건을 둠.
+        /// </summary>
+        private static void LogSkipped(Microsoft.Extensions.Logging.ILogger logger, string logLabel)
+        {
+            if (logger != null) logger.ZLogInformation($"[ApiRetryUtil] Editor/development build; skipping send: {logLabel}");
+        }
+#endif
+
+        /// <summary>
+        /// 네트워크 연결을 확인한 뒤 GET 요청을 보내고, 실패하면 재시도 간격마다 다시 보내는 공통 재시도 루프.
+        /// 성공하면 (true, 응답 본문)을, 네트워크 미연결이거나 재시도를 모두 소진하면 (false, null)을 반환함.
+        /// </summary>
+        private static async UniTask<(bool isSuccess, string responseText)> SendWithRetryAsync(
+            string url,
+            string logLabel,
+            Microsoft.Extensions.Logging.ILogger logger,
+            CancellationToken cancellationToken,
+            int maxAttemptCount,
+            float retryDelaySeconds)
+        {
             // 네트워크 자체가 연결되어 있지 않으면 시도해도 무조건 실패하므로, 재시도 루프를
             // 돌리며 최대 대기 시간을 허비하지 않도록 먼저 걸러냄.
             if (Application.internetReachability == NetworkReachability.NotReachable)
             {
                 if (logger != null) logger.ZLogWarning($"[ApiRetryUtil] Network is not reachable; skipping send: {logLabel}");
-                return false;
+                return (false, null);
             }
 
             for (int attempt = 1; attempt <= maxAttemptCount; attempt++)
@@ -72,7 +133,7 @@ namespace HuliacDev.Network
                     await request.SendWebRequest().ToUniTask(cancellationToken: cancellationToken);
 
                     if (logger != null) logger.ZLogInformation($"[ApiRetryUtil] Send succeeded ({attempt}/{maxAttemptCount}): {logLabel}");
-                    return true;
+                    return (true, request.downloadHandler.text);
                 }
                 catch (OperationCanceledException)
                 {
@@ -103,11 +164,7 @@ namespace HuliacDev.Network
                 }
             }
 
-            return false;
-#endif
+            return (false, null);
         }
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-#pragma warning restore CS1998
-#endif
     }
 }

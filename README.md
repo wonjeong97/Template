@@ -211,7 +211,7 @@ Runtime/
 │              ApiManagerBase       — 서버 상태 로깅 베이스
 │              ApiRetryUtil         — 네트워크 예외 격리 재시도
 ├─ UI/         UIManager · SoundManager · VideoManager · FadeManager
-├─ Utils/      SingletonGuard<T> · JsonLoader · GameCloser · SystemCanvas
+├─ Utils/      SingletonGuard<T> · JsonLoader · GameCloser · ConsecutiveClickCounter · SystemCanvas
 └─ ThirdParty/ RuntimeInspector · LogViewer(Reporter)
 ```
 
@@ -229,11 +229,12 @@ Runtime/
 | | `VideoManager` | 비디오 비동기 프리로드/재생, 고아 RenderTexture 메모리 최적 해제 ($O(N+M)$) |
 | **Network** | `NetworkStatusService` | R3 기반 실시간 네트워크 도달성/끊김/복구 모니터링 (오프라인 키오스크 초기 알림 억제) |
 | | `ApiManagerBase` | 시작/종료/비활동/외부 API 호출 이력 사내 서버 전송 추상 베이스 클래스 |
-| | `ApiRetryUtil` | 고정 간격 재시도 및 소켓/DNS 네트워크 예외 격리를 지원하는 WebRequest 안정적 재시도 |
+| | `ApiRetryUtil` | 고정 간격 재시도 및 소켓/DNS 네트워크 예외 격리를 지원하는 WebRequest 안정적 재시도, 응답 본문 반환(`GetTextWithRetryAsync`) |
 | **Logging** | `LogRetentionService` | 일별 로그 파일 회전(`AddZLoggerRollingFile`) 및 30일 보관 주기 만료 파일 자동 정리 |
 | **Hardware** | `ArduinoManager` | 시리얼 통신, 읽기 스레드 예외 격리 및 메인 스레드 마샬링 기반 자동 재연결(`AutoReconnect`) |
-| **Data & Utils**| `AppSettingsProvider` | `Settings.json` 단일 로드/캐싱 및 런타임 핫 리로드(`ReloadAsync`) 지원 |
-| | `JsonLoader` | `StreamingAssets` 및 `PersistentData` 지원, `.json` 확장자 자동 보정 직렬화 |
+| **Data & Utils**| `AppSettingsProvider` | `Settings.json` 단일 로드/캐싱 및 런타임 핫 리로드(`ReloadAsync`) 지원, 읽기 실패 시 비활동 타이머를 켠 대체 설정 사용 |
+| | `JsonLoader` | `StreamingAssets` 및 `PersistentData` 지원, `.json` 확장자 자동 보정 직렬화, 읽기 성공 여부 반환(`TryLoadAsync`), 임시 파일을 거친 저장과 저장 성공 여부 반환 |
+| | `ConsecutiveClickCounter` | "N초 안에 M번 누르기" 연속 클릭 판정 (`GameCloser`가 사용, 운영자용 숨은 버튼에 재사용) |
 | | `SingletonGuard<T>` | `DontDestroyOnLoad` 중복 방어 일원화, 즉시 비활성화 및 에디터 도메인 리로드 자가 복구 |
 
 ### 설계 원칙
@@ -341,6 +342,23 @@ _externalApiReturnPublisher.Publish(new ExternalApiReturnEvent(true));
 _externalApiReturnPublisher.Publish(new ExternalApiReturnEvent(false, "HTTP 500"));
 ```
 
+### 응답이 필요한 API 호출 (ApiRetryUtil.GetTextWithRetryAsync)
+
+사용자 확인·진행도 조회처럼 응답 본문을 해석해야 하는 API는 `GetTextWithRetryAsync`로 호출합니다. 재시도 간격·횟수와 네트워크 미연결 판정은 로그 전송용 `SendGetRequestWithRetryAsync`와 같고, 성공하면 `(true, 본문)`, 네트워크 미연결이거나 재시도를 모두 소진하면 `(false, null)`을 돌려줍니다.
+
+```csharp
+(bool isSuccess, string responseText) result = await ApiRetryUtil.GetTextWithRetryAsync(
+    url, "user check", _logger, this.GetCancellationTokenOnDestroy(), maxAttemptCount: 3);
+
+if (result.isSuccess)
+{
+    UserCheckResponse response = JsonUtility.FromJson<UserCheckResponse>(result.responseText);
+}
+```
+
+- `SendGetRequestWithRetryAsync`와 달리 기본값으로 **에디터·Development 빌드에서도 실제로 전송**해 개발 중에 서버 응답을 확인할 수 있습니다. 운영 서버에 기록이 남는 요청이라 개발 중에는 보내면 안 되면 `skipInEditorAndDevelopmentBuild: true`를 넘기세요.
+- HTTP 4xx를 포함한 모든 실패를 재시도합니다. '없는 사용자'를 404로 알리는 API라면 `maxAttemptCount`를 줄여 응답을 오래 기다리지 않게 하세요.
+
 ### 창 포커스 복구 (WindowFocusRestorer, Windows 전용)
 
 전시 앱을 전체 화면으로 켜 두고 USB 바코드·QR 스캐너를 키보드 장치로 읽는 경우를 위한 기능입니다. Windows는 키보드 입력을 포커스가 있는 창에만 보내므로, 알림·업데이트 창·다른 프로그램이 포커스를 가져가면 누가 화면을 터치할 때까지 스캐너 입력이 앱에 들어오지 않습니다. Input System의 Background Behavior로는 해결되지 않습니다(키보드 장치는 백그라운드 입력을 받지 못함).
@@ -419,6 +437,7 @@ public class GameLifetimeScope : RootLifetimeScope
 }
 ```
 
+- `Settings.json`을 읽지 못하면(파일 없음, 빈 파일, 끝 쉼표 같은 형식 오류) 오류 로그를 남기고 **비활동 타이머만 켠 대체 설정**(`resetTime` 90초, `AppSettingsProvider.FallbackResetTimeSeconds`)으로 동작합니다. 효과음·폰트·`closeSetting`은 적용되지 않으므로, 콘솔이나 로그 파일에 "Failed to load Settings.json"이 보이면 파일을 고치고 앱을 다시 시작하세요.
 - `useInactivityTimer`가 `true`이고 `resetTime`(초)이 0보다 크면 `InactivityTimer`가 활성화됩니다. `warningTime`/`fadeTime`은 향후 경고 단계·전환 연출용으로 예약된 필드이며 아직 `InactivityTimer`에서 사용하지 않습니다.
 - `targetFrameRate`는 0 이하(또는 생략)면 적용되지 않고, 이 경우 실제 FPS는 현재 활성 품질 레벨의 `vSyncCount`에 좌우됩니다(본 템플릿 기준 Performant=0→무제한, Balanced/High Fidelity=1→디스플레이 주사율 고정). 품질 레벨이 바뀌면 미설정 시 동작도 함께 바뀌므로, 특정 FPS를 보장하려면 값을 명시적으로 지정하세요. 값을 지정하면 `vSyncCount`를 0으로 끄고 해당 FPS로 캡을 겁니다. 장시간 구동되는 키오스크 환경에서 발열·전력 소모를 줄이려면 30~60 사이 값을 권장합니다.
 - `focusRestoreDelay`(초)는 포커스를 잃은 뒤 첫 복구 시도까지 기다리는 시간, `focusRestoreRetryInterval`(초)은 포커스가 돌아오지 않았을 때 다시 시도하는 간격입니다. 0 이하(또는 생략)면 기본값 3초를 쓰고, 1초 미만 양수는 1초로 올려 적용합니다. 기능을 켜고 끄는 키는 Settings.json에 없고 `F` 키로 전환합니다([창 포커스 복구](#창-포커스-복구-windowfocusrestorer-windows-전용) 참고).
