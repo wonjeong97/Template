@@ -9,6 +9,10 @@
 ## 할 일
 
 - [ ] `AppSettingsProvider`의 대체 설정(Settings.json을 읽지 못했을 때)에 `closeSetting`이 없어 `GameCloser`가 위치·투명도를 적용하지 않고, SystemCanvas 프리팹의 기본값(화면 가운데, 흰색 150x150)이 가장 위 정렬로 떠 모든 화면의 터치를 가리고 그 자리를 연타하면 앱이 꺼짐. 재현: Settings.json 끝에 쉼표를 넣고 빌드 실행. 프리팹 기본값을 구석·투명으로 두거나 대체 설정에 closeSetting 기본값을 넣기 — 발견일: 2026-10-10
+- [ ] `JsonLoader.TryLoadAsync`(그리고 `LoadAsync`)는 로컬 파일이 없으면 취소 토큰을 확인하지 않고 `(false, new T())`를 돌려줘, 문서의 "취소되면 OperationCanceledException"과 다름. 재현: 이미 취소된 토큰으로 없는 파일을 읽으면 예외 없이 기본값이 옴 — 호출부가 파괴된 뒤 기본값으로 초기화를 이어갈 수 있음. 메서드 첫 줄에 `cancellationToken.ThrowIfCancellationRequested()`를 두기 — 발견일: 2026-10-10
+- [ ] `ApiRetryUtil.GetTextWithRetryAsync`가 요청에 `timeout`을 두지 않아, 연결만 받고 응답하지 않는 서버면 호출자 토큰에 시간 제한이 없을 때 무기한 기다림. 또 성공할 때마다 Information 로그를 남겨 사용자 확인처럼 자주 부르는 API에서는 로그가 많아짐. 시도별 시간 초과 매개변수를 추가하고 성공 로그 수준을 정할 수 있게 하기 — 발견일: 2026-10-10
+- [ ] `WindowFocusRestorer`를 `ToggleFocusRestore`로 꺼 둔 상태에서도 포커스를 잃으면 "Will bring the window back in Ns" 로그가 남고, 켜짐·꺼짐을 화면에서 알 수 없어 유지보수 뒤 꺼 둔 채 잊기 쉬움. 꺼진 상태의 로그 문구를 따로 두고, 토글할 때 화면에 잠깐 상태를 표시하기 — 발견일: 2026-10-10
+- [ ] (추정) `WindowFocusRestorer`가 응답 없는(멈춘) 포그라운드 창의 스레드에 `AttachThreadInput`을 붙인 채 `SetForegroundWindow`를 부르면 앱의 메인 스레드도 함께 멈출 수 있음. 붙이기 전에 `IsHungAppWindow`로 확인해 멈춘 창이면 붙이지 않기 — 발견일: 2026-10-10
 ## 완료
 
 - [x] `JsonLoader.LoadAsync`가 파일 없음·형식 오류에도 `new T()`를 돌려줘, `Settings.json`이 깨지면 비활동 복귀·효과음이 조용히 꺼지고 일부러 끈 것과 구별되지 않던 문제. 읽기 결과를 `(bool isSuccess, T data)`로 돌려주는 `TryLoadAsync`를 추가하고, `AppSettingsProvider`가 실패 시 오류 로그와 비활동 타이머(90초)를 켠 대체 설정을 쓰도록 함 — 완료: 2026-10-10 (#59)
