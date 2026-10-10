@@ -1,5 +1,6 @@
 using System.Collections;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -150,5 +151,35 @@ namespace HuliacDev.Tests
                 Assert.IsNotNull(result, "다른 소비자의 취소가 전파되어 결과를 받지 못함");
             }
         });
+
+        /// <summary>
+        /// Settings.json을 읽지 못하면(파일 없음, 형식 오류) 오류를 남기고 비활동 타이머를 켠 대체 설정을 써야 함.
+        /// 이전에는 new Settings()를 그대로 써서 useInactivityTimer가 false가 되어 비활동 복귀가 조용히 꺼졌음.
+        /// </summary>
+        [Test]
+        public void 읽기에_실패하면_비활동_타이머를_켠_대체_설정을_반환한다()
+        {
+            LogAssert.Expect(LogType.Error, new Regex("Failed to load Settings.json"));
+
+            Settings settings = AppSettingsProvider.ResolveLoadResult((false, new Settings()), null);
+
+            Assert.IsTrue(settings.useInactivityTimer, "읽기에 실패했는데 비활동 타이머가 꺼져 있음");
+            Assert.AreEqual(AppSettingsProvider.FallbackResetTimeSeconds, settings.resetTime, 0.0001f);
+        }
+
+        /// <summary>
+        /// 읽기에 성공했으면 파일에 적힌 useInactivityTimer=false를 대체 설정으로 바꾸지 않고 그대로 써야 함.
+        /// 운영자가 일부러 끈 경우와 읽기 실패를 구분하는지 확인함.
+        /// </summary>
+        [Test]
+        public void 읽기에_성공하면_파일에_적힌_false를_그대로_쓴다()
+        {
+            Settings loaded = new Settings { useInactivityTimer = false, resetTime = 30f };
+
+            Settings settings = AppSettingsProvider.ResolveLoadResult((true, loaded), null);
+
+            Assert.AreSame(loaded, settings, "읽기에 성공했는데 파일 값 대신 다른 설정을 반환함");
+            Assert.IsFalse(settings.useInactivityTimer);
+        }
     }
 }

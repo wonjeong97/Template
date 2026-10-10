@@ -1,9 +1,12 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Cysharp.Text;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using UnityEngine;
 using HuliacDev.Utils;
+using ZLogger;
 
 namespace HuliacDev.Data
 {
@@ -16,6 +19,12 @@ namespace HuliacDev.Data
     public class AppSettingsProvider : IDisposable
     {
         private const string SettingsFileName = "Settings.json";
+
+        /// <summary>
+        /// Settings.json을 읽지 못했을 때 대체 설정에 쓰는 비활동 복귀 시간(초).
+        /// 설정 파일이 깨져도 관람객이 떠난 화면이 첫 화면으로 돌아가도록 비활동 타이머를 켠 채로 둠.
+        /// </summary>
+        public const float FallbackResetTimeSeconds = 90f;
 
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
 
@@ -62,7 +71,7 @@ namespace HuliacDev.Data
                 if (!_isLoadStarted)
                 {
                     _isLoadStarted = true;
-                    _loadTask = JsonLoader.LoadAsync<Settings>(SettingsFileName, _cts.Token, _logger).AsTask();
+                    _loadTask = LoadOrFallbackAsync(_cts.Token).AsTask();
                 }
 
                 loadTask = _loadTask;
@@ -87,13 +96,52 @@ namespace HuliacDev.Data
             lock (_lock)
             {
                 _isLoadStarted = true;
-                _loadTask = JsonLoader.LoadAsync<Settings>(SettingsFileName, _cts.Token, _logger).AsTask();
+                _loadTask = LoadOrFallbackAsync(_cts.Token).AsTask();
                 loadTask = _loadTask;
             }
 
             Settings settings = await loadTask.AsUniTask().AttachExternalCancellation(cancellationToken);
             await UniTask.SwitchToMainThread(cancellationToken);
             return settings;
+        }
+
+        /// <summary>
+        /// Settings.json을 읽고, 읽지 못하면 비활동 타이머를 켠 대체 설정을 반환함.
+        /// 취소되면 대체 설정을 만들지 않고 OperationCanceledException을 그대로 전파함.
+        /// </summary>
+        private async UniTask<Settings> LoadOrFallbackAsync(CancellationToken cancellationToken)
+        {
+            (bool isSuccess, Settings data) result = await JsonLoader.TryLoadAsync<Settings>(SettingsFileName, cancellationToken, _logger);
+            return ResolveLoadResult(result, _logger);
+        }
+
+        /// <summary>
+        /// 로드 결과에서 쓸 설정을 고름. 읽기에 성공했으면 파일 값을 그대로 쓰고, 실패했으면(파일 없음, 비어 있음, 형식 오류)
+        /// 오류를 남기고 비활동 타이머만 켠 대체 설정을 반환함. 기본값(new Settings())을 그대로 쓰면 useInactivityTimer가
+        /// false라 비활동 복귀가 조용히 꺼지고, 로그만으로는 운영자가 일부러 끈 것과 구별되지 않기 때문임.
+        /// 로거가 없으면(테스트처럼 new로 직접 만든 경우) Unity 콘솔로 대신 출력함.
+        /// </summary>
+        internal static Settings ResolveLoadResult((bool isSuccess, Settings data) result, Microsoft.Extensions.Logging.ILogger logger)
+        {
+            if (result.isSuccess)
+            {
+                return result.data;
+            }
+
+            if (logger != null)
+            {
+                logger.ZLogError($"[AppSettingsProvider] Failed to load {SettingsFileName}. Using fallback settings: inactivity timer on ({FallbackResetTimeSeconds}s), no sounds, fonts or closeSetting. Fix the file and restart the app.");
+            }
+            else
+            {
+                Debug.LogError(ZString.Concat("[AppSettingsProvider] Failed to load ", SettingsFileName, ". Using fallback settings: inactivity timer on (", FallbackResetTimeSeconds, "s), no sounds, fonts or closeSetting. Fix the file and restart the app."));
+            }
+
+            return new Settings
+            {
+                useInactivityTimer = true,
+                resetTime = FallbackResetTimeSeconds
+            };
         }
 
         /// <summary>
