@@ -8,6 +8,7 @@
 
 ## 할 일
 
+- [ ] `AppSettingsProvider`의 대체 설정(Settings.json을 읽지 못했을 때)에 `closeSetting`이 없어 `GameCloser`가 위치·투명도를 적용하지 않고, SystemCanvas 프리팹의 기본값(화면 가운데, 흰색 150x150)이 가장 위 정렬로 떠 모든 화면의 터치를 가리고 그 자리를 연타하면 앱이 꺼짐. 재현: Settings.json 끝에 쉼표를 넣고 빌드 실행. 프리팹 기본값을 구석·투명으로 두거나 대체 설정에 closeSetting 기본값을 넣기 — 발견일: 2026-10-10
 ## 완료
 
 - [x] `JsonLoader.LoadAsync`가 파일 없음·형식 오류에도 `new T()`를 돌려줘, `Settings.json`이 깨지면 비활동 복귀·효과음이 조용히 꺼지고 일부러 끈 것과 구별되지 않던 문제. 읽기 결과를 `(bool isSuccess, T data)`로 돌려주는 `TryLoadAsync`를 추가하고, `AppSettingsProvider`가 실패 시 오류 로그와 비활동 타이머(90초)를 켠 대체 설정을 쓰도록 함 — 완료: 2026-10-10 (#59)
