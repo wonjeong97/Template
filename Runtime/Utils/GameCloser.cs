@@ -28,8 +28,7 @@ namespace HuliacDev.Utils
         [SerializeField, Min(CloseSettingResolver.MinClickTimeWindow), Tooltip("연속 클릭으로 인정되는 최대 대기 시간 (초, 최소 1초)")]
         private float clickTimeWindow = 3.0f;
 
-        private int _currentClickCount;
-        private float _firstClickTime;
+        private readonly ConsecutiveClickCounter _clickCounter = new ConsecutiveClickCounter();
 
         private ILogger<GameCloser> _logger;
         private AppSettingsProvider _settingsProvider;
@@ -266,40 +265,20 @@ namespace HuliacDev.Utils
 
         /// <summary>
         /// 버튼 클릭 시 호출되는 내부 로직.
-        /// 첫 클릭 시간을 기준으로 제한 시간 내에 타겟 횟수 도달 시 앱을 종료함.
+        /// 첫 클릭 시간을 기준으로 제한 시간 내에 타겟 횟수 도달 시 앱을 종료함(판정은 ConsecutiveClickCounter가 담당).
         /// </summary>
         private void OnClicked()
         {
             float currentTime = Time.unscaledTime;
-
-            // 완전 첫 클릭일 때 시작 시간을 기록함
-            if (_currentClickCount == 0)
-            {
-                _firstClickTime = currentTime;
-            }
-
-            // 첫 클릭으로부터 지정된 총 제한 시간(Window)이 지났다면 
-            // 카운트를 초기화하고 '방금 누른 클릭'을 새로운 1회차로 취급함
-            if (currentTime - _firstClickTime > clickTimeWindow)
-            {
-                _currentClickCount = 1;
-                _firstClickTime = currentTime;
-            }
-            else
-            {
-                // 제한 시간 내에 클릭했다면 카운트 증가
-                _currentClickCount++;
-            }
+            bool isTargetReached = _clickCounter.RegisterClick(currentTime, targetClickCount, clickTimeWindow);
 
             if (_logger != null)
             {
-                _logger.ZLogDebug($"[GameCloser] Clicked: {_currentClickCount} / {targetClickCount} (Window: {currentTime - _firstClickTime:F1}s)");
+                _logger.ZLogDebug($"[GameCloser] Clicked: {_clickCounter.ClickCount} / {targetClickCount} (Window: {currentTime - _clickCounter.FirstClickTime:F1}s)");
             }
 
-            if (_currentClickCount >= targetClickCount)
+            if (isTargetReached)
             {
-                // 성공 시 다음번 안전을 위해 카운트 초기화 후 종료 호출
-                _currentClickCount = 0;
                 QuitApplication();
             }
         }
