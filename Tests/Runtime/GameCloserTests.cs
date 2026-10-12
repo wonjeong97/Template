@@ -372,6 +372,62 @@ namespace HuliacDev.Tests
                 closer.ApplyResolvedSettings(new ResolvedCloseSetting(5, null, 0f, null, CloseSettingIssues.None)));
         }
 
+#if UNITY_EDITOR
+        private const string SystemCanvasPrefabPath = "Packages/com.huliacdev.template/Runtime/Prefabs/SystemCanvas.prefab";
+
+        /// <summary>
+        /// SystemCanvas 프리팹의 숨은 종료 버튼은 closeSetting 없이도 화면 구석에 투명하게 놓여 있어야 함.
+        /// Settings.json을 읽지 못하면 대체 설정에 closeSetting이 없어 프리팹 값이 그대로 쓰이는데, 예전 기본값
+        /// (가운데, 흰색 불투명 150x150)은 최상단 캔버스에서 모든 화면의 가운데 터치를 가리고 그 자리를 연타하면 앱이 꺼졌음.
+        /// </summary>
+        [Test]
+        public void SystemCanvas_프리팹의_종료_버튼은_구석에_투명하게_놓여_있다()
+        {
+            GameObject prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(SystemCanvasPrefabPath);
+            Assert.IsTrue(prefab, "SystemCanvas 프리팹을 찾지 못함");
+
+            GameCloser closer = FindDirectChildCloser(prefab.transform);
+            Assert.IsTrue(closer, "SystemCanvas 프리팹의 직계 자식에서 GameCloser를 찾지 못함");
+            Assert.IsTrue(closer.TryGetComponent(out RectTransform rt), "종료 버튼에 RectTransform이 없음");
+            Assert.IsTrue(closer.TryGetComponent(out Image img), "종료 버튼에 Image가 없음");
+
+            Assert.AreEqual(rt.anchorMin, rt.anchorMax, "앵커가 한 점이 아니라 버튼이 늘어남");
+            Assert.AreEqual(rt.anchorMin, rt.pivot, "피벗이 앵커와 달라 버튼이 구석에 붙지 않음");
+            Assert.IsTrue(IsCorner(rt.anchorMin), $"앵커가 화면 구석이 아님: {rt.anchorMin}");
+            Assert.AreEqual(Vector2.zero, rt.anchoredPosition, "버튼이 구석에서 떨어져 있음");
+            Assert.AreEqual(0f, img.color.a, 0.0001f, "종료 버튼이 투명하지 않아 화면에 보임");
+        }
+
+        /// <summary>
+        /// 직계 자식 중 GameCloser가 붙은 오브젝트를 찾음. 없으면 null을 반환함.
+        /// </summary>
+        private static GameCloser FindDirectChildCloser(Transform parent)
+        {
+            foreach (Transform child in parent)
+            {
+                if (child.TryGetComponent(out GameCloser closer)) return closer;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 정규화 좌표의 두 성분이 모두 0 또는 1인지(화면 네 모서리 중 하나인지) 확인함.
+        /// </summary>
+        private static bool IsCorner(Vector2 normalized)
+        {
+            return IsZeroOrOne(normalized.x) && IsZeroOrOne(normalized.y);
+        }
+
+        /// <summary>
+        /// 값이 오차 범위 안에서 0 또는 1인지 확인함.
+        /// </summary>
+        private static bool IsZeroOrOne(float value)
+        {
+            return Mathf.Abs(value) < 0.0001f || Mathf.Abs(value - 1f) < 0.0001f;
+        }
+#endif
+
         /// <summary>
         /// 앵커·피벗이 가운데이고 빨간 불투명 Image를 가진 GameCloser를 만듦(Button은 RequireComponent로 자동 추가).
         /// </summary>
