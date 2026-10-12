@@ -302,6 +302,9 @@ namespace HuliacDev.Core
             private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
 
             [DllImport("user32.dll")]
+            private static extern bool IsHungAppWindow(IntPtr hWnd);
+
+            [DllImport("user32.dll")]
             private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
             [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -316,8 +319,8 @@ namespace HuliacDev.Core
             /// <summary>
             /// 창을 포그라운드로 가져오고 성공 여부를 돌려줌.
             /// 포그라운드 잠금 때문에 SetForegroundWindow만으로는 거부되는 경우가 많아, 현재 포그라운드 창의
-            /// 스레드에 입력 상태를 잠시 붙인 채 호출하고 바로 분리함. 최소화된 경우에만 SW_RESTORE를 써서,
-            /// 최소화되지 않은 창의 크기·상태는 건드리지 않음.
+            /// 스레드에 입력 상태를 잠시 붙인 채 호출하고 바로 분리함. 단 포그라운드 창이 응답 없음(멈춤) 상태면 붙이지 않음.
+            /// 최소화된 경우에만 SW_RESTORE를 써서, 최소화되지 않은 창의 크기·상태는 건드리지 않음.
             /// </summary>
             public static bool BringToForeground(IntPtr windowHandle)
             {
@@ -328,8 +331,12 @@ namespace HuliacDev.Core
                 uint foregroundThreadId = foregroundWindow != IntPtr.Zero
                     ? GetWindowThreadProcessId(foregroundWindow, out uint _)
                     : 0;
-                bool isAttached = foregroundThreadId != 0 && foregroundThreadId != currentThreadId
-                    && AttachThreadInput(currentThreadId, foregroundThreadId, true);
+
+                // 입력을 붙이면 두 스레드가 입력 상태를 공유해, 상대 스레드가 멈춰 있으면 이 앱의 메인 스레드도 입력 처리에서
+                // 함께 멈출 수 있음. 응답 없는 창이면 붙이지 않고 시도만 하며, 거부되면 다음 재시도 때 다시 확인함.
+                bool canAttach = foregroundThreadId != 0 && foregroundThreadId != currentThreadId
+                    && !IsHungAppWindow(foregroundWindow);
+                bool isAttached = canAttach && AttachThreadInput(currentThreadId, foregroundThreadId, true);
 
                 try
                 {
