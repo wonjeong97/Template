@@ -284,7 +284,8 @@ namespace HuliacDev.App
 
         /// <summary>
         /// MessagePipe를 기반으로 전역 이벤트 시스템을 설정함.
-        /// 인스펙터 토글 이벤트 등의 브로커를 등록함.
+        /// 템플릿 이벤트(인스펙터 토글 등)의 브로커를 등록한 뒤 ConfigureProjectMessageBrokers를 호출함.
+        /// 프로젝트 이벤트만 더하려면 이 메서드가 아니라 ConfigureProjectMessageBrokers를 override할 것.
         /// </summary>
         protected virtual void ConfigureMessagePipe(IContainerBuilder builder)
         {
@@ -295,6 +296,17 @@ namespace HuliacDev.App
             builder.RegisterMessageBroker<MoveIdleEvent>(options);
             builder.RegisterMessageBroker<ExternalApiCallEvent>(options);
             builder.RegisterMessageBroker<ExternalApiReturnEvent>(options);
+            ConfigureProjectMessageBrokers(builder, options);
+        }
+
+        /// <summary>
+        /// 템플릿 브로커를 등록한 직후, RegisterMessagePipe가 돌려준 options로 프로젝트 이벤트 브로커를 더하는 훅.
+        /// RegisterMessagePipe는 한 번만 불러야 해서, 이 훅이 없으면 브로커 하나를 더하려 해도 ConfigureMessagePipe 전체를
+        /// 복사해 override해야 했고, 템플릿이 브로커를 추가하면 복사본이 낡아 새 이벤트를 구독하는 템플릿 컴포넌트가
+        /// 컨테이너 빌드에서 해석에 실패했음. 기본 구현은 아무것도 등록하지 않음.
+        /// </summary>
+        protected virtual void ConfigureProjectMessageBrokers(IContainerBuilder builder, MessagePipeOptions options)
+        {
         }
     }
 }
