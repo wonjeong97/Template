@@ -113,6 +113,10 @@ namespace HuliacDev.Utils
         public static async UniTask<(bool isSuccess, T data)> TryLoadAsync<T>(string fileName, JsonStorageLocation location,
             CancellationToken cancellationToken = default, Microsoft.Extensions.Logging.ILogger logger = null) where T : new()
         {
+            // 파일 없음처럼 await 없이 끝나는 실패 경로는 토큰을 확인하지 않아, 이미 취소된 호출부에도 기본값을 돌려줬음.
+            // 어느 경로로 끝나든 취소가 먼저 전달되도록 시작할 때 확인함.
+            cancellationToken.ThrowIfCancellationRequested();
+
             string path = GetPath(fileName, location);
 
             try
