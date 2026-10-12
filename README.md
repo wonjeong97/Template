@@ -277,6 +277,22 @@ public class GameManager : GameManagerBase
 }
 ```
 
+### 프로젝트 이벤트 브로커 등록
+
+프로젝트 고유 MessagePipe 이벤트는 `RootLifetimeScope` 파생 클래스에서 `ConfigureProjectMessageBrokers`를 override해 등록합니다. 템플릿 브로커를 모두 등록한 뒤 `RegisterMessagePipe()`가 돌려준 `options`를 그대로 넘겨 주므로, 템플릿 목록을 복사할 필요가 없습니다.
+
+```csharp
+public class GameLifetimeScope : RootLifetimeScope
+{
+    protected override void ConfigureProjectMessageBrokers(IContainerBuilder builder, MessagePipeOptions options)
+    {
+        builder.RegisterMessageBroker<QuizAnsweredEvent>(options);
+    }
+}
+```
+
+> `ConfigureMessagePipe`를 override해 목록을 복사하지 마세요. `RegisterMessagePipe()`는 한 번만 부를 수 있어 복사본이 템플릿 목록 전체를 대신하게 되고, 템플릿이 나중에 브로커를 추가하면 그 이벤트를 구독하는 템플릿 컴포넌트가 컨테이너 빌드에서 해석에 실패합니다.
+
 ### InactivityTimer (비활동 타이머)
 
 `Settings.json`의 `useInactivityTimer`/`resetTime`에 따라 일정 시간 입력이 없으면 `HuliacDev.App.InactivityTimeoutEvent`(MessagePipe 메시지)를 발행합니다. "최초 화면"이 별도 씬인지, 같은 씬의 첫 패널인지는 프로젝트마다 다르므로, 실제로 되돌아가는 로직(씬 로드, 패널 전환 등)은 이 이벤트를 `ISubscriber<InactivityTimeoutEvent>`로 구독해 프로젝트가 직접 구현합니다.
@@ -358,6 +374,8 @@ if (result.isSuccess)
 
 - `SendGetRequestWithRetryAsync`와 달리 기본값으로 **에디터·Development 빌드에서도 실제로 전송**해 개발 중에 서버 응답을 확인할 수 있습니다. 운영 서버에 기록이 남는 요청이라 개발 중에는 보내면 안 되면 `skipInEditorAndDevelopmentBuild: true`를 넘기세요.
 - HTTP 4xx를 포함한 모든 실패를 재시도합니다. '없는 사용자'를 404로 알리는 API라면 `maxAttemptCount`를 줄여 응답을 오래 기다리지 않게 하세요.
+- 시도 한 번이 `attemptTimeoutSeconds`(기본 10초, `ApiRetryUtil.DefaultAttemptTimeoutSeconds`)를 넘기면 그 시도를 실패로 보고 재시도합니다. 연결만 받고 응답하지 않는 서버에서도 무기한 기다리지 않으며, 0 이하를 넘기면 시간 제한을 두지 않습니다.
+- 성공 로그는 기본적으로 Information으로 남습니다. 사용자 확인처럼 자주 부르는 API는 `successLogLevel: LogLevel.Debug`(또는 `LogLevel.None`)로 낮추세요. 실패·재시도 로그는 그대로 남습니다.
 
 ### 창 포커스 복구 (WindowFocusRestorer, Windows 전용)
 
@@ -366,10 +384,10 @@ if (result.isSuccess)
 `RootLifetimeScope`가 `WindowFocusRestorer`를 자동으로 만들므로 씬 배치나 등록 코드는 필요 없습니다. 앱이 포커스를 잃으면 `focusRestoreDelay`초 뒤 앱 창을 다시 앞으로 가져오고, 포커스가 돌아올 때까지 `focusRestoreRetryInterval`초마다 다시 시도합니다.
 
 - **Windows 스탠드얼론 빌드에서만 동작합니다.** 에디터와 다른 플랫폼에서는 아무것도 하지 않습니다.
-- **앱을 켜면 켜진 상태로 시작하고, `F` 키(ToggleFocusRestore)로 끄고 켭니다.** 유지보수 중 다른 프로그램을 써야 하면 앱에서 `F`를 눌러 끄고, 끝나면 다시 눌러 켭니다. 앱을 다시 시작하면 켜진 상태로 돌아갑니다. 끄고 켤 때 로그가 남습니다.
+- **앱을 켜면 켜진 상태로 시작하고, `F` 키(ToggleFocusRestore)로 끄고 켭니다.** 유지보수 중 다른 프로그램을 써야 하면 앱에서 `F`를 눌러 끄고, 끝나면 다시 눌러 켭니다. 앱을 다시 시작하면 켜진 상태로 돌아갑니다. 끄고 켤 때 로그가 남고, 화면 위쪽에 켜짐·꺼짐이 2초 동안 표시됩니다(끌 때는 다시 켜는 키도 함께 표시). 꺼 둔 동안 포커스를 잃으면 "꺼져 있어 창을 되돌리지 않는다"는 로그가 남습니다.
 - `Settings.json`에서는 타이밍만 조정합니다(아래 Settings.json 절 참고). 파일을 읽지 못하면 기본 타이밍(3초/3초)으로 동작합니다.
 - Player Settings의 **Run In Background**가 켜져 있어야 합니다. 꺼져 있으면 포커스를 잃은 동안 플레이어가 멈춰 복구할 수 없으며, 시작 시 경고 로그가 남습니다.
-- Windows의 포그라운드 잠금 때문에 `SetForegroundWindow`만으로는 거부되는 경우가 많아, 현재 포그라운드 창의 스레드에 입력을 잠시 붙여(`AttachThreadInput`) 창을 올립니다. 그래도 잠금 화면, UAC 확인 창, 관리자 권한으로 실행된 창이 앞에 있으면 Windows가 막을 수 있습니다. 실패하면 포커스를 잃을 때마다 처음 한 번만 경고 로그를 남기고 계속 재시도합니다.
+- Windows의 포그라운드 잠금 때문에 `SetForegroundWindow`만으로는 거부되는 경우가 많아, 현재 포그라운드 창의 스레드에 입력을 잠시 붙여(`AttachThreadInput`) 창을 올립니다. 단 포그라운드 창이 응답 없음 상태면 붙이지 않습니다(멈춘 창과 입력을 공유하면 앱도 함께 멈출 수 있음). 그래도 잠금 화면, UAC 확인 창, 관리자 권한으로 실행된 창이 앞에 있으면 Windows가 막을 수 있습니다. 실패하면 포커스를 잃을 때마다 처음 한 번만 경고 로그를 남기고 계속 재시도합니다.
 - 앱 종료 중에는 시도하지 않습니다.
 
 > **바코드·QR 스캐너 주의:** 스캐너는 읽은 값을 키 입력으로 보내므로, 값에 대문자 `F`가 있으면 포커스 복구가 꺼집니다(`D`·`I`·`M` 단축키도 같은 문제가 있습니다). 스캐너를 쓰는 프로젝트는 아래처럼 Ctrl 조합으로 바꾸세요. 스캐너는 Ctrl을 보내지 않습니다.
@@ -437,7 +455,7 @@ public class GameLifetimeScope : RootLifetimeScope
 }
 ```
 
-- `Settings.json`을 읽지 못하면(파일 없음, 빈 파일, 끝 쉼표 같은 형식 오류) 오류 로그를 남기고 **비활동 타이머만 켠 대체 설정**(`resetTime` 90초, `AppSettingsProvider.FallbackResetTimeSeconds`)으로 동작합니다. 효과음·폰트·`closeSetting`은 적용되지 않으므로, 콘솔이나 로그 파일에 "Failed to load Settings.json"이 보이면 파일을 고치고 앱을 다시 시작하세요.
+- `Settings.json`을 읽지 못하면(파일 없음, 빈 파일, 끝 쉼표 같은 형식 오류) 오류 로그를 남기고 **비활동 타이머만 켠 대체 설정**(`resetTime` 90초, `AppSettingsProvider.FallbackResetTimeSeconds`)으로 동작합니다. 효과음·폰트·`closeSetting`은 적용되지 않으므로, 콘솔이나 로그 파일에 "Failed to load Settings.json"이 보이면 파일을 고치고 앱을 다시 시작하세요. 이때 숨은 종료 버튼은 `SystemCanvas` 프리팹 기본값(좌상단 150x150, 투명, 3초 안에 10번)으로 동작합니다.
 - `useInactivityTimer`가 `true`이고 `resetTime`(초)이 0보다 크면 `InactivityTimer`가 활성화됩니다. `warningTime`/`fadeTime`은 향후 경고 단계·전환 연출용으로 예약된 필드이며 아직 `InactivityTimer`에서 사용하지 않습니다.
 - `targetFrameRate`는 0 이하(또는 생략)면 적용되지 않고, 이 경우 실제 FPS는 현재 활성 품질 레벨의 `vSyncCount`에 좌우됩니다(본 템플릿 기준 Performant=0→무제한, Balanced/High Fidelity=1→디스플레이 주사율 고정). 품질 레벨이 바뀌면 미설정 시 동작도 함께 바뀌므로, 특정 FPS를 보장하려면 값을 명시적으로 지정하세요. 값을 지정하면 `vSyncCount`를 0으로 끄고 해당 FPS로 캡을 겁니다. 장시간 구동되는 키오스크 환경에서 발열·전력 소모를 줄이려면 30~60 사이 값을 권장합니다.
 - `focusRestoreDelay`(초)는 포커스를 잃은 뒤 첫 복구 시도까지 기다리는 시간, `focusRestoreRetryInterval`(초)은 포커스가 돌아오지 않았을 때 다시 시도하는 간격입니다. 0 이하(또는 생략)면 기본값 3초를 쓰고, 1초 미만 양수는 1초로 올려 적용합니다. 기능을 켜고 끄는 키는 Settings.json에 없고 `F` 키로 전환합니다([창 포커스 복구](#창-포커스-복구-windowfocusrestorer-windows-전용) 참고).

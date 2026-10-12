@@ -258,6 +258,55 @@ namespace HuliacDev.Tests
         });
 
         /// <summary>
+        /// 없는 파일을 이미 취소된 토큰으로 읽어도 기본값 대신 OperationCanceledException을 던져야 함.
+        /// 파일 없음 경로는 await 없이 끝나 토큰을 확인하지 않았기 때문에, 파괴된 호출부가 기본값으로 초기화를 이어갈 수 있었음.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 취소된_토큰으로_없는_파일을_TryLoadAsync하면_OperationCanceledException을_던진다() => UniTask.ToCoroutine(async () =>
+        {
+            using (CancellationTokenSource cts = new CancellationTokenSource())
+            {
+                cts.Cancel();
+
+                bool isCanceled = false;
+                try
+                {
+                    await JsonLoader.TryLoadAsync<JsonLoaderTestData>("JsonLoaderTests_없는파일.json", cts.Token).AwaitWithRealtimeTimeout();
+                }
+                catch (OperationCanceledException)
+                {
+                    isCanceled = true;
+                }
+
+                Assert.IsTrue(isCanceled, "취소됐는데 파일 없음 경로에서 예외 없이 기본값을 반환함");
+            }
+        });
+
+        /// <summary>
+        /// LoadAsync도 TryLoadAsync를 거치므로, 없는 파일을 이미 취소된 토큰으로 읽으면 OperationCanceledException을 던져야 함.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 취소된_토큰으로_없는_파일을_LoadAsync하면_OperationCanceledException을_던진다() => UniTask.ToCoroutine(async () =>
+        {
+            using (CancellationTokenSource cts = new CancellationTokenSource())
+            {
+                cts.Cancel();
+
+                bool isCanceled = false;
+                try
+                {
+                    await JsonLoader.LoadAsync<JsonLoaderTestData>("JsonLoaderTests_없는파일.json", cts.Token).AwaitWithRealtimeTimeout();
+                }
+                catch (OperationCanceledException)
+                {
+                    isCanceled = true;
+                }
+
+                Assert.IsTrue(isCanceled, "취소됐는데 파일 없음 경로에서 예외 없이 기본값을 반환함");
+            }
+        });
+
+        /// <summary>
         /// 기존 파일이 있을 때 SaveAsync가 성공하면 true를 반환하고, 대상 파일 내용을 바꾸고 임시 파일은 남기지 않아야 함.
         /// </summary>
         [UnityTest]

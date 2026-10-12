@@ -8,14 +8,14 @@
 
 ## 할 일
 
-- [ ] `AppSettingsProvider`의 대체 설정(Settings.json을 읽지 못했을 때)에 `closeSetting`이 없어 `GameCloser`가 위치·투명도를 적용하지 않고, SystemCanvas 프리팹의 기본값(화면 가운데, 흰색 150x150)이 가장 위 정렬로 떠 모든 화면의 터치를 가리고 그 자리를 연타하면 앱이 꺼짐. 재현: Settings.json 끝에 쉼표를 넣고 빌드 실행. 프리팹 기본값을 구석·투명으로 두거나 대체 설정에 closeSetting 기본값을 넣기 — 발견일: 2026-10-10
-- [ ] `JsonLoader.TryLoadAsync`(그리고 `LoadAsync`)는 로컬 파일이 없으면 취소 토큰을 확인하지 않고 `(false, new T())`를 돌려줘, 문서의 "취소되면 OperationCanceledException"과 다름. 재현: 이미 취소된 토큰으로 없는 파일을 읽으면 예외 없이 기본값이 옴 — 호출부가 파괴된 뒤 기본값으로 초기화를 이어갈 수 있음. 메서드 첫 줄에 `cancellationToken.ThrowIfCancellationRequested()`를 두기 — 발견일: 2026-10-10
-- [ ] `ApiRetryUtil.GetTextWithRetryAsync`가 요청에 `timeout`을 두지 않아, 연결만 받고 응답하지 않는 서버면 호출자 토큰에 시간 제한이 없을 때 무기한 기다림. 또 성공할 때마다 Information 로그를 남겨 사용자 확인처럼 자주 부르는 API에서는 로그가 많아짐. 시도별 시간 초과 매개변수를 추가하고 성공 로그 수준을 정할 수 있게 하기 — 발견일: 2026-10-10
-- [ ] `WindowFocusRestorer`를 `ToggleFocusRestore`로 꺼 둔 상태에서도 포커스를 잃으면 "Will bring the window back in Ns" 로그가 남고, 켜짐·꺼짐을 화면에서 알 수 없어 유지보수 뒤 꺼 둔 채 잊기 쉬움. 꺼진 상태의 로그 문구를 따로 두고, 토글할 때 화면에 잠깐 상태를 표시하기 — 발견일: 2026-10-10
-- [ ] (추정) `WindowFocusRestorer`가 응답 없는(멈춘) 포그라운드 창의 스레드에 `AttachThreadInput`을 붙인 채 `SetForegroundWindow`를 부르면 앱의 메인 스레드도 함께 멈출 수 있음. 붙이기 전에 `IsHungAppWindow`로 확인해 멈춘 창이면 붙이지 않기 — 발견일: 2026-10-10
-- [ ] `RootLifetimeScope.ConfigureMessagePipe`가 `RegisterMessagePipe`로 받은 `options`를 파생 클래스에 넘기지 않아, 프로젝트 이벤트 브로커 하나를 더하려 해도 기반 등록 목록 전체를 복사해 override해야 함(`RegisterMessagePipe`는 한 번만 불러야 함). 템플릿이 브로커를 추가하면 복사본이 낡아, 새 이벤트를 구독하는 템플릿 컴포넌트가 컨테이너 빌드에서 해석에 실패함. 재현: 이전 버전 목록을 복사한 override를 둔 채 템플릿을 갱신. 기본 등록 뒤 `options`를 받는 훅(예: `ConfigureProjectMessageBrokers(IContainerBuilder, MessagePipeOptions)`)을 두기 — 발견일: 2026-10-12
 ## 완료
 
+- [x] Settings.json을 읽지 못해 대체 설정에 `closeSetting`이 없으면, SystemCanvas 프리팹의 숨은 종료 버튼 기본값(화면 가운데, 흰색 불투명 150x150)이 최상단 캔버스에서 모든 화면의 가운데 터치를 가리고 연타하면 앱이 꺼지던 문제. 프리팹 기본값을 README 예시와 같은 좌상단·투명으로 바꿈 — 완료: 2026-10-12 (#60)
+- [x] `JsonLoader.TryLoadAsync`(그리고 `LoadAsync`)가 로컬 파일이 없으면 취소 토큰을 확인하지 않고 기본값을 돌려주던 문제. 메서드 시작에서 `cancellationToken.ThrowIfCancellationRequested()`로 확인하도록 수정 — 완료: 2026-10-12 (#60)
+- [x] `ApiRetryUtil.GetTextWithRetryAsync`가 요청에 시간 제한이 없어 응답하지 않는 서버를 무기한 기다리고, 성공할 때마다 Information 로그를 남기던 문제. 시도별 제한 시간 `attemptTimeoutSeconds`(기본 10초)와 성공 로그 수준 `successLogLevel`을 추가함(`SendGetRequestWithRetryAsync`는 중복 로그 우려로 그대로 둠) — 완료: 2026-10-12 (#60)
+- [x] `WindowFocusRestorer`를 꺼 둔 상태에서도 "Will bring the window back" 로그가 남고 켜짐·꺼짐을 화면에서 알 수 없던 문제. 꺼진 상태의 로그 문구를 따로 두고, 토글하면 화면 위쪽에 상태를 2초 동안 표시함(`StatusMessageOverlay`) — 완료: 2026-10-12 (#60)
+- [x] (추정) `WindowFocusRestorer`가 응답 없는 포그라운드 창의 스레드에 `AttachThreadInput`을 붙이면 앱 메인 스레드도 함께 멈출 수 있던 문제. 붙이기 전에 `IsHungAppWindow`로 확인해 응답 없는 창이면 붙이지 않음(현장 재현은 못 함) — 완료: 2026-10-12 (#60)
+- [x] `RootLifetimeScope.ConfigureMessagePipe`가 `options`를 파생 클래스에 넘기지 않아 프로젝트 브로커를 더하려면 등록 목록 전체를 복사해야 했던 문제. 템플릿 브로커 등록 뒤 호출하는 훅 `ConfigureProjectMessageBrokers(IContainerBuilder, MessagePipeOptions)`를 추가함 — 완료: 2026-10-12 (#60)
 - [x] `JsonLoader.LoadAsync`가 파일 없음·형식 오류에도 `new T()`를 돌려줘, `Settings.json`이 깨지면 비활동 복귀·효과음이 조용히 꺼지고 일부러 끈 것과 구별되지 않던 문제. 읽기 결과를 `(bool isSuccess, T data)`로 돌려주는 `TryLoadAsync`를 추가하고, `AppSettingsProvider`가 실패 시 오류 로그와 비활동 타이머(90초)를 켠 대체 설정을 쓰도록 함 — 완료: 2026-10-10 (#59)
 - [x] `JsonLoader.SaveAsync`가 대상 파일을 바로 덮어써 저장 도중 끊기면 파일이 비거나 잘리던 문제. 임시 파일(`.tmp`)에 쓰고 `Flush(true)` 뒤 `File.Replace`로 교체하도록 수정(실패·취소 시 기존 파일 유지) — 완료: 2026-10-10 (#59)
 - [x] `JsonLoader.LoadAsync`가 취소를 삼키고 `new T()`를 돌려줘 파괴된 호출부가 초기화를 이어가던 문제. `LoadAsync`·`TryLoadAsync`·`SaveAsync`가 `OperationCanceledException`을 다시 던지도록 수정 — 완료: 2026-10-10 (#59)
