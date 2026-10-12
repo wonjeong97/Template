@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -11,7 +13,7 @@ using HuliacDev.Network;
 namespace HuliacDev.Tests
 {
     /// <summary>
-    /// ApiRetryUtil.GetTextWithRetryAsync의 응답 본문 반환과 에디터 전송 건너뛰기 선택 검증.
+    /// ApiRetryUtil.GetTextWithRetryAsync의 응답 본문 반환, 에디터 전송 건너뛰기 선택, 시도별 제한 시간 검증.
     /// 서버 없이 검증하도록 임시 파일의 file:// URL로 요청함. 네트워크 미연결로 판정되는 환경에서는
     /// 요청 전에 포기하는 정책 때문에 검증할 수 없어 결과를 '판정 불가'로 둠.
     /// </summary>
@@ -20,6 +22,7 @@ namespace HuliacDev.Tests
         private const string ResponseText = "{\"ok\":true}";
 
         private string _filePath;
+        private TcpListener _silentServer;
 
         [SetUp]
         public void SetUp()
@@ -33,6 +36,12 @@ namespace HuliacDev.Tests
             if (File.Exists(_filePath))
             {
                 File.Delete(_filePath);
+            }
+
+            if (_silentServer != null)
+            {
+                _silentServer.Stop();
+                _silentServer = null;
             }
         }
 
@@ -90,6 +99,34 @@ namespace HuliacDev.Tests
 
                 Assert.IsFalse(result.isSuccess, "없는 파일 요청이 성공으로 보고됨");
                 Assert.IsNull(result.responseText);
+            });
+        }
+
+        /// <summary>
+        /// 연결만 받고 응답하지 않는 서버에는 시도별 제한 시간이 지나면 실패를 반환해야 함.
+        /// 예전에는 요청에 시간 제한이 없어, 호출자 토큰에 시간 제한이 없으면 무기한 기다렸음.
+        /// 응답하지 않는 서버는 Accept를 부르지 않는 로컬 TcpListener로 흉내 냄(운영체제가 연결은 받아 두지만 응답은 오지 않음).
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 응답하지_않는_서버에는_시도별_제한_시간이_지나면_실패를_반환한다()
+        {
+            AssumeNetworkReachable();
+            _silentServer = new TcpListener(IPAddress.Loopback, 0);
+            _silentServer.Start();
+            int port = ((IPEndPoint)_silentServer.LocalEndpoint).Port;
+
+            return UniTask.ToCoroutine(async () =>
+            {
+                double startTime = Time.realtimeSinceStartupAsDouble;
+
+                (bool isSuccess, string responseText) result = await ApiRetryUtil
+                    .GetTextWithRetryAsync($"http://127.0.0.1:{port}/", "test", null, CancellationToken.None, 1, 0.1f, attemptTimeoutSeconds: 1)
+                    .AwaitWithRealtimeTimeout(5f);
+
+                double elapsed = Time.realtimeSinceStartupAsDouble - startTime;
+                Assert.IsFalse(result.isSuccess, "응답이 없는데 성공으로 보고함");
+                Assert.IsNull(result.responseText);
+                Assert.GreaterOrEqual(elapsed, 0.9d, "제한 시간 전에 실패함(시간 초과가 아닌 다른 원인으로 실패한 것으로 보임)");
             });
         }
 

@@ -27,6 +27,12 @@ namespace HuliacDev.Network
         public const float DefaultRetryDelaySeconds = 3f;
 
         /// <summary>
+        /// GetTextWithRetryAsync의 시도 한 번당 기본 제한 시간(초). 연결만 받고 응답하지 않는 서버에서
+        /// 호출자 토큰에 시간 제한이 없으면 무기한 기다리므로, 이 시간이 지나면 그 시도를 실패로 보고 재시도함.
+        /// </summary>
+        public const int DefaultAttemptTimeoutSeconds = 10;
+
+        /// <summary>
         /// 지정한 URL로 GET 요청을 보내고, 실패 시 지정된 횟수만큼 지연을 두고 재시도함.
         /// 실제로 전송을 시도해 성공하면 true를 반환하고, 에디터·디벨롭 빌드이거나 네트워크가
         /// 연결돼 있지 않아 전송을 생략했거나 재시도를 모두 소진하면 false를 반환함.
@@ -52,7 +58,9 @@ namespace HuliacDev.Network
             LogSkipped(logger, logLabel);
             return false;
 #else
-            (bool isSuccess, string responseText) result = await SendWithRetryAsync(url, logLabel, logger, cancellationToken, maxAttemptCount, retryDelaySeconds);
+            // 시작·종료 로그는 서버가 늦게 응답해도 시간 초과로 재시도하면 같은 로그가 중복 기록될 수 있어, 이전처럼 시간 제한 없이 보냄.
+            (bool isSuccess, string responseText) result = await SendWithRetryAsync(url, logLabel, logger, cancellationToken, maxAttemptCount, retryDelaySeconds,
+                attemptTimeoutSeconds: 0, successLogLevel: LogLevel.Information);
             return result.isSuccess;
 #endif
         }
@@ -68,7 +76,9 @@ namespace HuliacDev.Network
         /// 기본값으로는 에디터·디벨롭 빌드에서도 실제로 전송해 개발 중에 서버 응답을 확인할 수 있음.
         /// 운영 서버에 기록이 남는 요청이라 개발 중에는 보내면 안 되면 skipInEditorAndDevelopmentBuild를 true로 넘기며,
         /// 이때 두 환경에서는 전송 없이 로그만 남기고 (false, null)을 반환함.
-        /// 취소되면 OperationCanceledException을 던짐.
+        /// 시도 한 번이 attemptTimeoutSeconds(기본 10초)를 넘기면 그 시도를 실패로 보고 재시도하며, 0 이하면 시간 제한을 두지 않음.
+        /// 성공 로그는 successLogLevel(기본 Information)로 남기므로, 자주 부르는 API는 LogLevel.Debug나 LogLevel.None으로 낮출 수 있음.
+        /// 실패·재시도 로그의 수준은 바뀌지 않음. 취소되면 OperationCanceledException을 던짐.
         /// </summary>
         // skipInEditorAndDevelopmentBuild 분기만 await 없이 반환하므로 CS1998은 발생하지 않음.
         public static async UniTask<(bool isSuccess, string responseText)> GetTextWithRetryAsync(
@@ -78,7 +88,9 @@ namespace HuliacDev.Network
             CancellationToken cancellationToken,
             int maxAttemptCount = DefaultMaxAttemptCount,
             float retryDelaySeconds = DefaultRetryDelaySeconds,
-            bool skipInEditorAndDevelopmentBuild = false)
+            bool skipInEditorAndDevelopmentBuild = false,
+            int attemptTimeoutSeconds = DefaultAttemptTimeoutSeconds,
+            LogLevel successLogLevel = LogLevel.Information)
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (skipInEditorAndDevelopmentBuild)
@@ -87,7 +99,8 @@ namespace HuliacDev.Network
                 return (false, null);
             }
 #endif
-            return await SendWithRetryAsync(url, logLabel, logger, cancellationToken, maxAttemptCount, retryDelaySeconds);
+            return await SendWithRetryAsync(url, logLabel, logger, cancellationToken, maxAttemptCount, retryDelaySeconds,
+                attemptTimeoutSeconds, successLogLevel);
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -103,6 +116,7 @@ namespace HuliacDev.Network
         /// <summary>
         /// 네트워크 연결을 확인한 뒤 GET 요청을 보내고, 실패하면 재시도 간격마다 다시 보내는 공통 재시도 루프.
         /// 성공하면 (true, 응답 본문)을, 네트워크 미연결이거나 재시도를 모두 소진하면 (false, null)을 반환함.
+        /// attemptTimeoutSeconds가 양수면 시도마다 그 시간을 넘기면 실패로 보고, 성공 로그는 successLogLevel로 남김.
         /// </summary>
         private static async UniTask<(bool isSuccess, string responseText)> SendWithRetryAsync(
             string url,
@@ -110,7 +124,9 @@ namespace HuliacDev.Network
             Microsoft.Extensions.Logging.ILogger logger,
             CancellationToken cancellationToken,
             int maxAttemptCount,
-            float retryDelaySeconds)
+            float retryDelaySeconds,
+            int attemptTimeoutSeconds,
+            LogLevel successLogLevel)
         {
             // 네트워크 자체가 연결되어 있지 않으면 시도해도 무조건 실패하므로, 재시도 루프를
             // 돌리며 최대 대기 시간을 허비하지 않도록 먼저 걸러냄.
@@ -128,11 +144,18 @@ namespace HuliacDev.Network
                 {
                     using UnityWebRequest request = UnityWebRequest.Get(url);
 
+                    // UnityWebRequest는 기본값(0)이면 시간 제한이 없어, 연결만 받고 응답하지 않는 서버를 무기한 기다림.
+                    // 제한 시간이 지나면 요청이 중단되고 UnityWebRequestException("Request timeout")으로 아래에서 재시도됨.
+                    if (attemptTimeoutSeconds > 0)
+                    {
+                        request.timeout = attemptTimeoutSeconds;
+                    }
+
                     // ToUniTask는 result가 Success가 아니면 UnityWebRequestException을 던지므로
                     // 여기까지 도달했다는 것 자체가 성공을 뜻한다.
                     await request.SendWebRequest().ToUniTask(cancellationToken: cancellationToken);
 
-                    if (logger != null) logger.ZLogInformation($"[ApiRetryUtil] Send succeeded ({attempt}/{maxAttemptCount}): {logLabel}");
+                    if (logger != null) logger.ZLog(successLogLevel, $"[ApiRetryUtil] Send succeeded ({attempt}/{maxAttemptCount}): {logLabel}");
                     return (true, request.downloadHandler.text);
                 }
                 catch (OperationCanceledException)
