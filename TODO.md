@@ -13,6 +13,7 @@
 - [ ] `ApiRetryUtil.GetTextWithRetryAsync`가 요청에 `timeout`을 두지 않아, 연결만 받고 응답하지 않는 서버면 호출자 토큰에 시간 제한이 없을 때 무기한 기다림. 또 성공할 때마다 Information 로그를 남겨 사용자 확인처럼 자주 부르는 API에서는 로그가 많아짐. 시도별 시간 초과 매개변수를 추가하고 성공 로그 수준을 정할 수 있게 하기 — 발견일: 2026-10-10
 - [ ] `WindowFocusRestorer`를 `ToggleFocusRestore`로 꺼 둔 상태에서도 포커스를 잃으면 "Will bring the window back in Ns" 로그가 남고, 켜짐·꺼짐을 화면에서 알 수 없어 유지보수 뒤 꺼 둔 채 잊기 쉬움. 꺼진 상태의 로그 문구를 따로 두고, 토글할 때 화면에 잠깐 상태를 표시하기 — 발견일: 2026-10-10
 - [ ] (추정) `WindowFocusRestorer`가 응답 없는(멈춘) 포그라운드 창의 스레드에 `AttachThreadInput`을 붙인 채 `SetForegroundWindow`를 부르면 앱의 메인 스레드도 함께 멈출 수 있음. 붙이기 전에 `IsHungAppWindow`로 확인해 멈춘 창이면 붙이지 않기 — 발견일: 2026-10-10
+- [ ] `RootLifetimeScope.ConfigureMessagePipe`가 `RegisterMessagePipe`로 받은 `options`를 파생 클래스에 넘기지 않아, 프로젝트 이벤트 브로커 하나를 더하려 해도 기반 등록 목록 전체를 복사해 override해야 함(`RegisterMessagePipe`는 한 번만 불러야 함). 템플릿이 브로커를 추가하면 복사본이 낡아, 새 이벤트를 구독하는 템플릿 컴포넌트가 컨테이너 빌드에서 해석에 실패함. 재현: 이전 버전 목록을 복사한 override를 둔 채 템플릿을 갱신. 기본 등록 뒤 `options`를 받는 훅(예: `ConfigureProjectMessageBrokers(IContainerBuilder, MessagePipeOptions)`)을 두기 — 발견일: 2026-10-12
 ## 완료
 
 - [x] `JsonLoader.LoadAsync`가 파일 없음·형식 오류에도 `new T()`를 돌려줘, `Settings.json`이 깨지면 비활동 복귀·효과음이 조용히 꺼지고 일부러 끈 것과 구별되지 않던 문제. 읽기 결과를 `(bool isSuccess, T data)`로 돌려주는 `TryLoadAsync`를 추가하고, `AppSettingsProvider`가 실패 시 오류 로그와 비활동 타이머(90초)를 켠 대체 설정을 쓰도록 함 — 완료: 2026-10-10 (#59)
