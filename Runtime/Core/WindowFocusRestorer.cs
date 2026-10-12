@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using Cysharp.Text;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using UnityEngine;
@@ -23,7 +24,8 @@ namespace HuliacDev.Core
     /// </para>
     /// <para>
     /// 앱 시작 시 켜져 있고, 운영자가 유지보수 중 다른 프로그램을 쓸 수 있도록 TemplateInputActions의
-    /// System/ToggleFocusRestore(기본 F 키)로 끄고 켬. Settings.json에서는 대기 시간과 재시도 간격만 조정함.
+    /// System/ToggleFocusRestore(기본 F 키)로 끄고 켬. 토글하면 화면 위쪽에 바뀐 상태를 잠깐 보여 줌.
+    /// Settings.json에서는 대기 시간과 재시도 간격만 조정함.
     /// 앱 종료 중에는 시도하지 않으며, 에디터와 다른 플랫폼에서는 아무것도 하지 않음.
     /// 언제 시도할지는 FocusRestoreSchedule이 정하고, 이 클래스는 포커스 이벤트·키 입력 연결과 user32 호출만 담당함.
     /// </para>
@@ -37,6 +39,7 @@ namespace HuliacDev.Core
         private CancellationTokenSource _cts;
         private bool _isActive;
         private bool _isRestoreOn = true;
+        private StatusMessageOverlay _statusOverlay;
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         private FocusRestoreSchedule _schedule;
@@ -101,7 +104,7 @@ namespace HuliacDev.Core
         }
 
         /// <summary>
-        /// 운영자 키 입력으로 포커스 복구를 끄거나 켬.
+        /// 운영자 키 입력으로 포커스 복구를 끄거나 켜고, 바뀐 상태를 화면에 잠깐 보여 줌.
         /// </summary>
         private void OnToggleFocusRestore(InputAction.CallbackContext _)
         {
@@ -110,6 +113,30 @@ namespace HuliacDev.Core
             if (_logger != null)
             {
                 _logger.ZLogInformation($"[WindowFocusRestorer] Focus restore turned {(_isRestoreOn ? "on" : "off")} by the ToggleFocusRestore key.");
+            }
+
+            ShowToggleStatus();
+        }
+
+        /// <summary>
+        /// 포커스 복구의 켜짐·꺼짐을 화면 위쪽에 잠깐 표시함. 상태가 로그에만 남으면 유지보수 중 꺼 둔 채 잊기 쉬워,
+        /// 끌 때는 다시 켜는 키도 함께 보여 줌. 키 이름은 ConfigureInputBindings로 바꾼 바인딩을 그대로 따름.
+        /// </summary>
+        private void ShowToggleStatus()
+        {
+            if (!_statusOverlay)
+            {
+                _statusOverlay = StatusMessageOverlay.Create("FocusRestoreStatusOverlay");
+            }
+
+            if (_isRestoreOn)
+            {
+                _statusOverlay.Show("Focus restore ON");
+            }
+            else
+            {
+                string keyName = _inputActions.System.ToggleFocusRestore.GetBindingDisplayString();
+                _statusOverlay.Show(ZString.Concat("Focus restore OFF - press ", keyName, " to turn it back on"));
             }
         }
 
@@ -180,9 +207,16 @@ namespace HuliacDev.Core
 
             _schedule.OnFocusLost(Time.realtimeSinceStartupAsDouble);
 
-            if (_logger != null)
+            if (_logger == null) return;
+
+            // 키로 꺼 둔 상태에서는 Tick이 시도하지 않으므로, 되돌아온다는 로그를 남기면 로그만 보고 원인을 찾을 수 없음.
+            if (_isRestoreOn)
             {
                 _logger.ZLogInformation($"[WindowFocusRestorer] Focus lost. Will bring the window back in {_schedule.DelaySeconds}s.");
+            }
+            else
+            {
+                _logger.ZLogInformation($"[WindowFocusRestorer] Focus lost. Focus restore is off (ToggleFocusRestore key), so the window will not be brought back.");
             }
         }
 
@@ -338,7 +372,7 @@ namespace HuliacDev.Core
 #endif
 
         /// <summary>
-        /// 컨테이너 파기 시 VContainer가 자동 호출함. 포커스 이벤트·키 입력 구독과 설정 로드를 정리함.
+        /// 컨테이너 파기 시 VContainer가 자동 호출함. 포커스 이벤트·키 입력 구독과 설정 로드, 상태 표시 오버레이를 정리함.
         /// </summary>
         void IDisposable.Dispose()
         {
@@ -348,6 +382,13 @@ namespace HuliacDev.Core
             if (_inputActions != null)
             {
                 _inputActions.System.ToggleFocusRestore.performed -= OnToggleFocusRestore;
+            }
+
+            // 오버레이는 씬을 넘어 유지되도록 만들었으므로, 이 서비스가 사라질 때 함께 파괴해야 남지 않음.
+            if (_statusOverlay)
+            {
+                UnityEngine.Object.Destroy(_statusOverlay.gameObject);
+                _statusOverlay = null;
             }
 
             _isActive = false;
