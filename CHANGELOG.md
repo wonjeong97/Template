@@ -1,6 +1,21 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.10.12-1] - 2026-10-12
+
+### Added
+- **`RootLifetimeScope.ConfigureProjectMessageBrokers` 추가(`Runtime/App/RootLifetimeScope.cs`):** `ConfigureMessagePipe`가 `RegisterMessagePipe()`로 받은 `options`를 파생 클래스에 넘기지 않아, 프로젝트 이벤트 브로커 하나를 더하려 해도 템플릿 등록 목록 전체를 복사해 override해야 했음(`RegisterMessagePipe()`는 한 번만 불러야 함). 템플릿이 브로커를 추가하면 복사본이 낡아, 새 이벤트를 구독하는 템플릿 컴포넌트가 컨테이너 빌드에서 해석에 실패했음. 템플릿 브로커를 모두 등록한 직후 `options`를 넘겨 호출하는 가상 메서드를 두고(기본 구현은 아무것도 등록하지 않음), README에 사용 예시를 적음. `ConfigureMessagePipe`를 override하지 않은 프로젝트의 동작은 같음. 이미 `ConfigureMessagePipe`를 복사해 override한 프로젝트는 프로젝트 브로커만 이 메서드로 옮기고 override를 지우면 템플릿 목록을 따라가게 됨. DI 등록 훅이라 테스트는 추가하지 않음.
+- **`ApiRetryUtil.GetTextWithRetryAsync`에 시도별 제한 시간과 성공 로그 수준 추가(`Runtime/Network/ApiRetryUtil.cs`):** 요청에 시간 제한이 없어, 연결만 받고 응답하지 않는 서버에서는 호출자 토큰에 시간 제한이 없으면 무기한 기다렸음. 또 성공할 때마다 Information 로그를 남겨, 사용자 확인처럼 자주 부르는 API에서는 로그가 많아졌음. 매개변수 `attemptTimeoutSeconds`(기본 10초, `ApiRetryUtil.DefaultAttemptTimeoutSeconds`, 0 이하면 시간 제한 없음)를 추가해 시도마다 `UnityWebRequest.timeout`을 걸고, 시간이 지나면 그 시도를 실패로 보고 재시도함. 매개변수 `successLogLevel`(기본 `LogLevel.Information`)로 성공 로그 수준을 `Debug`나 `None`으로 낮출 수 있음(실패·재시도 로그는 그대로). `SendGetRequestWithRetryAsync`는 바뀌지 않음: 시작·종료 로그는 서버가 늦게 응답할 때 시간 초과로 재시도하면 같은 로그가 중복 기록될 수 있어 이전처럼 시간 제한 없이 보냄. `ApiRetryUtilTests`에 테스트 1건 추가(Accept를 부르지 않는 로컬 TcpListener로 응답 없는 서버를 흉내 내, 제한 시간 1초 뒤 실패를 반환함을 확인. 수정 전 코드에서는 5초 안에 끝나지 않아 실패함을 확인).
+  - **Breaking:** `GetTextWithRetryAsync`를 부르는 기존 코드는 이제 시도 한 번이 10초를 넘기면 실패로 보고 재시도함. 응답에 10초 넘게 걸리는 API는 `attemptTimeoutSeconds`를 늘리거나 0으로 넘길 것.
+- **`WindowFocusRestorer` 토글 시 화면에 상태 표시(`Runtime/Core/WindowFocusRestorer.cs`, `Runtime/Core/StatusMessageOverlay.cs`):** 포커스 복구를 `ToggleFocusRestore` 키로 끄고 켜도 로그에만 남아, 유지보수 뒤 꺼 둔 채 잊기 쉬웠음. 토글하면 화면 위쪽 가운데에 "Focus restore ON" 또는 "Focus restore OFF - press F to turn it back on"을 2초 동안 표시함(키 이름은 `ConfigureInputBindings`로 바꾼 바인딩을 따름). 표시는 새 내부 컴포넌트 `StatusMessageOverlay`가 IMGUI로 그려 씬·프리팹 배치가 필요 없고, Screen Space Overlay 캔버스보다 위에 그려지며, 표시 시간이 지나면 컴포넌트를 꺼 OnGUI 호출 비용이 남지 않음. 오버레이는 처음 토글할 때 만들고 서비스가 파기될 때 함께 파괴함. IMGUI 기본 글꼴로 그려 영문으로 표시함. 화면 표시라 테스트는 추가하지 않음.
+
+### Fixed
+- **Settings.json을 읽지 못하면 숨은 종료 버튼이 화면 가운데를 가리던 문제 수정(`Runtime/Prefabs/SystemCanvas.prefab`):** 대체 설정에는 `closeSetting`이 없어 `GameCloser`가 위치·투명도를 적용하지 않는데, 프리팹 기본값이 화면 가운데의 흰색 불투명 150x150 버튼이라 최상단 `SystemCanvas`(sortingOrder 30000)에 떠서 모든 화면의 가운데 터치를 가렸고, 관람객이 그 자리를 연타하면 앱이 꺼졌음(재현: `Settings.json` 끝에 쉼표를 넣고 빌드 실행). 프리팹의 `GameClose` 기본값을 README 예시와 같은 좌상단(앵커·피벗 (0,1))·투명(알파 0)으로 바꿈. 크기 150x150과 클릭 조건(3초 안에 10번)은 그대로이고, 투명해도 Raycast Target이 켜져 있어 누를 수 있음. `closeSetting`에 `position`·`imageAlpha`를 적은 프로젝트는 결과가 같음. `GameCloserTests`에 테스트 1건 추가(프리팹의 종료 버튼이 구석에 투명하게 놓여 있는지 확인. 수정 전 프리팹에서는 앵커 (0.5, 0.5)로 실패함을 확인).
+  - **Breaking:** `closeSetting`의 `position`·`imageAlpha`를 적지 않고 프리팹 기본값(가운데, 흰색)에 기대던 프로젝트는 종료 버튼이 좌상단에 투명하게 놓임. 다른 위치가 필요하면 `closeSetting.position`에 적을 것. 씬에서 위치·색을 재정의한 `SystemCanvas` 인스턴스는 기존 값이 유지됨.
+- **`JsonLoader.TryLoadAsync`/`LoadAsync`가 파일이 없을 때 취소를 확인하지 않던 문제 수정(`Runtime/Utils/JsonLoader.cs`):** 로컬 파일이 없으면 await 없이 `(false, new T())`를 돌려줘, 이미 취소된 토큰으로 호출해도 예외 없이 기본값이 와서 문서의 "취소되면 OperationCanceledException"과 달랐고, 파괴된 호출부가 기본값으로 초기화를 이어갈 수 있었음. 메서드를 시작할 때 `ThrowIfCancellationRequested()`로 확인해, 어느 경로로 끝나든 취소가 먼저 전달되게 함. 취소된 토큰이면 "JSON file not found" 경고도 남지 않음. `JsonLoaderTests`에 테스트 2건 추가(`TryLoadAsync`·`LoadAsync`로 없는 파일을 취소된 토큰으로 읽기. 둘 다 수정 전 코드에서 실패함을 확인).
+- **`WindowFocusRestorer`를 꺼 둔 상태에서도 창을 되돌린다는 로그가 남던 문제 수정(`Runtime/Core/WindowFocusRestorer.cs`):** `ToggleFocusRestore`로 꺼 두면 시도하지 않는데도 포커스를 잃을 때 "Will bring the window back in Ns" 로그가 남아, 로그만 보고는 왜 창이 돌아오지 않는지 알 수 없었음. 꺼져 있으면 "Focus restore is off (ToggleFocusRestore key), so the window will not be brought back."을 남김. Windows 스탠드얼론 빌드 전용 경로라 테스트는 추가하지 않음.
+- **`WindowFocusRestorer`가 응답 없는 창에 입력을 붙이지 않도록 수정(`Runtime/Core/WindowFocusRestorer.cs`):** 창을 앞으로 가져올 때 현재 포그라운드 창의 스레드에 `AttachThreadInput`으로 입력을 붙이는데, 두 스레드가 입력 상태를 공유하게 되어 그 창이 응답 없음(멈춤) 상태면 앱의 메인 스레드도 입력 처리에서 함께 멈출 수 있음(현장에서 재현하지는 못했고, 입력 공유의 동작에 근거한 예방 조치임). 붙이기 전에 `IsHungAppWindow`로 확인해 응답 없는 창이면 붙이지 않고 `BringWindowToTop`·`SetForegroundWindow`만 시도하며, 거부되면 다음 재시도 때 다시 확인함. user32 호출이라 테스트는 추가하지 않음.
+
 ## [26.10.10-2] - 2026-10-10
 
 ### Added
