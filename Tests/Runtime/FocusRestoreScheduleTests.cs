@@ -155,5 +155,18 @@ namespace HuliacDev.Tests
             Assert.AreEqual(FocusRestoreSchedule.DefaultDelaySeconds, fromMissing.DelaySeconds);
             Assert.AreEqual(FocusRestoreSchedule.DefaultRetryIntervalSeconds, fromMissing.RetryIntervalSeconds);
         }
+
+        /// <summary>
+        /// alwaysOnTop 키 이름이 필드와 맞는지, 키가 없으면 꺼진 채(false)로 남아 기존 동작과 같은지 확인함.
+        /// </summary>
+        [Test]
+        public void Settings_json_alwaysOnTop_키를_읽고_키가_없으면_끈다()
+        {
+            Settings configured = JsonUtility.FromJson<Settings>("{\"alwaysOnTop\":true}");
+            Assert.IsTrue(configured.alwaysOnTop);
+
+            Settings missing = JsonUtility.FromJson<Settings>("{}");
+            Assert.IsFalse(missing.alwaysOnTop);
+        }
     }
 }

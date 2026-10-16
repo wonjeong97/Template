@@ -25,13 +25,21 @@ namespace HuliacDev.Core
     /// <para>
     /// 앱 시작 시 켜져 있고, 운영자가 유지보수 중 다른 프로그램을 쓸 수 있도록 TemplateInputActions의
     /// System/ToggleFocusRestore(기본 F 키)로 끄고 켬. 토글하면 화면 위쪽에 바뀐 상태를 잠깐 보여 줌.
-    /// Settings.json에서는 대기 시간과 재시도 간격만 조정함.
+    /// Settings.json에서는 대기 시간·재시도 간격과 항상 위 사용 여부(alwaysOnTop)를 정함.
     /// 앱 종료 중에는 시도하지 않으며, 에디터와 다른 플랫폼에서는 아무것도 하지 않음.
     /// 언제 시도할지는 FocusRestoreSchedule이 정하고, 이 클래스는 포커스 이벤트·키 입력 연결과 user32 호출만 담당함.
+    /// </para>
+    /// <para>
+    /// alwaysOnTop이 true면 앱 창을 항상 위(Topmost)로 두어, 나중에 뜬 다른 프로그램 창이 화면을 가리지 않게 함.
+    /// Display.Activate로 연 보조 디스플레이 창도 같은 창 클래스라 함께 적용하며, 나중에 열린 창이나 풀린 상태를 잡도록
+    /// 주기적으로 다시 확인함. ToggleFocusRestore 키로 끄면 항상 위도 함께 풀어, 점검할 때 작업 관리자·다른 프로그램을 볼 수 있게 함.
     /// </para>
     /// </summary>
     public sealed class WindowFocusRestorer : IStartable, ITickable, IDisposable
     {
+        /// <summary>항상 위가 켜져 있을 때, 이 앱의 창이 모두 항상 위인지 다시 확인하는 간격(초).</summary>
+        private const double TopmostCheckIntervalSeconds = 1d;
+
         private readonly AppSettingsProvider _settingsProvider;
         private readonly ILogger<WindowFocusRestorer> _logger;
         private readonly TemplateInputActions _inputActions;
@@ -39,11 +47,13 @@ namespace HuliacDev.Core
         private CancellationTokenSource _cts;
         private bool _isActive;
         private bool _isRestoreOn = true;
+        private bool _useAlwaysOnTop;
         private StatusMessageOverlay _statusOverlay;
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         private FocusRestoreSchedule _schedule;
         private IntPtr _windowHandle;
+        private double _nextTopmostCheckTime;
 #endif
 
         /// <summary>
@@ -80,8 +90,8 @@ namespace HuliacDev.Core
         }
 
         /// <summary>
-        /// Settings.json에서 대기 시간과 재시도 간격을 읽어, Windows 스탠드얼론 빌드에서만 감시를 시작함.
-        /// Settings.json을 읽지 못하면 AppSettingsProvider가 기본 Settings를 돌려주므로 기본 타이밍으로 동작함.
+        /// Settings.json에서 대기 시간·재시도 간격과 항상 위 사용 여부를 읽어, Windows 스탠드얼론 빌드에서만 감시를 시작함.
+        /// Settings.json을 읽지 못하면 AppSettingsProvider가 대체 설정을 돌려주므로 기본 타이밍으로, 항상 위 없이 동작함.
         /// </summary>
         private async UniTaskVoid LoadSettingsAsync(CancellationToken cancellationToken)
         {
@@ -96,6 +106,9 @@ namespace HuliacDev.Core
                 return;
             }
 
+            // 토글 키의 상태 표시·로그가 항상 위도 함께 끄고 켠다고 알리도록 플랫폼과 상관없이 기억함(적용은 Windows 스탠드얼론 빌드만 함).
+            _useAlwaysOnTop = settings != null && settings.alwaysOnTop;
+
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             Activate(settings ?? new Settings());
 #else
@@ -104,7 +117,7 @@ namespace HuliacDev.Core
         }
 
         /// <summary>
-        /// 운영자 키 입력으로 포커스 복구를 끄거나 켜고, 바뀐 상태를 화면에 잠깐 보여 줌.
+        /// 운영자 키 입력으로 포커스 복구(항상 위를 켰으면 항상 위도 함께)를 끄거나 켜고, 바뀐 상태를 화면에 잠깐 보여 줌.
         /// </summary>
         private void OnToggleFocusRestore(InputAction.CallbackContext _)
         {
@@ -112,15 +125,30 @@ namespace HuliacDev.Core
 
             if (_logger != null)
             {
-                _logger.ZLogInformation($"[WindowFocusRestorer] Focus restore turned {(_isRestoreOn ? "on" : "off")} by the ToggleFocusRestore key.");
+                _logger.ZLogInformation($"[WindowFocusRestorer] Focus restore{(_useAlwaysOnTop ? " and always on top" : "")} turned {(_isRestoreOn ? "on" : "off")} by the ToggleFocusRestore key.");
             }
+
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            // 끌 때는 그 자리에서 풀어 다른 프로그램 창이 앱 위로 올라올 수 있게 하고, 켤 때는 다음 Tick에서 바로 다시 적용함.
+            if (_isActive && _useAlwaysOnTop)
+            {
+                if (_isRestoreOn)
+                {
+                    _nextTopmostCheckTime = 0d;
+                }
+                else
+                {
+                    SetAlwaysOnTop(false);
+                }
+            }
+#endif
 
             ShowToggleStatus();
         }
 
         /// <summary>
-        /// 포커스 복구의 켜짐·꺼짐을 화면 위쪽에 잠깐 표시함. 상태가 로그에만 남으면 유지보수 중 꺼 둔 채 잊기 쉬워,
-        /// 끌 때는 다시 켜는 키도 함께 보여 줌. 키 이름은 ConfigureInputBindings로 바꾼 바인딩을 그대로 따름.
+        /// 포커스 복구(항상 위를 켰으면 항상 위도 함께)의 켜짐·꺼짐을 화면 위쪽에 잠깐 표시함. 상태가 로그에만 남으면
+        /// 유지보수 중 꺼 둔 채 잊기 쉬워, 끌 때는 다시 켜는 키도 함께 보여 줌. 키 이름은 ConfigureInputBindings로 바꾼 바인딩을 그대로 따름.
         /// </summary>
         private void ShowToggleStatus()
         {
@@ -129,28 +157,41 @@ namespace HuliacDev.Core
                 _statusOverlay = StatusMessageOverlay.Create("FocusRestoreStatusOverlay");
             }
 
+            string featureName = _useAlwaysOnTop ? "Focus restore and always on top" : "Focus restore";
+
             if (_isRestoreOn)
             {
-                _statusOverlay.Show("Focus restore ON");
+                _statusOverlay.Show(ZString.Concat(featureName, " ON"));
             }
             else
             {
                 string keyName = _inputActions.System.ToggleFocusRestore.GetBindingDisplayString();
-                _statusOverlay.Show(ZString.Concat("Focus restore OFF - press ", keyName, " to turn it back on"));
+                string pronoun = _useAlwaysOnTop ? "them" : "it";
+                _statusOverlay.Show(ZString.Concat(featureName, " OFF - press ", keyName, " to turn ", pronoun, " back on"));
             }
         }
 
         /// <summary>
-        /// 다음 시도 시각이 되면 창을 앞으로 가져오도록 시도함. 키로 꺼져 있거나 앱 종료가 시작됐으면 시도하지 않음.
+        /// 다음 시도 시각이 되면 창을 앞으로 가져오도록 시도하고, 항상 위를 켰으면 주기적으로 다시 적용함.
+        /// 키로 꺼져 있거나 앱 종료가 시작됐으면 둘 다 하지 않음.
         /// </summary>
         void ITickable.Tick()
         {
             if (!_isActive || !_isRestoreOn || _cts == null || _cts.IsCancellationRequested) return;
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
-            if (_schedule.TryBeginAttempt(Time.realtimeSinceStartupAsDouble))
+            double now = Time.realtimeSinceStartupAsDouble;
+
+            if (_schedule.TryBeginAttempt(now))
             {
                 TryRestoreFocus();
+            }
+
+            // Display.Activate로 나중에 열린 보조 디스플레이 창과, 어떤 이유로든 풀린 항상 위를 다시 잡도록 주기적으로 확인함.
+            if (_useAlwaysOnTop && now >= _nextTopmostCheckTime)
+            {
+                _nextTopmostCheckTime = now + TopmostCheckIntervalSeconds;
+                SetAlwaysOnTop(true);
             }
 #endif
         }
@@ -183,7 +224,7 @@ namespace HuliacDev.Core
 
             if (_logger != null)
             {
-                _logger.ZLogInformation($"[WindowFocusRestorer] Started ({(_isRestoreOn ? "on" : "off")}). Brings the window back {_schedule.DelaySeconds}s after focus is lost and retries every {_schedule.RetryIntervalSeconds}s.");
+                _logger.ZLogInformation($"[WindowFocusRestorer] Started ({(_isRestoreOn ? "on" : "off")}). Brings the window back {_schedule.DelaySeconds}s after focus is lost and retries every {_schedule.RetryIntervalSeconds}s. Always on top is {(_useAlwaysOnTop ? "enabled" : "disabled")} (alwaysOnTop).");
             }
         }
 
@@ -241,6 +282,18 @@ namespace HuliacDev.Core
         }
 
         /// <summary>
+        /// 이 앱의 창을 모두 항상 위로 두거나 풀고, 상태가 바뀐 창이 있을 때만 로그를 남김.
+        /// 이미 항상 위인 창은 건드리지 않으므로, 나중에 항상 위로 뜬 다른 창(화상 키보드 등)과 순서를 다투지 않음.
+        /// </summary>
+        private void SetAlwaysOnTop(bool isOnTop)
+        {
+            int changedCount = NativeMethods.SetOwnWindowsTopmost(isOnTop);
+            if (changedCount == 0 || _logger == null) return;
+
+            _logger.ZLogInformation($"[WindowFocusRestorer] Always on top {(isOnTop ? "applied to" : "removed from")} {changedCount} window(s).");
+        }
+
+        /// <summary>
         /// 포커스가 있을 때 현재 스레드의 활성 창(이 앱의 창)을 기억함.
         /// </summary>
         private void RememberActiveWindow()
@@ -268,14 +321,22 @@ namespace HuliacDev.Core
         }
 
         /// <summary>
-        /// 창을 앞으로 가져오는 데 쓰는 user32·kernel32 호출 모음.
+        /// 창을 앞으로 가져오고 항상 위로 두는 데 쓰는 user32·kernel32 호출 모음.
         /// </summary>
         private static class NativeMethods
         {
-            /// <summary>Unity 스탠드얼론 플레이어 창의 클래스 이름.</summary>
+            /// <summary>Unity 스탠드얼론 플레이어 창의 클래스 이름. Display.Activate로 연 보조 디스플레이 창도 같은 클래스를 씀.</summary>
             private const string UnityWindowClassName = "UnityWndClass";
 
             private const int SwRestore = 9;
+
+            private const int GwlExStyle = -20;
+            private const int WsExTopmost = 0x00000008;
+            private const uint SwpNoSize = 0x0001;
+            private const uint SwpNoMove = 0x0002;
+            private const uint SwpNoActivate = 0x0010;
+            private static readonly IntPtr HwndTopmost = new IntPtr(-1);
+            private static readonly IntPtr HwndNoTopmost = new IntPtr(-2);
 
             [DllImport("user32.dll")]
             public static extern IntPtr GetActiveWindow();
@@ -309,6 +370,13 @@ namespace HuliacDev.Core
 
             [DllImport("user32.dll", CharSet = CharSet.Unicode)]
             private static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpszClass, string lpszWindow);
+
+            [DllImport("user32.dll")]
+            private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+            // 확장 스타일(32비트 값)만 읽으므로 64비트에서도 GetWindowLongPtr가 필요 없음. A/W 접미사 탐색에 기대지 않도록 이름을 직접 지정함.
+            [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+            private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
             [DllImport("kernel32.dll")]
             private static extern uint GetCurrentThreadId();
@@ -374,6 +442,34 @@ namespace HuliacDev.Core
                 }
 
                 return IntPtr.Zero;
+            }
+
+            /// <summary>
+            /// 이 프로세스의 Unity 창(보조 디스플레이 창 포함)을 모두 찾아, 항상 위 상태가 원하는 값과 다른 창만 바꾸고
+            /// 바꾼 창 수를 돌려줌. 위치·크기·활성 상태는 건드리지 않음.
+            /// </summary>
+            public static int SetOwnWindowsTopmost(bool isTopmost)
+            {
+                uint currentProcessId = GetCurrentProcessId();
+                IntPtr insertAfter = isTopmost ? HwndTopmost : HwndNoTopmost;
+                IntPtr candidate = IntPtr.Zero;
+                int changedCount = 0;
+
+                while ((candidate = FindWindowEx(IntPtr.Zero, candidate, UnityWindowClassName, null)) != IntPtr.Zero)
+                {
+                    GetWindowThreadProcessId(candidate, out uint processId);
+                    if (processId != currentProcessId) continue;
+
+                    bool isCurrentlyTopmost = (GetWindowLong(candidate, GwlExStyle) & WsExTopmost) != 0;
+                    if (isCurrentlyTopmost == isTopmost) continue;
+
+                    if (SetWindowPos(candidate, insertAfter, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate))
+                    {
+                        changedCount++;
+                    }
+                }
+
+                return changedCount;
             }
         }
 #endif
