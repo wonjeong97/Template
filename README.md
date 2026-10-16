@@ -395,9 +395,10 @@ if (result.isSuccess)
 시작 프로그램 폴더 등으로 여러 프로그램을 함께 켜면 실행 순서와 창이 뜨는 순서가 보장되지 않아, 나중에 뜬 다른 프로그램 창이 앱 화면을 가릴 수 있습니다. 포커스 복구는 `focusRestoreDelay`초 뒤에야 창을 되돌리고, 포그라운드 잠금으로 거부되면 계속 가려질 수 있습니다. `Settings.json`에 `"alwaysOnTop": true`를 적으면 앱 창을 항상 위(Topmost)로 두어 다른 창이 앱 위로 올라오지 못하게 합니다.
 
 - 기본값은 꺼짐(`false`)이며, 생략하면 기존 동작과 같습니다. `Settings.json`을 읽지 못해 대체 설정으로 동작할 때도 꺼집니다.
+- 앱을 시작할 때 한 번 읽으므로, 값을 바꾸면 앱을 다시 시작해야 합니다(`AppSettingsProvider.ReloadAsync`로 다시 읽어도 반영되지 않으며, 포커스 복구 타이밍도 같습니다).
 - 포커스 복구와 함께 동작합니다. 항상 위는 화면 가림만 막고 키보드 포커스는 옮기지 않으므로, 스캐너 입력은 계속 포커스 복구가 되찾습니다.
 - **`F` 키(ToggleFocusRestore)로 포커스 복구와 함께 끄고 켭니다.** 켜 두면 작업 관리자·오류 창·다른 프로그램도 앱 뒤에 가려지므로, 점검할 때는 `F`로 끄고 작업한 뒤 다시 켜세요. 화면 위쪽에는 "Focus restore and always on top ON/OFF"가 표시되고, 앱을 다시 시작하면 켜진 상태로 돌아갑니다. 앱을 끌 때는 Alt+F4나 숨은 종료 버튼(`GameCloser`)을 씁니다.
-- `Display.Activate`로 연 보조 디스플레이 창에도 함께 적용합니다. 나중에 열린 창이나 풀린 상태를 잡도록 1초마다 확인해, 항상 위가 아닌 창만 다시 적용합니다.
+- `Display.Activate`로 연 보조 디스플레이 창에도 함께 적용하고, `F`로 끌 때도 함께 풉니다. 보조 창을 열면 메인 창의 항상 위가 풀리기도 하므로, 1초마다 확인해 항상 위가 아닌 창만 다시 적용합니다.
 - 이미 항상 위인 다른 창(화상 키보드, '항상 위' 옵션을 켠 작업 관리자 등)과는 순서를 다투지 않으므로, 그런 창이 나중에 뜨면 앱 위에 보일 수 있습니다. 잠금 화면과 UAC 확인 창도 앱 위에 뜹니다.
 - Windows 스탠드얼론 빌드에서만 동작하며, 에디터에서는 적용하지 않습니다.
 
@@ -432,7 +433,7 @@ public class GameLifetimeScope : RootLifetimeScope
 }
 ```
 
-> `RootLifetimeScope`를 쓰지 않거나 `ConfigureCoreComponents`에서 `TemplateInputActions` 등록을 뺀 프로젝트는 `GameManagerBase`가 입력 액션을 직접 만들므로 이 override가 적용되지 않고, 포커스 복구 토글 키도 동작하지 않습니다(포커스 복구는 켜진 채로 동작).
+> `RootLifetimeScope`를 쓰지 않거나 `ConfigureCoreComponents`에서 `TemplateInputActions` 등록을 뺀 프로젝트는 `GameManagerBase`가 입력 액션을 직접 만들므로 이 override가 적용되지 않고, 포커스 복구 토글 키도 동작하지 않습니다(포커스 복구는 켜진 채로 동작). 이때 `alwaysOnTop`을 켜면 항상 위도 끌 수 없으므로 시작할 때 경고 로그가 남습니다.
 
 ---
 

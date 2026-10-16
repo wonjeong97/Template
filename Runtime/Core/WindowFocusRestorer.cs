@@ -187,7 +187,8 @@ namespace HuliacDev.Core
                 TryRestoreFocus();
             }
 
-            // Display.Activate로 나중에 열린 보조 디스플레이 창과, 어떤 이유로든 풀린 항상 위를 다시 잡도록 주기적으로 확인함.
+            // Display.Activate로 나중에 열린 보조 디스플레이 창과, 어떤 이유로든 풀린 항상 위(보조 창을 열면 메인 창도 풀림)를
+            // 다시 잡도록 주기적으로 확인함.
             if (_useAlwaysOnTop && now >= _nextTopmostCheckTime)
             {
                 _nextTopmostCheckTime = now + TopmostCheckIntervalSeconds;
@@ -225,6 +226,12 @@ namespace HuliacDev.Core
             if (_logger != null)
             {
                 _logger.ZLogInformation($"[WindowFocusRestorer] Started ({(_isRestoreOn ? "on" : "off")}). Brings the window back {_schedule.DelaySeconds}s after focus is lost and retries every {_schedule.RetryIntervalSeconds}s. Always on top is {(_useAlwaysOnTop ? "enabled" : "disabled")} (alwaysOnTop).");
+
+                // 토글 키가 없으면 점검할 때 항상 위를 끌 방법이 없어 작업 관리자·오류 창이 계속 가려지므로 미리 알림.
+                if (_useAlwaysOnTop && _inputActions == null)
+                {
+                    _logger.ZLogWarning($"[WindowFocusRestorer] Always on top is enabled but the ToggleFocusRestore key is unavailable, so it cannot be turned off for maintenance. Close the app with Alt+F4 or the hidden close button instead.");
+                }
             }
         }
 
@@ -330,6 +337,12 @@ namespace HuliacDev.Core
 
             private const int SwRestore = 9;
 
+            /// <summary>Unity가 지원하는 최대 디스플레이 수. 이 프로세스의 Unity 창은 이보다 많지 않음.</summary>
+            private const int MaxOwnWindowCount = 8;
+
+            /// <summary>CollectOwnUnityWindows가 호출마다 배열을 만들지 않도록 재사용하는 버퍼(메인 스레드에서만 씀).</summary>
+            private static readonly IntPtr[] OwnWindowBuffer = new IntPtr[MaxOwnWindowCount];
+
             private const int GwlExStyle = -20;
             private const int WsExTopmost = 0x00000008;
             private const uint SwpNoSize = 0x0001;
@@ -432,16 +445,7 @@ namespace HuliacDev.Core
             /// </summary>
             public static IntPtr FindOwnUnityWindow()
             {
-                uint currentProcessId = GetCurrentProcessId();
-                IntPtr candidate = IntPtr.Zero;
-
-                while ((candidate = FindWindowEx(IntPtr.Zero, candidate, UnityWindowClassName, null)) != IntPtr.Zero)
-                {
-                    GetWindowThreadProcessId(candidate, out uint processId);
-                    if (processId == currentProcessId) return candidate;
-                }
-
-                return IntPtr.Zero;
+                return CollectOwnUnityWindows() > 0 ? OwnWindowBuffer[0] : IntPtr.Zero;
             }
 
             /// <summary>
@@ -450,20 +454,17 @@ namespace HuliacDev.Core
             /// </summary>
             public static int SetOwnWindowsTopmost(bool isTopmost)
             {
-                uint currentProcessId = GetCurrentProcessId();
                 IntPtr insertAfter = isTopmost ? HwndTopmost : HwndNoTopmost;
-                IntPtr candidate = IntPtr.Zero;
+                int windowCount = CollectOwnUnityWindows();
                 int changedCount = 0;
 
-                while ((candidate = FindWindowEx(IntPtr.Zero, candidate, UnityWindowClassName, null)) != IntPtr.Zero)
+                for (int i = 0; i < windowCount; i++)
                 {
-                    GetWindowThreadProcessId(candidate, out uint processId);
-                    if (processId != currentProcessId) continue;
-
-                    bool isCurrentlyTopmost = (GetWindowLong(candidate, GwlExStyle) & WsExTopmost) != 0;
+                    IntPtr window = OwnWindowBuffer[i];
+                    bool isCurrentlyTopmost = (GetWindowLong(window, GwlExStyle) & WsExTopmost) != 0;
                     if (isCurrentlyTopmost == isTopmost) continue;
 
-                    if (SetWindowPos(candidate, insertAfter, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate))
+                    if (SetWindowPos(window, insertAfter, 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate))
                     {
                         changedCount++;
                     }
@@ -471,16 +472,47 @@ namespace HuliacDev.Core
 
                 return changedCount;
             }
+
+            /// <summary>
+            /// 이 프로세스의 Unity 창을 위에서부터 z-order 순서로 OwnWindowBuffer에 모으고 개수를 돌려줌.
+            /// 같은 PC에서 도는 다른 Unity 앱의 창은 프로세스 ID로 걸러냄. FindWindowEx는 넘긴 창 다음 z-order부터 찾으므로,
+            /// 찾는 도중 창을 옮기면 이미 지난 위치로 간 다른 창을 건너뛰게 됨. 그래서 창을 바꾸는 쪽은 먼저 목록을 다 모음.
+            /// </summary>
+            private static int CollectOwnUnityWindows()
+            {
+                uint currentProcessId = GetCurrentProcessId();
+                IntPtr candidate = IntPtr.Zero;
+                int count = 0;
+
+                while (count < OwnWindowBuffer.Length
+                    && (candidate = FindWindowEx(IntPtr.Zero, candidate, UnityWindowClassName, null)) != IntPtr.Zero)
+                {
+                    GetWindowThreadProcessId(candidate, out uint processId);
+                    if (processId == currentProcessId)
+                    {
+                        OwnWindowBuffer[count++] = candidate;
+                    }
+                }
+
+                return count;
+            }
         }
 #endif
 
         /// <summary>
-        /// 컨테이너 파기 시 VContainer가 자동 호출함. 포커스 이벤트·키 입력 구독과 설정 로드, 상태 표시 오버레이를 정리함.
+        /// 컨테이너 파기 시 VContainer가 자동 호출함. 포커스 이벤트·키 입력 구독과 설정 로드, 상태 표시 오버레이를 정리하고,
+        /// 이 서비스가 켠 항상 위를 풂.
         /// </summary>
         void IDisposable.Dispose()
         {
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
             Application.focusChanged -= OnFocusChanged;
+
+            // 앱은 계속 도는데 컨테이너만 파기되면 끄는 키도 함께 사라지므로, 항상 위가 남지 않게 풂.
+            if (_isActive && _useAlwaysOnTop)
+            {
+                NativeMethods.SetOwnWindowsTopmost(false);
+            }
 #endif
             if (_inputActions != null)
             {
