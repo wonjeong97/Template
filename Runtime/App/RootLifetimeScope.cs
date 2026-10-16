@@ -96,7 +96,8 @@ namespace HuliacDev.App
         /// <summary>
         /// 앱 창이 포커스를 잃으면 다시 앞으로 가져오는 WindowFocusRestorer를 엔트리포인트로 등록함.
         /// Windows 스탠드얼론 빌드에서만 동작하며 앱 시작 시 켜져 있고, 운영자가 ToggleFocusRestore 키(기본 F)로 끄고 켬.
-        /// Settings.json에서는 focusRestoreDelay·focusRestoreRetryInterval로 타이밍만 조정함.
+        /// Settings.json에서는 focusRestoreDelay·focusRestoreRetryInterval로 타이밍을 조정하고, alwaysOnTop을 true로 적으면
+        /// 창을 항상 위로 둠(같은 키로 함께 끄고 켬).
         /// 씬 배치나 등록 코드는 필요 없으며, 기능을 아예 쓰지 않으려면 이 메서드를 빈 본문으로 override할 것.
         /// </summary>
         protected virtual void ConfigureWindowFocus(IContainerBuilder builder)

@@ -210,5 +210,12 @@ namespace HuliacDev.Data
         /// 1초 미만 양수는 1초로 올려 적용함.
         /// </summary>
         public float focusRestoreRetryInterval;
+
+        /// <summary>
+        /// true면 앱 창을 항상 위(Topmost)로 두어, 나중에 뜬 다른 프로그램 창이 앱 화면을 가리지 않게 함
+        /// (WindowFocusRestorer, Windows 스탠드얼론 빌드 전용). 생략하면 false(끔)이며 기존 동작과 같음.
+        /// 켜 두면 작업 관리자·오류 창도 앱 뒤에 가려지므로, 점검할 때는 ToggleFocusRestore 키(기본 F)로 포커스 복구와 함께 끔.
+        /// </summary>
+        public bool alwaysOnTop;
     }
 }

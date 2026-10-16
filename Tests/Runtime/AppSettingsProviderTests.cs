@@ -165,6 +165,7 @@ namespace HuliacDev.Tests
 
             Assert.IsTrue(settings.useInactivityTimer, "읽기에 실패했는데 비활동 타이머가 꺼져 있음");
             Assert.AreEqual(AppSettingsProvider.FallbackResetTimeSeconds, settings.resetTime, 0.0001f);
+            Assert.IsFalse(settings.alwaysOnTop, "읽기에 실패했는데 대체 설정이 창을 항상 위로 둠");
         }
 
         /// <summary>
