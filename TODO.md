@@ -6,12 +6,11 @@
 
 ## 진행 중
 
-- [ ] 여러 프로그램을 함께 켜면 창이 뜨는 순서가 보장되지 않아 나중에 뜬 다른 프로그램 창이 앱 화면을 가리던 문제. `Settings.json`의 `alwaysOnTop`으로 앱 창을 항상 위로 두는 옵션을 추가하고, `F` 키가 포커스 복구와 함께 끄고 켜도록 함 — 발견일: 2026-10-16 — 담당: Claude / 검증: Antigravity
-
 ## 할 일
 
 ## 완료
 
+- [x] 여러 프로그램을 함께 켜면 창이 뜨는 순서가 보장되지 않아 나중에 뜬 다른 프로그램 창이 앱 화면을 가리던 문제. `Settings.json`의 `alwaysOnTop`으로 앱 창을 항상 위로 두는 옵션을 추가하고(기본 끔), `F` 키가 포커스 복구와 함께 끄고 켜도록 함 — 완료: 2026-10-16 (#61)
 - [x] Settings.json을 읽지 못해 대체 설정에 `closeSetting`이 없으면, SystemCanvas 프리팹의 숨은 종료 버튼 기본값(화면 가운데, 흰색 불투명 150x150)이 최상단 캔버스에서 모든 화면의 가운데 터치를 가리고 연타하면 앱이 꺼지던 문제. 프리팹 기본값을 README 예시와 같은 좌상단·투명으로 바꿈 — 완료: 2026-10-12 (#60)
 - [x] `JsonLoader.TryLoadAsync`(그리고 `LoadAsync`)가 로컬 파일이 없으면 취소 토큰을 확인하지 않고 기본값을 돌려주던 문제. 메서드 시작에서 `cancellationToken.ThrowIfCancellationRequested()`로 확인하도록 수정 — 완료: 2026-10-12 (#60)
 - [x] `ApiRetryUtil.GetTextWithRetryAsync`가 요청에 시간 제한이 없어 응답하지 않는 서버를 무기한 기다리고, 성공할 때마다 Information 로그를 남기던 문제. 시도별 제한 시간 `attemptTimeoutSeconds`(기본 10초)와 성공 로그 수준 `successLogLevel`을 추가함(`SendGetRequestWithRetryAsync`는 중복 로그 우려로 그대로 둠) — 완료: 2026-10-12 (#60)
