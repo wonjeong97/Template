@@ -225,7 +225,7 @@ Runtime/
 | | `WindowFocusRestorer` | 앱 창이 포커스를 잃으면 다시 앞으로 가져와 키보드형 스캐너 입력 유지, 선택적으로 창을 항상 위로 둠 (Windows 스탠드얼론, `F` 키로 끄고 켬) |
 | **UI & Media** | `UIManager` | uGUI/TextMeshPro 비동기 폰트 프리로드/일괄 적용, 텍스처 VRAM 압축(`compress`) 제어 |
 | | `FadeManager` | 화면 페이드 인/아웃(DOTween/UniTask), 커스텀 색상(`Color? color`) 및 `SortingOrder` 제어 |
-| | `SoundManager` | BGM/SFX 비동기 재생, 마스터/BGM/SFX 개별 볼륨 및 음소거(`Mute`), DOTween 페이드 충돌 방어 |
+| | `SoundManager` | BGM/SFX 비동기 재생, 미리 불러오기(`PreloadAsync`), 마스터/BGM/SFX 개별 볼륨 및 음소거(`Mute`), DOTween 페이드 충돌 방어 |
 | | `VideoManager` | 비디오 비동기 프리로드/재생, 고아 RenderTexture 메모리 최적 해제 ($O(N+M)$) |
 | **Network** | `NetworkStatusService` | R3 기반 실시간 네트워크 도달성/끊김/복구 모니터링 (오프라인 키오스크 초기 알림 억제) |
 | | `ApiManagerBase` | 시작/종료/비활동/외부 API 호출 이력 사내 서버 전송 추상 베이스 클래스 |
@@ -332,6 +332,25 @@ public class PanelManager : MonoBehaviour
 void OnVideoStarted() => _inactivityTimer?.Pause();
 void OnVideoFinished() => _inactivityTimer?.Resume();
 ```
+
+### 효과음 미리 불러오기 (SoundManager.PreloadAsync)
+
+`SoundManager`는 처음 트는 클립을 `StreamingAssets`에서 읽고 디코드한 뒤에야 재생합니다. 나레이션처럼 긴 효과음을 화면 연출과 같은 순간에 시작해야 하면, 앱을 켤 때나 그 장면에 들어가기 전에 `PreloadAsync`로 미리 읽어 두세요. 캐시에 있는 클립은 `PlaySFX`·`PlayBGM`이 읽기를 기다리지 않고 바로 재생합니다.
+
+```csharp
+// 클립이 캐시에 들어 있으면 true, 없는 키이거나 읽기에 실패하면 false (원인은 로그로 남음)
+bool isLoaded = await _soundManager.PreloadAsync("narration", this.GetCancellationTokenOnDestroy());
+
+// 나중에 연출을 시작할 때 같은 프레임에 재생됨
+_soundManager.PlaySFX("narration");
+```
+
+- 키는 `Settings.json`의 `sounds[].key`입니다. BGM과 효과음이 같은 캐시를 쓰므로 BGM 키도 미리 읽을 수 있습니다.
+- `SoundManager`가 사운드 목록을 읽기 전에 불러도(예: `GameManagerBase.OnSettingsLoaded`) 목록을 읽을 때까지 기다린 뒤 진행합니다. `SoundManager` 오브젝트가 꺼져 있어 목록을 읽지 못하면 넘긴 토큰이 취소될 때까지 기다리므로, 호출하는 쪽의 파괴 토큰(`this.GetCancellationTokenOnDestroy()`)을 넘기세요.
+- 이미 캐시에 있으면 바로 `true`를 돌려주고, 같은 클립을 읽는 중이면 그 읽기를 함께 기다립니다.
+- 넘긴 토큰이 취소되면 `OperationCanceledException`을 던집니다. 이미 시작한 읽기는 같은 클립을 기다리는 재생 요청과 공유되므로 멈추지 않고 끝까지 진행되어 캐시에 들어갑니다(사운드 목록을 기다리던 중에 취소되면 읽기를 시작하지 않습니다).
+- 미리 읽은 클립은 다른 클립처럼 `ClearCache()`를 부를 때까지 메모리에 남습니다.
+- `StopSFX()`는 재생 중인 효과음과 함께, 읽기를 기다리던 `PlaySFX` 요청도 취소합니다(읽기가 끝나도 재생하지 않음). 미리 불러오기는 취소하지 않습니다.
 
 ### 외부 API 호출 로깅 (wavespeed, GPT 등)
 

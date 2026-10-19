@@ -1,6 +1,14 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.10.19-1] - 2026-10-19
+
+### Added
+- **`SoundManager.PreloadAsync` 추가(`Runtime/UI/SoundManager.cs`):** 처음 트는 클립은 StreamingAssets에서 읽고 디코드한 뒤에야 재생되는데 미리 읽어 둘 방법이 없어, 나레이션 같은 긴 효과음을 화면 연출과 같은 순간에 시작하려 해도 앱을 켠 뒤 첫 재생은 읽는 시간만큼 늦었음. 지정한 키의 클립을 미리 읽어 캐시에 넣는 `PreloadAsync(string key, CancellationToken cancellationToken = default)`를 추가해, 이후 `PlaySFX`·`PlayBGM`이 읽기를 기다리지 않고 그 자리에서 재생되게 함. 클립이 캐시에 들어 있으면 true, 없는 키이거나 읽기에 실패하면 false를 반환함(원인은 이전과 같은 경고·오류 로그). `SoundManager`가 `Settings.json`의 사운드 목록을 읽기 전에 부르면 목록을 읽을 때까지 기다림(`GameManagerBase.OnSettingsLoaded`는 같은 설정을 기다리지만 `SoundManager`와 어느 쪽이 먼저 이어질지 정해져 있지 않음. `SoundManager` 오브젝트가 꺼져 있어 목록을 읽지 못하면 넘긴 토큰이 취소될 때까지 기다림). 같은 클립을 읽는 중이면 그 읽기를 함께 기다리며, 넘긴 토큰이 취소되면 `OperationCanceledException`을 던지되, 이미 시작한 읽기는 같은 클립을 기다리는 재생 요청과 공유되므로 멈추지 않고 캐시에 들어감(사운드 목록을 기다리던 중에 취소되면 읽기를 시작하지 않음). 미리 읽은 클립도 `ClearCache()`로 해제함. README에 사용 예시를 적음. `SoundManagerTests`에 테스트 3건 추가(미리 읽은 클립은 파일을 지워도 `PlaySFX`가 다시 읽지 않음. 재생 전에 캐시를 비우도록 테스트를 바꾸면 실패함을 확인. 읽지 못한 클립이면 false 반환. 기다리던 호출자가 취소하면 `OperationCanceledException`을 받고 이미 시작한 읽기는 캐시에 들어감. 읽기를 호출자 토큰으로 취소하도록 바꾸면 실패함을 확인. 사운드 목록을 기다리는 경로는 DI와 `Settings.json` 없이 재현할 수 없어 테스트하지 않음).
+
+### Fixed
+- **클립 로드 중에 `SoundManager.StopSFX`를 불러도 로드가 끝나면 효과음이 재생되던 문제 수정(`Runtime/UI/SoundManager.cs`):** 캐시에 없는 효과음은 읽기를 마친 뒤 재생되는데, BGM은 `_currentBGMKey`로 그 사이의 정지·교체를 확인하는 반면 효과음은 확인하지 않아 `StopSFX`로 정지한 뒤에 효과음이 뒤늦게 재생됐음. `StopSFX`를 부른 횟수를 세어, 읽기를 기다리는 사이 `StopSFX`가 불렸으면 그 전에 들어온 `PlaySFX` 요청은 재생하지 않고 Information 로그("SFX request stopped while loading; skipped")를 남김. 캐시에 있던 클립의 재생과 `PreloadAsync`의 읽기는 영향을 받지 않음. `SoundManagerTests`에 테스트 1건 추가(로드 중 `StopSFX` 뒤 재생을 건너뛰는지 확인. 수정을 되돌리면 실패함을 확인. 로드가 요청 직후 끝나 경합을 만들 수 없으면 결론 없음으로 처리).
+
 ## [26.10.16-1] - 2026-10-16
 
 ### Added

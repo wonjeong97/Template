@@ -3,6 +3,7 @@ using System.Collections;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
@@ -13,7 +14,7 @@ using HuliacDev.Utils;
 namespace HuliacDev.Tests
 {
     /// <summary>
-    /// SoundManager의 BGM 요청 순서 보장과 무시된 재생 요청의 로그 검증.
+    /// SoundManager의 BGM 요청 순서 보장, 로드 중 정지한 효과음, 미리 불러오기(PreloadAsync), 무시된 재생 요청의 로그 검증.
     ///
     /// 배경: 캐시에 없는 BGM은 다운로드가 끝난 뒤 재생되는데, 예전 구현은 그 사이
     /// StopBGM/FadeOutBGM/다른 PlayBGM이 호출됐는지 확인하지 않았음. 그래서 정지한 BGM이
@@ -37,6 +38,10 @@ namespace HuliacDev.Tests
             _go = new GameObject("SoundManagerTests");
             _soundManager = _go.AddComponent<SoundManager>();
             SoundManagerTestHelper.SetLogger(_soundManager);
+
+            // 테스트 씬에는 카메라가 없어 AudioListener도 없음. 클립을 실제로 재생하는 테스트에서
+            // "There are no audio listeners in the scene" 로그가 매 프레임 남지 않도록 붙여 둠.
+            _go.AddComponent<AudioListener>();
 
             // 5MB WAV는 실제 로드가 필요한 테스트에서만 PrepareSilentClip으로 만듦.
             _clipPath = Path.Combine(Application.temporaryCachePath, "SoundManagerTests.wav").Replace("\\", "/");
@@ -100,6 +105,110 @@ namespace HuliacDev.Tests
             // 대조군: 같은 파일이 실제로 로드 가능해야 위 검증이 의미가 있음.
             _soundManager.PlayBGM("a");
             await WaitUntilBgmClipAsync(bgmSource, "a");
+        });
+
+        /// <summary>
+        /// 로드 중에 StopSFX를 호출하면, 로드가 끝나도 그 전에 요청한 효과음을 재생하면 안 됨.
+        /// PlayOneShot은 AudioSource에 흔적을 남기지 않으므로 재생을 건너뛴 로그로 확인함.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 로드_중_StopSFX를_호출하면_로드가_끝나도_재생하지_않는다() => UniTask.ToCoroutine(async () =>
+        {
+            ExpectMissingSettingsProviderError();
+            PrepareSilentClip("a");
+
+            // Start()의 의존성 누락 오류가 먼저 출력되게 한 프레임 넘김(아래 Assume으로 끝나도 예상 로그가 남도록).
+            await UniTask.Yield();
+
+            _soundManager.PlaySFX("a");
+            // PlaySFX의 로드가 진행 중이면 PreloadAsync는 그 로드를 함께 기다리므로 아직 끝나지 않음.
+            UniTask<bool> preload = _soundManager.PreloadAsync("a");
+            AssumeLoadIsPending(preload.Status == UniTaskStatus.Pending);
+
+            LogAssert.Expect(LogType.Log, new Regex("SFX request stopped while loading; skipped: a"));
+            _soundManager.StopSFX();
+
+            // 대조군: 같은 파일이 실제로 로드 가능해야 위 검증이 의미가 있음.
+            Assert.IsTrue(await preload.AwaitWithRealtimeTimeout(), "효과음 파일을 읽지 못함");
+            await UniTask.Delay(TimeSpan.FromSeconds(LoadSettleSeconds), DelayType.UnscaledDeltaTime);
+        });
+
+        /// <summary>
+        /// PreloadAsync로 미리 읽은 클립은 PlaySFX가 다시 읽지 않고 캐시에서 바로 재생해야 함.
+        /// 파일을 지운 뒤 재생해, 다시 읽으려 하면 남는 "Failed to load sound" 오류가 없는지로 확인함
+        /// (예상하지 않은 오류 로그는 테스트 프레임워크가 실패로 처리함).
+        /// </summary>
+        [UnityTest]
+        public IEnumerator PreloadAsync로_읽은_클립은_PlaySFX가_다시_읽지_않는다() => UniTask.ToCoroutine(async () =>
+        {
+            ExpectMissingSettingsProviderError();
+            PrepareSilentClip("a");
+
+            bool isLoaded = await _soundManager.PreloadAsync("a").AwaitWithRealtimeTimeout();
+            Assert.IsTrue(isLoaded, "효과음 파일을 읽지 못함");
+
+            File.Delete(_clipPath);
+            _soundManager.PlaySFX("a");
+
+            await UniTask.Delay(TimeSpan.FromSeconds(LoadSettleSeconds), DelayType.UnscaledDeltaTime);
+        });
+
+        /// <summary>
+        /// PreloadAsync를 기다리던 호출자가 취소하면 OperationCanceledException을 받되, 이미 시작한 읽기는
+        /// 멈추지 않고 캐시에 들어가야 함. 같은 클립을 함께 기다리는 PlaySFX가 있을 수 있어 읽기를 호출자 토큰으로 취소하지 않음.
+        /// 캐시에 들어갔는지는 파일을 지운 뒤 PlaySFX가 "Failed to load sound" 오류 없이 끝나는지로 확인함.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator PreloadAsync를_취소해도_시작한_읽기는_캐시에_들어간다() => UniTask.ToCoroutine(async () =>
+        {
+            ExpectMissingSettingsProviderError();
+            PrepareSilentClip("a");
+
+            // Start()의 의존성 누락 오류가 먼저 출력되게 한 프레임 넘김(아래 Assume으로 끝나도 예상 로그가 남도록).
+            await UniTask.Yield();
+
+            bool isCanceled = false;
+            using (CancellationTokenSource cts = new CancellationTokenSource())
+            {
+                UniTask<bool> preload = _soundManager.PreloadAsync("a", cts.Token);
+                AssumeLoadIsPending(preload.Status == UniTaskStatus.Pending);
+                cts.Cancel();
+
+                try
+                {
+                    await preload.AwaitWithRealtimeTimeout();
+                }
+                catch (OperationCanceledException)
+                {
+                    isCanceled = true;
+                }
+            }
+
+            Assert.IsTrue(isCanceled, "취소했는데 OperationCanceledException이 전달되지 않음");
+
+            await UniTask.Delay(TimeSpan.FromSeconds(LoadSettleSeconds), DelayType.UnscaledDeltaTime);
+            File.Delete(_clipPath);
+            _soundManager.PlaySFX("a");
+            await UniTask.Delay(TimeSpan.FromSeconds(LoadSettleSeconds), DelayType.UnscaledDeltaTime);
+        });
+
+        /// <summary>
+        /// 읽지 못한 클립이면 PreloadAsync가 false를 반환하고 원인을 오류 로그로 남겨야 함.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator PreloadAsync는_읽지_못한_클립이면_false를_반환한다() => UniTask.ToCoroutine(async () =>
+        {
+            ExpectMissingSettingsProviderError();
+            string missingPath = Path.Combine(Application.temporaryCachePath, "SoundManagerTests_missing.wav").Replace("\\", "/");
+            SoundManagerTestHelper.SetSoundSetting(_soundManager, "missing", missingPath);
+
+            // Start()의 의존성 누락 오류가 먼저 출력되게 한 프레임 넘김(LogAssert.Expect는 등록 순서대로 대조함).
+            await UniTask.Yield();
+
+            LogAssert.Expect(LogType.Error, new Regex("Failed to load sound.*SoundManagerTests_missing"));
+            bool isLoaded = await _soundManager.PreloadAsync("missing").AwaitWithRealtimeTimeout();
+
+            Assert.IsFalse(isLoaded, "읽지 못한 클립인데 true를 반환함");
         });
 
         /// <summary>
