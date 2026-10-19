@@ -6,9 +6,9 @@
 
 ## 진행 중
 
-## 할 일
+- [ ] `SoundManager.PlaySFX`가 처음 트는 클립은 StreamingAssets에서 읽어 디코드한 뒤에야 재생되고 미리 불러오는 API가 없어, 긴 효과음(나레이션 등)을 화면 연출과 같은 순간에 시작하려 해도 앱을 켠 뒤 첫 재생은 읽는 시간만큼 늦음. 또 읽는 중에 `StopSFX`를 불러도 읽기가 끝나면 그대로 재생됨(BGM은 `_currentBGMKey`로 막지만 SFX에는 그런 처리가 없음). 미리 불러오기(예: `PreloadAsync(key)`)와 Stop 뒤에 끝난 SFX 읽기 결과를 재생하지 않는 처리 검토 — 발견일: 2026-10-19 — 담당: Claude / 검증: Antigravity·리뷰 서브에이전트
 
-- [ ] `SoundManager.PlaySFX`가 처음 트는 클립은 StreamingAssets에서 읽어 디코드한 뒤에야 재생되고 미리 불러오는 API가 없어, 긴 효과음(나레이션 등)을 화면 연출과 같은 순간에 시작하려 해도 앱을 켠 뒤 첫 재생은 읽는 시간만큼 늦음. 또 읽는 중에 `StopSFX`를 불러도 읽기가 끝나면 그대로 재생됨(BGM은 `_currentBGMKey`로 막지만 SFX에는 그런 처리가 없음). 미리 불러오기(예: `PreloadAsync(key)`)와 Stop 뒤에 끝난 SFX 읽기 결과를 재생하지 않는 처리 검토 — 발견일: 2026-10-19
+## 할 일
 
 ## 완료
 
