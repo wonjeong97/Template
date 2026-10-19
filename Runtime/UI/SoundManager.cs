@@ -31,6 +31,9 @@ namespace HuliacDev.UI
         private bool _isMuted;
         private string _currentBGMKey;
 
+        // StopSFX가 불린 횟수. 클립 로드를 기다리던 SFX 요청이 그 사이 정지됐는지 판정하는 데 씀.
+        private int _sfxStopCount;
+
         // 설정 로드 완료 여부. 재생 요청이 무시됐을 때 "아직 로드 전"인지 "없는 키"인지 구분하는 데 씀.
         private bool _isSettingsLoaded;
 
@@ -228,7 +231,7 @@ namespace HuliacDev.UI
 
             _currentBGMKey = key;
             CancelFadeRoutine();
-            LoadAndPlayAsync(setting, _bgmSource, true, this.GetCancellationTokenOnDestroy()).Forget();
+            LoadAndPlayAsync(setting, _bgmSource, true, _sfxStopCount, this.GetCancellationTokenOnDestroy()).Forget();
         }
 
         /// <summary>
@@ -238,7 +241,44 @@ namespace HuliacDev.UI
         {
             if (!TryGetSoundSetting(key, nameof(PlaySFX), out SoundSetting setting)) return;
 
-            LoadAndPlayAsync(setting, _sfxSource, false, this.GetCancellationTokenOnDestroy()).Forget();
+            LoadAndPlayAsync(setting, _sfxSource, false, _sfxStopCount, this.GetCancellationTokenOnDestroy()).Forget();
+        }
+
+        /// <summary>
+        /// 지정된 키의 오디오 클립을 미리 읽어 캐시에 넣어, 이후 PlayBGM·PlaySFX가 읽기를 기다리지 않고 바로 재생되게 함.
+        /// 설정 로드 전에 호출되면 로드가 끝날 때까지 기다리며, 클립이 캐시에 있으면 true, 없는 키이거나 읽기에 실패하면 false를 반환함.
+        /// 오브젝트가 꺼져 있어 설정 로드가 시작되지 않으면 토큰이 취소될 때까지 기다리므로 호출하는 쪽의 파괴 토큰을 넘김.
+        /// </summary>
+        public async UniTask<bool> PreloadAsync(string key, CancellationToken cancellationToken = default)
+        {
+            // 캐시에 있으면 기다림 없이 끝나므로, 어느 경로로 끝나든 취소가 먼저 전달되게 시작할 때 확인함.
+            cancellationToken.ThrowIfCancellationRequested();
+            CancellationToken destroyToken = this.GetCancellationTokenOnDestroy();
+
+            // 부팅 직후(GameManagerBase.OnSettingsLoaded 등)에는 아직 사운드 목록을 채우기 전일 수 있음.
+            // 같은 AppSettingsProvider를 기다려도 어느 쪽이 먼저 이어질지 정해져 있지 않으므로 목록이 채워질 때까지 기다림.
+            if (!_isSettingsLoaded && _settingsProvider != null)
+            {
+                using (CancellationTokenSource linkedCts =
+                       CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, destroyToken))
+                {
+                    await UniTask.WaitUntil(() => _isSettingsLoaded, cancellationToken: linkedCts.Token);
+                }
+            }
+
+            if (!TryGetSoundSetting(key, nameof(PreloadAsync), out SoundSetting setting)) return false;
+
+            if (_clipCache.ContainsKey(setting.key)) return true;
+
+            // 읽기는 같은 키를 요청한 PlaySFX 등과 공유되므로 호출자 토큰으로 취소하지 않음.
+            // 호출자가 취소하면 기다림만 끝내고, 읽기는 이어져 캐시에 들어감.
+            AudioClip clip = await DownloadAndCacheClipAsync(setting, destroyToken)
+                .AttachExternalCancellation(cancellationToken);
+
+            // 실패 원인은 ExecuteDownloadAsync가 이미 로그로 남김.
+            if (!clip) return false;
+
+            return true;
         }
 
         /// <summary>
@@ -283,6 +323,8 @@ namespace HuliacDev.UI
         /// </summary>
         public void StopSFX()
         {
+            // 클립 로드를 기다리던 요청도 무효로 만듦. 그대로 두면 정지한 뒤에 로드가 끝난 효과음이 재생됨.
+            _sfxStopCount++;
             if (_sfxSource) _sfxSource.Stop();
         }
 
@@ -393,9 +435,10 @@ namespace HuliacDev.UI
 
         /// <summary>
         /// 오디오 클립을 비동기로 로드하고 조건에 맞춰 오디오 소스에 할당함.
+        /// sfxStopCountAtRequest는 요청 시점의 StopSFX 호출 횟수이며 SFX 요청에서만 씀.
         /// </summary>
         private async UniTaskVoid LoadAndPlayAsync(SoundSetting setting, AudioSource source, bool isBGM,
-            CancellationToken cancellationToken)
+            int sfxStopCountAtRequest, CancellationToken cancellationToken)
         {
             AudioClip targetClip = null;
 
@@ -419,6 +462,14 @@ namespace HuliacDev.UI
             if (isBGM && _currentBGMKey != setting.key)
             {
                 if (_logger != null) _logger.ZLogInformation($"[SoundManager] BGM request superseded while loading; skipped: {setting.key}");
+                return;
+            }
+
+            // 효과음도 같음. 로드를 기다리는 사이 StopSFX가 호출됐으면 정지 전에 들어온 요청이므로 재생하지 않음.
+            // 캐시에 있던 클립은 기다리지 않고 바로 재생되므로 이 판정에 걸리지 않음.
+            if (!isBGM && _sfxStopCount != sfxStopCountAtRequest)
+            {
+                if (_logger != null) _logger.ZLogInformation($"[SoundManager] SFX request stopped while loading; skipped: {setting.key}");
                 return;
             }
 
