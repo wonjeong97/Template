@@ -231,7 +231,7 @@ namespace HuliacDev.UI
 
             _currentBGMKey = key;
             CancelFadeRoutine();
-            LoadAndPlayAsync(setting, _bgmSource, true, _sfxStopCount, this.GetCancellationTokenOnDestroy()).Forget();
+            LoadAndPlayAsync(setting, _bgmSource, true, this.GetCancellationTokenOnDestroy()).Forget();
         }
 
         /// <summary>
@@ -241,7 +241,7 @@ namespace HuliacDev.UI
         {
             if (!TryGetSoundSetting(key, nameof(PlaySFX), out SoundSetting setting)) return;
 
-            LoadAndPlayAsync(setting, _sfxSource, false, _sfxStopCount, this.GetCancellationTokenOnDestroy()).Forget();
+            LoadAndPlayAsync(setting, _sfxSource, false, this.GetCancellationTokenOnDestroy(), _sfxStopCount).Forget();
         }
 
         /// <summary>
@@ -435,10 +435,10 @@ namespace HuliacDev.UI
 
         /// <summary>
         /// 오디오 클립을 비동기로 로드하고 조건에 맞춰 오디오 소스에 할당함.
-        /// sfxStopCountAtRequest는 요청 시점의 StopSFX 호출 횟수이며 SFX 요청에서만 씀.
+        /// sfxStopCountAtRequest는 SFX 요청만 넘기는 요청 시점의 StopSFX 호출 횟수이며, BGM 요청에서는 쓰지 않음.
         /// </summary>
         private async UniTaskVoid LoadAndPlayAsync(SoundSetting setting, AudioSource source, bool isBGM,
-            int sfxStopCountAtRequest, CancellationToken cancellationToken)
+            CancellationToken cancellationToken, int sfxStopCountAtRequest = 0)
         {
             AudioClip targetClip = null;
 

@@ -39,6 +39,10 @@ namespace HuliacDev.Tests
             _soundManager = _go.AddComponent<SoundManager>();
             SoundManagerTestHelper.SetLogger(_soundManager);
 
+            // 테스트 씬에는 카메라가 없어 AudioListener도 없음. 클립을 실제로 재생하는 테스트에서
+            // "There are no audio listeners in the scene" 로그가 매 프레임 남지 않도록 붙여 둠.
+            _go.AddComponent<AudioListener>();
+
             // 5MB WAV는 실제 로드가 필요한 테스트에서만 PrepareSilentClip으로 만듦.
             _clipPath = Path.Combine(Application.temporaryCachePath, "SoundManagerTests.wav").Replace("\\", "/");
         }
