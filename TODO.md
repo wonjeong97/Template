@@ -8,6 +8,8 @@
 
 ## 할 일
 
+- [ ] `VideoManager.PrepareAndPlayAsync`가 준비 성공·실패를 돌려주지 않아, 호출부가 재생이 시작됐는지 알려면 `VideoPlayer.isPrepared`·`isPlaying`을 다시 확인해야 함. 준비 중 오류와 준비 완료가 같은 프레임에 오면 Play하지 않았는데도 `isPrepared`가 true라 호출부가 성공으로 볼 수 있음. 성공 여부(또는 실패 사유)를 돌려주도록 바꾸기 — 발견일: 2026-10-29
+
 ## 완료
 
 - [x] `SoundManager.PlaySFX`가 처음 트는 클립은 StreamingAssets에서 읽어 디코드한 뒤에야 재생되고 미리 불러오는 API가 없어 앱을 켠 뒤 첫 재생이 읽는 시간만큼 늦던 문제와, 읽는 중에 `StopSFX`를 불러도 읽기가 끝나면 그대로 재생되던 문제. 클립을 미리 읽어 캐시에 넣는 `PreloadAsync(key, token)`을 추가하고, `StopSFX` 호출 횟수로 로드를 기다리던 SFX 요청을 건너뛰도록 함 — 완료: 2026-10-19 (#62)
