@@ -227,9 +227,9 @@ Runtime/
 | | `FadeManager` | 화면 페이드 인/아웃(DOTween/UniTask), 커스텀 색상(`Color? color`) 및 `SortingOrder` 제어 |
 | | `SoundManager` | BGM/SFX 비동기 재생, 미리 불러오기(`PreloadAsync`), 마스터/BGM/SFX 개별 볼륨 및 음소거(`Mute`), DOTween 페이드 충돌 방어 |
 | | `VideoManager` | 비디오 비동기 프리로드/재생, 고아 RenderTexture 메모리 최적 해제 ($O(N+M)$) |
-| **Network** | `NetworkStatusService` | R3 기반 실시간 네트워크 도달성/끊김/복구 모니터링 (오프라인 키오스크 초기 알림 억제) |
+| **Network** | `NetworkStatusService` | R3 기반 실시간 네트워크 도달성/끊김/복구 모니터링, Windows의 인터넷 판정 반영 (오프라인 키오스크 초기 알림 억제) |
 | | `ApiManagerBase` | 시작/종료/비활동/외부 API 호출 이력 사내 서버 전송 추상 베이스 클래스 |
-| | `ApiRetryUtil` | 고정 간격 재시도 및 소켓/DNS 네트워크 예외 격리를 지원하는 WebRequest 안정적 재시도, 응답 본문 반환(`GetTextWithRetryAsync`) |
+| | `ApiRetryUtil` | 고정 간격 재시도 및 소켓/DNS 네트워크 예외 격리를 지원하는 WebRequest 안정적 재시도, 응답 본문 반환(`GetTextWithRetryAsync`), 인터넷이 없으면 전송 생략 |
 | **Logging** | `LogRetentionService` | 일별 로그 파일 회전(`AddZLoggerRollingFile`) 및 30일 보관 주기 만료 파일 자동 정리 |
 | **Hardware** | `ArduinoManager` | 시리얼 통신, 읽기 스레드 예외 격리 및 메인 스레드 마샬링 기반 자동 재연결(`AutoReconnect`) |
 | **Data & Utils**| `AppSettingsProvider` | `Settings.json` 단일 로드/캐싱 및 런타임 핫 리로드(`ReloadAsync`) 지원, 읽기 실패 시 비활동 타이머를 켠 대체 설정 사용 |
@@ -377,9 +377,24 @@ _externalApiReturnPublisher.Publish(new ExternalApiReturnEvent(true));
 _externalApiReturnPublisher.Publish(new ExternalApiReturnEvent(false, "HTTP 500"));
 ```
 
+### 전송 전 인터넷 연결 확인
+
+`ApiRetryUtil`은 보내기 전에 인터넷에 나갈 수 있는지 확인하고, 나갈 수 없으면 재시도 없이 바로 실패를 돌려줍니다. `NetworkStatusService`도 같은 판정을 씁니다.
+
+- 네트워크 어댑터가 끊겼으면 보내지 않습니다.
+- Windows에서는 작업 표시줄의 지구본 아이콘을 정하는 Windows의 판정도 읽습니다. 공유기에는 연결됐지만 인터넷이 끊긴 경우("인터넷 없음")에도 보내지 않습니다. 네트워크 요청 없이 Windows가 가진 값을 읽기만 합니다.
+- Windows가 아직 판정하지 못했거나 판정을 읽을 수 없는 환경(Windows 10 2004 이전, Windows가 아닌 환경)에서는 막지 않고 어댑터만 봅니다.
+- `ApiManagerBase`의 시작 로그(`start`)는 Windows 판정으로 거르지 않고 보냅니다. Windows가 "인터넷 연결됨"이라고 하지 않는 동안(인터넷 없음 또는 판정 전) 시작 로그가 성공하면 그 현장에서는 Windows 판정을 믿을 수 없는 것으로 보고, Windows가 "인터넷 연결됨"이라고 할 때까지 어댑터만 봅니다. 외부 확인 주소를 막은 망이나 같은 LAN 안 서버로만 보내는 현장을 위한 동작이며, `apiUrl`로 보내는 로그(시작 로그와 아래 확인 전송)가 아닌 요청의 성공은 이 근거로 쓰지 않습니다.
+- 시작 로그가 실패했거나(부팅 때 네트워크 어댑터가 아직 연결되지 않았으면 재시도 없이 바로 실패), 보정이 풀린 뒤 다시 막히면 idle·외부 API 로그 하나를 `InternetProbeIntervalSeconds`(기본 300초)마다 한 번 Windows 판정으로 거르지 않고 보내 봅니다. 이 확인 전송은 재시도하지 않으며, 닿으면 시작 로그와 같은 방식으로 보정합니다.
+  - 종료 로그는 종료를 늦추지 않도록 확인 전송에 쓰지 않습니다. 보낼 idle·외부 API 로그가 없으면 확인하지 않습니다.
+  - 간격을 바꾸려면 `ApiManagerBase`를 상속한 클래스에서 `InternetProbeIntervalSeconds`를 override하세요. 인터넷이 정말 없으면 확인할 때마다 실패 로그가 남습니다.
+  - 에디터·Development 빌드는 로그를 실제로 보내지 않으므로 보정되지 않습니다.
+- 같은 LAN 안 서버처럼 인터넷 없이 닿는 서버로 보내는 요청은 `apiUrl` 여부와 관계없이 `SendGetRequestWithRetryAsync`·`GetTextWithRetryAsync`에 `requireInternetAccess: false`를 넘기세요. 넘기지 않으면 인터넷이 없는 망에서는 보정되기 전까지 요청을 보내지 않습니다.
+- `NetworkStatusService`의 `IsConnected`도 같은 판정이라, 인터넷 없이 LAN 서버만 쓰는 현장에서는 시작 로그나 확인 전송으로 보정되기 전까지 끊긴 것으로 보입니다. 그런 현장에서 LAN 연결 여부가 필요하면 `Application.internetReachability`를 직접 보세요.
+
 ### 응답이 필요한 API 호출 (ApiRetryUtil.GetTextWithRetryAsync)
 
-사용자 확인·진행도 조회처럼 응답 본문을 해석해야 하는 API는 `GetTextWithRetryAsync`로 호출합니다. 재시도 간격·횟수와 네트워크 미연결 판정은 로그 전송용 `SendGetRequestWithRetryAsync`와 같고, 성공하면 `(true, 본문)`, 네트워크 미연결이거나 재시도를 모두 소진하면 `(false, null)`을 돌려줍니다.
+사용자 확인·진행도 조회처럼 응답 본문을 해석해야 하는 API는 `GetTextWithRetryAsync`로 호출합니다. 재시도 간격·횟수와 네트워크 미연결 판정(위 "전송 전 인터넷 연결 확인")은 로그 전송용 `SendGetRequestWithRetryAsync`와 같고, 성공하면 `(true, 본문)`, 네트워크 미연결이거나 재시도를 모두 소진하면 `(false, null)`을 돌려줍니다.
 
 ```csharp
 (bool isSuccess, string responseText) result = await ApiRetryUtil.GetTextWithRetryAsync(

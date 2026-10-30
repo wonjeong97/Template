@@ -14,8 +14,10 @@ namespace HuliacDev.Tests
             NetworkStatusService service = new NetworkStatusService(null, 1.0f);
             service.Initialize();
 
-            Assert.AreEqual(Application.internetReachability, service.CurrentReachability);
-            Assert.AreEqual(Application.internetReachability != NetworkReachability.NotReachable, service.IsConnected);
+            // 연결 여부는 ApiRetryUtil과 같은 판정(어댑터 + Windows 인터넷 판정)을 따라야 함.
+            bool isInternetAvailable = InternetConnectivity.IsInternetAvailable;
+            Assert.AreEqual(isInternetAvailable, service.IsConnected);
+            Assert.AreEqual(isInternetAvailable ? Application.internetReachability : NetworkReachability.NotReachable, service.CurrentReachability);
 
             service.Dispose();
         }

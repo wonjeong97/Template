@@ -100,6 +100,12 @@ namespace HuliacDev.Network
         protected virtual float ExitLogTimeoutSeconds => 5f;
 
         /// <summary>
+        /// 시작 로그로 판정을 보정하지 못한 채 Windows 판정 때문에 로그가 막혀 있을 때, 로그 하나를 거르지 않고 보내
+        /// 서버에 닿는지 다시 확인하는 최소 간격(초). 인터넷이 정말 없으면 확인할 때마다 실패 로그가 남으므로 너무 짧게 잡지 않음.
+        /// </summary>
+        protected virtual float InternetProbeIntervalSeconds => 300f;
+
+        /// <summary>
         /// VContainer 의존성 주입. 로거, 설정 제공자 및 이벤트 구독자를 할당함.
         /// </summary>
         [Inject]
@@ -233,7 +239,8 @@ namespace HuliacDev.Network
 
         /// <summary>
         /// Settings.json의 apiUrl로 종료 상태 메시지를 전송함. apiUrl이 비어 있으면 생략하며,
-        /// 네트워크 미연결 시 즉시 포기하는 정책은 시작 로그와 동일함.
+        /// 네트워크 어댑터가 끊겼거나 Windows가 인터넷 없음으로 판정하면 즉시 포기함(시작 로그와 달리 Windows 판정으로도 거름.
+        /// 시작 로그로 판정을 보정한 경우는 어댑터만 봄, InternetConnectivity 참고). 종료를 늦추지 않도록 확인 전송에는 쓰지 않음.
         /// </summary>
         protected virtual async UniTask SendExitLogAsync()
         {
@@ -324,10 +331,19 @@ namespace HuliacDev.Network
                 string message = alreadyLoggedToday ? "start (restart)" : "start";
                 string url = ZString.Concat(settings.apiUrl, Uri.EscapeDataString(message));
 
-                bool success = await ApiRetryUtil.SendGetRequestWithRetryAsync(url, $"startup log ({message})", Logger, cancellationToken);
+                // 시작 로그는 Windows의 인터넷 판정으로 거르지 않음. 판정이 틀린 망(확인 주소를 막은 망, LAN 안 서버)에서도
+                // 서버에 닿는지 실제로 확인하고, 닿으면 이후 전송이 그 판정에 막히지 않게 하기 위함(InternetConnectivity 참고).
+                // 부팅 직후 Windows 판정이 아직 끝나지 않았어도 막히지 않고, 인터넷이 늦게 연결되면 재시도 중에 전송됨.
+                bool success = await ApiRetryUtil.SendGetRequestWithRetryAsync(url, $"startup log ({message})", Logger, cancellationToken,
+                    requireInternetAccess: false);
 
                 if (success)
                 {
+                    // Windows가 인터넷 연결됨이라고 하지 않는 채 시작 로그가 닿았다면 그 판정을 믿을 수 없으므로 이후 판정에서 무시하게 함.
+                    // apiUrl로 보내는 로그(시작 로그·확인 전송)가 아닌 요청의 성공은 근거로 쓰지 않음. 같은 LAN 안 서버 요청이 성공해도
+                    // 인터넷이 있다는 뜻은 아니기 때문임.
+                    InternetConnectivity.ReportServerReached(Logger);
+
                     // 같은 날 재실행 시 "재시작"으로 구분되도록, 전송이 실제로 성공했을 때만 날짜를 갱신함.
                     PlayerPrefs.SetString(LastStartupLogDateKey, today);
                     PlayerPrefs.Save();
@@ -531,6 +547,7 @@ namespace HuliacDev.Network
         /// <summary>
         /// 종료 로그와 달리 재시도·시간 상한 정책이 특별히 필요하지 않은 단발성 상태 메시지
         /// (move_idle·외부 API 호출/반환 로그 등)를 ApiRetryUtil의 기본 정책(최대 10회, 3초 간격)으로 전송하는 공통 경로.
+        /// Windows 판정 때문에 막혀 있으면 일정 간격마다 확인 전송으로도 씀(<see cref="SendInternetProbeLogAsync"/>).
         /// </summary>
         private async UniTask SendSimpleLogAsync(string message, CancellationToken cancellationToken)
         {
@@ -550,6 +567,15 @@ namespace HuliacDev.Network
                 }
 
                 string url = ZString.Concat(settings.apiUrl, Uri.EscapeDataString(message));
+
+                // 시작 로그로 보정하지 못한 채 Windows 판정 때문에 막혀 있으면, InternetProbeIntervalSeconds마다 이 로그 하나를
+                // 판정으로 거르지 않고 보내 서버에 닿는지 다시 확인함(InternetConnectivity 참고).
+                if (InternetConnectivity.TryStartProbe(Time.realtimeSinceStartupAsDouble, InternetProbeIntervalSeconds))
+                {
+                    await SendInternetProbeLogAsync(url, message, cancellationToken);
+                    return;
+                }
+
                 await ApiRetryUtil.SendGetRequestWithRetryAsync(url, message, Logger, cancellationToken);
             }
             catch (OperationCanceledException)
@@ -559,6 +585,23 @@ namespace HuliacDev.Network
             catch (Exception e)
             {
                 if (Logger != null) Logger.ZLogError($"[ApiManagerBase] Exception while sending log ({message}): {e.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Windows 판정 때문에 막혀 있던 로그 하나를 판정으로 거르지 않고 한 번만 보내, 서버에 닿으면 판정을 보정함.
+        /// 막혀 있으면 어차피 보내지 않았을 로그라 재시도하지 않음(인터넷이 정말 없으면 실패 로그만 늘어나기 때문임).
+        /// </summary>
+        private async UniTask SendInternetProbeLogAsync(string url, string message, CancellationToken cancellationToken)
+        {
+            if (Logger != null) Logger.ZLogInformation($"[ApiManagerBase] Windows reports no internet access; sending this log once to check whether the server is reachable: {message}");
+
+            bool reached = await ApiRetryUtil.SendGetRequestWithRetryAsync(url, message, Logger, cancellationToken,
+                maxAttemptCount: 1, requireInternetAccess: false);
+
+            if (reached)
+            {
+                InternetConnectivity.ReportServerReached(Logger);
             }
         }
 
