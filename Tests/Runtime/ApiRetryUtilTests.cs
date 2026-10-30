@@ -16,6 +16,7 @@ namespace HuliacDev.Tests
     /// ApiRetryUtil.GetTextWithRetryAsync의 응답 본문 반환, 에디터 전송 건너뛰기 선택, 시도별 제한 시간 검증.
     /// 서버 없이 검증하도록 임시 파일의 file:// URL로 요청함. 네트워크 미연결로 판정되는 환경에서는
     /// 요청 전에 포기하는 정책 때문에 검증할 수 없어 결과를 '판정 불가'로 둠.
+    /// 로컬 파일·루프백 주소라 인터넷이 필요 없으므로, 인터넷이 없는 PC에서도 돌도록 requireInternetAccess: false로 부름.
     /// </summary>
     public class ApiRetryUtilTests
     {
@@ -58,7 +59,7 @@ namespace HuliacDev.Tests
             return UniTask.ToCoroutine(async () =>
             {
                 (bool isSuccess, string responseText) result = await ApiRetryUtil
-                    .GetTextWithRetryAsync(ToFileUrl(_filePath), "test", null, CancellationToken.None, 1, 0.1f)
+                    .GetTextWithRetryAsync(ToFileUrl(_filePath), "test", null, CancellationToken.None, 1, 0.1f, requireInternetAccess: false)
                     .AwaitWithRealtimeTimeout();
 
                 Assert.IsTrue(result.isSuccess, "요청이 성공했는데 실패로 보고함");
@@ -94,7 +95,7 @@ namespace HuliacDev.Tests
             return UniTask.ToCoroutine(async () =>
             {
                 (bool isSuccess, string responseText) result = await ApiRetryUtil
-                    .GetTextWithRetryAsync(ToFileUrl(_filePath), "test", null, CancellationToken.None, 2, 0.1f)
+                    .GetTextWithRetryAsync(ToFileUrl(_filePath), "test", null, CancellationToken.None, 2, 0.1f, requireInternetAccess: false)
                     .AwaitWithRealtimeTimeout();
 
                 Assert.IsFalse(result.isSuccess, "없는 파일 요청이 성공으로 보고됨");
@@ -120,7 +121,8 @@ namespace HuliacDev.Tests
                 double startTime = Time.realtimeSinceStartupAsDouble;
 
                 (bool isSuccess, string responseText) result = await ApiRetryUtil
-                    .GetTextWithRetryAsync($"http://127.0.0.1:{port}/", "test", null, CancellationToken.None, 1, 0.1f, attemptTimeoutSeconds: 1)
+                    .GetTextWithRetryAsync($"http://127.0.0.1:{port}/", "test", null, CancellationToken.None, 1, 0.1f, attemptTimeoutSeconds: 1,
+                        requireInternetAccess: false)
                     .AwaitWithRealtimeTimeout(5f);
 
                 double elapsed = Time.realtimeSinceStartupAsDouble - startTime;
@@ -131,12 +133,12 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
-        /// 네트워크 미연결이나 Windows의 인터넷 없음으로 판정되면 요청 전에 포기하므로, 이 경우 테스트를 판정 불가로 둠.
+        /// 네트워크 어댑터가 끊겨 있으면 requireInternetAccess: false여도 요청 전에 포기하므로, 이 경우 테스트를 판정 불가로 둠.
         /// </summary>
         private static void AssumeNetworkReachable()
         {
-            Assume.That(InternetConnectivity.IsInternetAvailable, Is.True,
-                "네트워크 미연결 또는 인터넷 없음으로 판정되어 요청 전에 포기하므로 검증할 수 없음");
+            Assume.That(InternetConnectivity.IsNetworkConnected, Is.True,
+                "네트워크 미연결로 판정되어 요청 전에 포기하므로 검증할 수 없음");
         }
 
         /// <summary>

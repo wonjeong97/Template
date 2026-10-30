@@ -88,7 +88,7 @@ namespace HuliacDev.Network
         internal static string HintFailure => _hintFailure;
 
         /// <summary>
-        /// Windows의 인터넷 판정을 읽음. 함수가 없거나(Windows 10 2004 이전) 호출이 실패하면 경고를 한 번 남기고,
+        /// Windows의 인터넷 판정을 읽음. 함수가 없거나(Windows 10 2004 이전) 호출이 실패하거나 예외가 나면 경고를 한 번 남기고,
         /// 이후에는 읽지 않고 Unknown을 반환함(1초마다 불리므로 매번 예외·로그를 만들지 않음).
         /// </summary>
         internal static InternetAccessHint ReadWindowsHint()
@@ -113,6 +113,12 @@ namespace HuliacDev.Network
             catch (DllNotFoundException)
             {
                 failure = "iphlpapi.dll was not found";
+            }
+            catch (Exception e)
+            {
+                // 판정은 최선 노력으로 읽는 값이라, 예상하지 못한 예외도 막지 않는 쪽(어댑터만 봄)으로 떨어뜨림.
+                // 그대로 올라가면 NetworkStatusService 생성에서 컨테이너 빌드가 실패해 앱이 시작되지 않음.
+                failure = $"{e.GetType().Name}: {e.Message}";
             }
 
             _hintFailure = failure;

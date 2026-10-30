@@ -7,7 +7,7 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 ### [2026-10-30 11:15] Claude → Antigravity + 서브에이전트 · 전송 전 인터넷 연결 확인 (fix/internet-connectivity-check)
 - 요청: 작업 표시줄이 지구본 아이콘인데도 시작 확인이 Reachable로 나와, 인터넷이 없을 때 전송을 거르지 못하던 문제 고치기(시작 로그로 Windows 판정을 보정).
 - 변경: `InternetConnectivity`(Windows `GetNetworkConnectivityHint`)와 `InternetAccessJudge`를 추가하고, `ApiRetryUtil` 전송 전 확인과 `NetworkStatusService`가 같은 판정을 씀. 시작 로그만 판정으로 거르지 않으며, 판정이 "인터넷 연결됨"이 아닐 때 시작 로그가 닿으면 판정을 무시함. 보정하지 못한 채 막혀 있으면 idle·외부 API 로그 하나를 300초마다 한 번 거르지 않고 재시도 없이 보내 다시 확인함(사용자 요청으로 추가). `requireInternetAccess` 매개변수 추가. 테스트 11건.
-- Claude 확인: Unity 프로젝트가 없는 패키지 저장소라 Unity 밖에서 확인함. csc(C# 10)로 Runtime 전체를 Windows 플레이어·Development·비Windows·에디터 조건으로, 테스트 어셈블리까지 컴파일해 에러 0. 판정기 테스트 11/11 통과(NUnit 직접 실행). 변이 사본에서 실패 확인: 어댑터만 보던 예전 동작 6건, 확인 전송 간격 확인 제거 1건, 막혀 있는지 확인 제거 2건. 같은 P/Invoke 선언을 이 PC에서 호출해 InternetAccess(3)를 받음. Unity Editor 컴파일·PlayMode·콘솔은 확인하지 못함.
+- Claude 확인: Unity 프로젝트가 없는 패키지 저장소라 Unity 밖에서 확인함. csc(C# 10)로 Runtime 전체를 Windows 플레이어·Development·비Windows·에디터 조건으로, 테스트 어셈블리까지 컴파일해 에러 0. 판정기 테스트 11/11 통과(NUnit 직접 실행). 변이 사본에서 실패 확인: 어댑터만 보던 예전 동작 6건, 확인 전송 간격 확인 제거 1건, 막혀 있는지 확인 제거 2건. 같은 P/Invoke 선언을 이 PC에서 호출해 InternetAccess(3)를 받음. 로컬 경로로 패키지를 참조하는 검증 프로젝트의 복사본을 명령줄 Unity(2022.3.62f3)로 실행해 컴파일 에러 0, PlayMode 146/146(PR 리뷰 반영 뒤 다시 146/146). 사용자가 빌드로 인터넷 있음·실행 중 끊김과 복구(확인 전송 포함)·처음부터 없음·없이 종료(`skipping send`) 로그를 확인함.
 - agy: gemini-4-argon-high가 할당량 초과(429)라 gemini-3.8-flash-high로 넘김.
 - agy (gemini-3.8-flash-high, 2묶음):
   - NetworkStatusService 이벤트·시작 로그·테스트 기대값 → 통과
@@ -20,7 +20,8 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
   - 판정을 읽지 못한 이유가 ZLogger 파일 로그에 남지 않음 → 서브에이전트만 지적(낮음) → NetworkStatusService 시작 로그에 Warning으로 남김
   - 재검증(고친 부분 3가지) → 코드는 둘 다 통과. 문서에 보정되지 않는 조건 누락(에디터·Development, 보정 해제 뒤, 어댑터 미연결) → 서브에이전트만 지적(낮음) → 고침
   - 확인 전송(판정기 TryStartProbe, ApiManagerBase 연결, 테스트 3건) → 둘 다 통과. 시작 로그 주석·문서의 "다른 요청의 성공은 근거로 쓰지 않음"이 확인 전송과 어긋남 → 서브에이전트만 지적(낮음) → 범위를 apiUrl 로그가 아닌 요청으로 고침
-- 남은 것: 보정이 풀린 뒤 마지막 확인 전송에서 300초 안에 다시 막히면 간격이 지날 때까지 확인하지 않음(서브에이전트 지적, 판정이 자주 바뀌는 망에서 확인 전송이 늘지 않게 하려는 의도라 그대로 둠). 보낼 idle·외부 API 로그가 없으면 확인하지 않음. `NetworkStatusService`를 빼고 등록하면 판정 무시가 늦게 풀릴 수 있음(낮음, 기록만). 시작 뒤 처음 생긴 판정 읽기 실패는 Unity 로그에만 남음(낮음, 기록만).
+  - PR 리뷰(Claude `/code-review` xhigh, 7건) 반영분: 판정 읽기에서 예상 못 한 예외가 DI 빌드까지 올라감 → 모든 예외를 Unknown으로 처리하도록 고침. `ApiRetryUtilTests`가 인터넷 없는 PC에서 판정 불가 → `requireInternetAccess: false`와 어댑터 가정으로 고침. CHANGELOG 굵은 머리에 클래스 이름 → 고침. 재검증 → 둘 다 통과
+- 남은 것: 보정이 풀린 뒤 마지막 확인 전송에서 300초 안에 다시 막히면 간격이 지날 때까지 확인하지 않음(서브에이전트 지적, 판정이 자주 바뀌는 망에서 확인 전송이 늘지 않게 하려는 의도라 그대로 둠). 보낼 idle·외부 API 로그가 없으면 확인하지 않음. `NetworkStatusService`를 빼고 등록하면 판정 무시가 늦게 풀릴 수 있음(낮음, 기록만). 시작 뒤 처음 생긴 판정 읽기 실패는 Unity 로그에만 남음(낮음, 기록만). PR 리뷰에서 기록만 한 것: 캡티브 포털이 http 요청에 200을 돌려주면 보정이 켜짐(이 PR 전에도 거짓 성공은 같았음, 응답 내용 검사가 필요해 범위 밖), 0이 아닌 반환값 한 번에 그 실행 동안 판정을 읽지 않음(일시 오류가 있는지 근거 없음, 어댑터만 보는 쪽으로 떨어짐), 확인 전송 실패가 5분마다 Error로 남음(다른 전송 실패와 같은 수준).
 
 ### [2026-10-19 17:10] Claude → Antigravity + 서브에이전트 · SoundManager SFX 미리 불러오기·로딩 중 정지 (feat/sound-preload)
 - 요청: TODO의 SoundManager 항목 처리(처음 트는 효과음의 재생 지연, 로드 중 `StopSFX` 뒤에도 재생됨).
