@@ -9,6 +9,8 @@ namespace HuliacDev.Tests
     /// </summary>
     public class InternetAccessJudgeTests
     {
+        private const double ProbeInterval = 300d;
+
         /// <summary>
         /// 어댑터가 끊기면 Windows 판정이나 판정 무시 상태와 무관하게 인터넷이 없다고 봐야 함.
         /// </summary>
@@ -111,6 +113,49 @@ namespace HuliacDev.Tests
             normalJudge.ReportServerReached(InternetAccessHint.Unknown);
             Assert.IsTrue(normalJudge.Evaluate(true, InternetAccessHint.Internet));
             Assert.IsFalse(normalJudge.Evaluate(true, InternetAccessHint.NoInternet), "정상 망에서 인터넷 연결됨을 본 뒤에도 무시 상태가 남음");
+        }
+
+        /// <summary>
+        /// 막혀 있지 않거나(인터넷 연결됨·판정 전) 어댑터가 끊겼으면 확인 전송을 하지 않아야 함.
+        /// </summary>
+        [Test]
+        public void 판정으로_막혀_있지_않으면_확인_전송을_하지_않는다()
+        {
+            InternetAccessJudge judge = new InternetAccessJudge();
+
+            Assert.IsFalse(judge.TryStartProbe(true, InternetAccessHint.Internet, 0d, ProbeInterval));
+            Assert.IsFalse(judge.TryStartProbe(true, InternetAccessHint.Unknown, 0d, ProbeInterval));
+            Assert.IsFalse(judge.TryStartProbe(false, InternetAccessHint.NoInternet, 0d, ProbeInterval), "어댑터가 끊겼는데 확인 전송을 함");
+        }
+
+        /// <summary>
+        /// 시작 로그로 보정하지 못한 채 인터넷 없음으로 막혀 있으면, 처음 한 번은 바로 확인 전송을 하고
+        /// 그 뒤로는 간격이 지나야 다시 해야 함. 예전에는 시작 로그가 실패하면 그 실행 동안 다시 확인할 방법이 없었음.
+        /// </summary>
+        [Test]
+        public void 인터넷_없음으로_막혀_있으면_간격마다_한_번씩_확인_전송을_한다()
+        {
+            InternetAccessJudge judge = new InternetAccessJudge();
+
+            Assert.IsTrue(judge.TryStartProbe(true, InternetAccessHint.NoInternet, 10d, ProbeInterval), "막혀 있는데 첫 확인 전송을 하지 않음");
+            Assert.IsFalse(judge.TryStartProbe(true, InternetAccessHint.NoInternet, 10d + ProbeInterval - 1d, ProbeInterval), "간격 안에 다시 확인 전송을 함");
+            Assert.IsTrue(judge.TryStartProbe(true, InternetAccessHint.NoInternet, 10d + ProbeInterval, ProbeInterval), "간격이 지났는데 확인 전송을 하지 않음");
+        }
+
+        /// <summary>
+        /// 확인 전송이 닿아 판정을 무시하게 되면 더는 막혀 있지 않으므로 확인 전송을 하지 않아야 함.
+        /// 보정이 풀린 뒤 다시 인터넷 없음으로 막히면 확인 전송을 다시 해야 함.
+        /// </summary>
+        [Test]
+        public void 판정을_무시하는_동안에는_확인_전송을_하지_않고_풀린_뒤_막히면_다시_한다()
+        {
+            InternetAccessJudge judge = new InternetAccessJudge();
+            judge.ReportServerReached(InternetAccessHint.NoInternet);
+
+            Assert.IsFalse(judge.TryStartProbe(true, InternetAccessHint.NoInternet, 0d, ProbeInterval), "판정을 무시하는 중인데 확인 전송을 함");
+
+            judge.Evaluate(true, InternetAccessHint.Internet);
+            Assert.IsTrue(judge.TryStartProbe(true, InternetAccessHint.NoInternet, 1d, ProbeInterval), "보정이 풀린 뒤 다시 막혔는데 확인 전송을 하지 않음");
         }
 
         /// <summary>

@@ -17,6 +17,8 @@ namespace HuliacDev.Network
     /// 외부 확인 주소를 막은 망이나 같은 LAN 안 서버로만 보내는 현장에서는 Windows 판정이 틀릴 수 있음.
     /// 그래서 Windows가 "인터넷 연결됨"이라고 하지 않는 동안 시작 로그가 성공하면(<see cref="ReportServerReached"/>) Windows가
     /// "인터넷 연결됨"이라고 할 때까지 어댑터 연결만 봄. 시작 로그는 이 확인을 위해 Windows 판정으로 거르지 않고 보냄.
+    /// 시작 로그가 실패해 보정하지 못한 채 막히면, ApiManagerBase가 일정 간격마다 로그 하나를 거르지 않고 보내 다시 확인함
+    /// (<see cref="TryStartProbe"/>).
     /// Windows 10 2004(빌드 19041)보다 오래된 Windows와 Windows가 아닌 환경에서는 어댑터 연결만 봄.
     /// </para>
     /// </summary>
@@ -34,9 +36,9 @@ namespace HuliacDev.Network
         public static bool IsInternetAvailable => _judge.Evaluate(IsNetworkConnected, ReadWindowsHint());
 
         /// <summary>
-        /// 시작 로그가 서버에 닿았음을 알림. Windows가 "인터넷 연결됨"이라고 하지 않고 있었다면 그 판정을 믿을 수 없는 것으로 보고,
-        /// Windows가 "인터넷 연결됨"이라고 할 때까지 그 판정을 무시함. "인터넷 없음" 판정을 무시하기 시작할 때만 경고를 남김
-        /// (판정 전이었던 경우는 정상 망의 부팅 직후에도 흔하므로 남기지 않음).
+        /// 시작 로그나 확인 전송(apiUrl 로그)이 서버에 닿았음을 알림. Windows가 "인터넷 연결됨"이라고 하지 않고 있었다면 그 판정을
+        /// 믿을 수 없는 것으로 보고, Windows가 "인터넷 연결됨"이라고 할 때까지 그 판정을 무시함. "인터넷 없음" 판정을 무시하기
+        /// 시작할 때만 경고를 남김(판정 전이었던 경우는 정상 망의 부팅 직후에도 흔하므로 남기지 않음).
         /// 같은 LAN 안 서버 요청의 성공은 인터넷이 있다는 근거가 아니므로 여기에 알리지 않음.
         /// </summary>
         public static void ReportServerReached(Microsoft.Extensions.Logging.ILogger logger)
@@ -44,7 +46,7 @@ namespace HuliacDev.Network
             InternetAccessHint hint = ReadWindowsHint();
             if (!_judge.ReportServerReached(hint) || hint != InternetAccessHint.NoInternet) return;
 
-            const string message = "[InternetConnectivity] Windows reports no internet access, but the startup log reached the server. Ignoring the Windows hint until it reports internet access again.";
+            const string message = "[InternetConnectivity] Windows reports no internet access, but a log reached the server. Ignoring the Windows hint until it reports internet access again.";
             if (logger != null)
             {
                 logger.ZLogWarning($"{message}");
@@ -53,6 +55,15 @@ namespace HuliacDev.Network
             {
                 Debug.LogWarning(message);
             }
+        }
+
+        /// <summary>
+        /// 어댑터는 연결됐는데 Windows 판정 때문에 전송이 막혀 있고, 마지막 확인 전송에서 intervalSeconds가 지났으면 true를 반환함.
+        /// true를 받은 호출부는 그 전송을 판정으로 거르지 않고 보내 보고, 닿으면 <see cref="ReportServerReached"/>를 부를 것.
+        /// </summary>
+        public static bool TryStartProbe(double now, double intervalSeconds)
+        {
+            return _judge.TryStartProbe(IsNetworkConnected, ReadWindowsHint(), now, intervalSeconds);
         }
 
         /// <summary>

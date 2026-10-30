@@ -21,6 +21,8 @@ namespace HuliacDev.Network
     /// 믿을 수 없는 것으로 보고, Windows가 "인터넷 연결됨"이라고 할 때까지 그 판정을 쓰지 않음(어댑터 연결만 봄).
     /// 판정 전에 닿은 경우도 포함하는 이유는, 부팅 직후 판정 전에 서버에 닿은 뒤 Windows가 인터넷 없음으로 판정하는
     /// 망(같은 LAN 안 서버로만 보내는 현장)에서도 전송이 막히지 않게 하기 위함임. 정상 망이면 곧 "인터넷 연결됨"이 되어 풀림.
+    /// 시작 로그가 실패해 보정하지 못한 채 막히는 동안에는 일정 간격마다 한 번 확인 전송을 허용해(<see cref="TryStartProbe"/>)
+    /// 그 전송이 닿으면 보정할 수 있게 함.
     /// 입력을 호출부가 넘기므로 Windows API 없이 단위 테스트할 수 있음.
     /// </summary>
     internal sealed class InternetAccessJudge
@@ -31,6 +33,8 @@ namespace HuliacDev.Network
         private const int WindowsLevelConstrainedInternetAccess = 4;
 
         private bool _isHintIgnored;
+        private bool _hasProbed;
+        private double _lastProbeTime;
 
         /// <summary>Windows의 "인터넷 없음" 판정을 무시하고 있는지 여부.</summary>
         public bool IsHintIgnored => _isHintIgnored;
@@ -64,6 +68,21 @@ namespace HuliacDev.Network
             if (hint == InternetAccessHint.Internet || _isHintIgnored) return false;
 
             _isHintIgnored = true;
+            return true;
+        }
+
+        /// <summary>
+        /// 어댑터는 연결됐는데 Windows 판정 때문에 막혀 있고, 마지막 확인 전송에서 intervalSeconds가 지났으면(처음이면 바로)
+        /// 이번 전송을 판정으로 거르지 않는 확인 전송으로 쓰도록 true를 반환하고 시각을 기록함.
+        /// 막혀 있지 않거나 어댑터가 끊겼으면 확인할 필요가 없으므로 false임.
+        /// </summary>
+        public bool TryStartProbe(bool isNetworkConnected, InternetAccessHint hint, double now, double intervalSeconds)
+        {
+            if (!isNetworkConnected || Evaluate(isNetworkConnected, hint)) return false;
+            if (_hasProbed && now - _lastProbeTime < intervalSeconds) return false;
+
+            _hasProbed = true;
+            _lastProbeTime = now;
             return true;
         }
 

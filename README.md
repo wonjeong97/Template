@@ -384,13 +384,13 @@ _externalApiReturnPublisher.Publish(new ExternalApiReturnEvent(false, "HTTP 500"
 - 네트워크 어댑터가 끊겼으면 보내지 않습니다.
 - Windows에서는 작업 표시줄의 지구본 아이콘을 정하는 Windows의 판정도 읽습니다. 공유기에는 연결됐지만 인터넷이 끊긴 경우("인터넷 없음")에도 보내지 않습니다. 네트워크 요청 없이 Windows가 가진 값을 읽기만 합니다.
 - Windows가 아직 판정하지 못했거나 판정을 읽을 수 없는 환경(Windows 10 2004 이전, Windows가 아닌 환경)에서는 막지 않고 어댑터만 봅니다.
-- `ApiManagerBase`의 시작 로그(`start`)는 Windows 판정으로 거르지 않고 보냅니다. Windows가 "인터넷 연결됨"이라고 하지 않는 동안(인터넷 없음 또는 판정 전) 시작 로그가 성공하면 그 현장에서는 Windows 판정을 믿을 수 없는 것으로 보고, Windows가 "인터넷 연결됨"이라고 할 때까지 어댑터만 봅니다. 외부 확인 주소를 막은 망이나 같은 LAN 안 서버로만 보내는 현장을 위한 동작이며, 다른 요청의 성공은 이 근거로 쓰지 않습니다.
-- 시작 로그는 한 번만 보내므로, 다음 경우에는 그 실행 동안 보정되지 않습니다. Windows 판정이 늘 틀리는 망이라면 앱을 다시 켤 때까지 전송이 걸러집니다.
-  - 시작 로그가 실패한 경우: 부팅 때 네트워크 어댑터가 아직 연결되지 않았으면 재시도 없이 바로 실패하고, 서버에 닿지 못하면 재시도를 다 쓴 뒤 실패합니다.
-  - 에디터·Development 빌드: 시작 로그를 실제로 보내지 않습니다.
-  - 보정한 뒤 Windows가 한 번이라도 "인터넷 연결됨"으로 판정한 경우: 그때 보정이 풀리고 다시 켜지지 않습니다.
-- 같은 LAN 안 서버처럼 인터넷 없이 닿는 서버로 보내는 요청은 `apiUrl` 여부와 관계없이 `SendGetRequestWithRetryAsync`·`GetTextWithRetryAsync`에 `requireInternetAccess: false`를 넘기세요. 넘기지 않으면 인터넷이 없는 망에서는 요청을 보내지 않습니다.
-- `NetworkStatusService`의 `IsConnected`도 같은 판정이라, 인터넷 없이 LAN 서버만 쓰는 현장에서는 시작 로그로 보정되기 전까지 끊긴 것으로 보입니다. 그런 현장에서 LAN 연결 여부가 필요하면 `Application.internetReachability`를 직접 보세요.
+- `ApiManagerBase`의 시작 로그(`start`)는 Windows 판정으로 거르지 않고 보냅니다. Windows가 "인터넷 연결됨"이라고 하지 않는 동안(인터넷 없음 또는 판정 전) 시작 로그가 성공하면 그 현장에서는 Windows 판정을 믿을 수 없는 것으로 보고, Windows가 "인터넷 연결됨"이라고 할 때까지 어댑터만 봅니다. 외부 확인 주소를 막은 망이나 같은 LAN 안 서버로만 보내는 현장을 위한 동작이며, `apiUrl`로 보내는 로그(시작 로그와 아래 확인 전송)가 아닌 요청의 성공은 이 근거로 쓰지 않습니다.
+- 시작 로그가 실패했거나(부팅 때 네트워크 어댑터가 아직 연결되지 않았으면 재시도 없이 바로 실패), 보정이 풀린 뒤 다시 막히면 idle·외부 API 로그 하나를 `InternetProbeIntervalSeconds`(기본 300초)마다 한 번 Windows 판정으로 거르지 않고 보내 봅니다. 이 확인 전송은 재시도하지 않으며, 닿으면 시작 로그와 같은 방식으로 보정합니다.
+  - 종료 로그는 종료를 늦추지 않도록 확인 전송에 쓰지 않습니다. 보낼 idle·외부 API 로그가 없으면 확인하지 않습니다.
+  - 간격을 바꾸려면 `ApiManagerBase`를 상속한 클래스에서 `InternetProbeIntervalSeconds`를 override하세요. 인터넷이 정말 없으면 확인할 때마다 실패 로그가 남습니다.
+  - 에디터·Development 빌드는 로그를 실제로 보내지 않으므로 보정되지 않습니다.
+- 같은 LAN 안 서버처럼 인터넷 없이 닿는 서버로 보내는 요청은 `apiUrl` 여부와 관계없이 `SendGetRequestWithRetryAsync`·`GetTextWithRetryAsync`에 `requireInternetAccess: false`를 넘기세요. 넘기지 않으면 인터넷이 없는 망에서는 보정되기 전까지 요청을 보내지 않습니다.
+- `NetworkStatusService`의 `IsConnected`도 같은 판정이라, 인터넷 없이 LAN 서버만 쓰는 현장에서는 시작 로그나 확인 전송으로 보정되기 전까지 끊긴 것으로 보입니다. 그런 현장에서 LAN 연결 여부가 필요하면 `Application.internetReachability`를 직접 보세요.
 
 ### 응답이 필요한 API 호출 (ApiRetryUtil.GetTextWithRetryAsync)
 
