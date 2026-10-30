@@ -12,7 +12,7 @@
 
 ## 완료
 
-- [x] 전송 전 인터넷 확인이 `Application.internetReachability`(네트워크 어댑터 연결 여부)만 봐서, 공유기에는 연결됐지만 인터넷이 끊긴 경우(작업 표시줄 지구본 아이콘)에도 `Reachable`로 나오고 로그 전송이 재시도를 다 돈 뒤에야 실패하던 문제. Windows의 인터넷 판정(`GetNetworkConnectivityHint`)을 함께 보고, 판정이 틀리는 망을 위해 시작 로그가 판정과 다르게 서버에 닿으면 그 판정을 무시하도록 함 — 완료: 2026-10-30
+- [x] 전송 전 인터넷 확인이 `Application.internetReachability`(네트워크 어댑터 연결 여부)만 봐서, 공유기에는 연결됐지만 인터넷이 끊긴 경우(작업 표시줄 지구본 아이콘)에도 `Reachable`로 나오고 로그 전송이 재시도를 다 돈 뒤에야 실패하던 문제. Windows의 인터넷 판정(`GetNetworkConnectivityHint`)을 함께 보고, 판정이 틀리는 망을 위해 시작 로그가 판정과 다르게 서버에 닿으면 그 판정을 무시하도록 함 — 완료: 2026-10-30 (#63)
 
 - [x] `SoundManager.PlaySFX`가 처음 트는 클립은 StreamingAssets에서 읽어 디코드한 뒤에야 재생되고 미리 불러오는 API가 없어 앱을 켠 뒤 첫 재생이 읽는 시간만큼 늦던 문제와, 읽는 중에 `StopSFX`를 불러도 읽기가 끝나면 그대로 재생되던 문제. 클립을 미리 읽어 캐시에 넣는 `PreloadAsync(key, token)`을 추가하고, `StopSFX` 호출 횟수로 로드를 기다리던 SFX 요청을 건너뛰도록 함 — 완료: 2026-10-19 (#62)
 
