@@ -233,7 +233,8 @@ namespace HuliacDev.Network
 
         /// <summary>
         /// Settings.json의 apiUrl로 종료 상태 메시지를 전송함. apiUrl이 비어 있으면 생략하며,
-        /// 네트워크 미연결 시 즉시 포기하는 정책은 시작 로그와 동일함.
+        /// 네트워크 어댑터가 끊겼거나 Windows가 인터넷 없음으로 판정하면 즉시 포기함(시작 로그와 달리 Windows 판정으로도 거름.
+        /// 시작 로그로 판정을 보정한 경우는 어댑터만 봄, InternetConnectivity 참고).
         /// </summary>
         protected virtual async UniTask SendExitLogAsync()
         {
@@ -324,10 +325,18 @@ namespace HuliacDev.Network
                 string message = alreadyLoggedToday ? "start (restart)" : "start";
                 string url = ZString.Concat(settings.apiUrl, Uri.EscapeDataString(message));
 
-                bool success = await ApiRetryUtil.SendGetRequestWithRetryAsync(url, $"startup log ({message})", Logger, cancellationToken);
+                // 시작 로그는 Windows의 인터넷 판정으로 거르지 않음. 판정이 틀린 망(확인 주소를 막은 망, LAN 안 서버)에서도
+                // 서버에 닿는지 실제로 확인하고, 닿으면 이후 전송이 그 판정에 막히지 않게 하기 위함(InternetConnectivity 참고).
+                // 부팅 직후 Windows 판정이 아직 끝나지 않았어도 막히지 않고, 인터넷이 늦게 연결되면 재시도 중에 전송됨.
+                bool success = await ApiRetryUtil.SendGetRequestWithRetryAsync(url, $"startup log ({message})", Logger, cancellationToken,
+                    requireInternetAccess: false);
 
                 if (success)
                 {
+                    // Windows가 인터넷 연결됨이라고 하지 않는 채 시작 로그가 닿았다면 그 판정을 믿을 수 없으므로 이후 판정에서 무시하게 함.
+                    // 다른 요청의 성공은 근거로 쓰지 않음. 같은 LAN 안 서버 요청이 성공해도 인터넷이 있다는 뜻은 아니기 때문임.
+                    InternetConnectivity.ReportServerReached(Logger);
+
                     // 같은 날 재실행 시 "재시작"으로 구분되도록, 전송이 실제로 성공했을 때만 날짜를 갱신함.
                     PlayerPrefs.SetString(LastStartupLogDateKey, today);
                     PlayerPrefs.Save();

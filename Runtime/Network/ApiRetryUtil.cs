@@ -2,7 +2,6 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using UnityEngine;
 using UnityEngine.Networking;
 using ZLogger;
 
@@ -14,8 +13,8 @@ namespace HuliacDev.Network
     /// 코드는 ApiManagerBase를 상속하지 않고도 바로 호출할 수 있음.
     /// <para>
     /// 정책: 에디터/디벨롭 빌드에서는 실제 전송 없이 무엇을 보냈을지만 로그로 남기고,
-    /// 네트워크 자체가 연결되어 있지 않으면 즉시 포기하며, 그 외 실패는
-    /// retryDelaySeconds 간격으로 최대 maxAttemptCount회 재시도함.
+    /// 네트워크 어댑터가 끊겼거나 Windows가 인터넷 없음으로 판정하면(InternetConnectivity 참고) 즉시 포기하며,
+    /// 그 외 실패는 retryDelaySeconds 간격으로 최대 maxAttemptCount회 재시도함.
     /// </para>
     /// </summary>
     public static class ApiRetryUtil
@@ -38,6 +37,9 @@ namespace HuliacDev.Network
         /// 연결돼 있지 않아 전송을 생략했거나 재시도를 모두 소진하면 false를 반환함.
         /// 응답 본문은 버리므로, 본문을 해석해야 하면 <see cref="GetTextWithRetryAsync"/>를 쓸 것.
         /// logLabel은 로그에 표시할 요청 식별용 라벨이며, logger가 null이면 로그를 남기지 않음.
+        /// requireInternetAccess가 false면 Windows의 인터넷 판정으로 거르지 않고 어댑터 연결만 확인해 보냄.
+        /// 시작 로그처럼 Windows 판정이 틀린 망에서도 서버에 닿는지 실제로 확인해야 하는 요청이나,
+        /// 같은 LAN 안 서버처럼 인터넷 없이 닿는 요청에 씀.
         /// </summary>
         // 에디터/디벨롭 빌드 분기는 await 없이 즉시 반환하므로 이 컴파일 변형에서만 CS1998이
         // 발생함. 실제 빌드(#else)는 await를 포함하므로 이 심볼 조합에서만 억제를 한정함.
@@ -50,7 +52,8 @@ namespace HuliacDev.Network
             Microsoft.Extensions.Logging.ILogger logger,
             CancellationToken cancellationToken,
             int maxAttemptCount = DefaultMaxAttemptCount,
-            float retryDelaySeconds = DefaultRetryDelaySeconds)
+            float retryDelaySeconds = DefaultRetryDelaySeconds,
+            bool requireInternetAccess = true)
         {
 // 에디터/디벨롭 빌드에서 매 플레이·테스트마다 서버로 로그가 나가면 실제 운영 로그가
 // 오염되므로, 이 두 환경에서는 전송을 생략하고 무엇을 보냈을지만 콘솔에 남김.
@@ -60,7 +63,7 @@ namespace HuliacDev.Network
 #else
             // 시작·종료 로그는 서버가 늦게 응답해도 시간 초과로 재시도하면 같은 로그가 중복 기록될 수 있어, 이전처럼 시간 제한 없이 보냄.
             (bool isSuccess, string responseText) result = await SendWithRetryAsync(url, logLabel, logger, cancellationToken, maxAttemptCount, retryDelaySeconds,
-                attemptTimeoutSeconds: 0, successLogLevel: LogLevel.Information);
+                attemptTimeoutSeconds: 0, successLogLevel: LogLevel.Information, requireInternetAccess: requireInternetAccess);
             return result.isSuccess;
 #endif
         }
@@ -79,6 +82,7 @@ namespace HuliacDev.Network
         /// 시도 한 번이 attemptTimeoutSeconds(기본 10초)를 넘기면 그 시도를 실패로 보고 재시도하며, 0 이하면 시간 제한을 두지 않음.
         /// 성공 로그는 successLogLevel(기본 Information)로 남기므로, 자주 부르는 API는 LogLevel.Debug나 LogLevel.None으로 낮출 수 있음.
         /// 실패·재시도 로그의 수준은 바뀌지 않음. 취소되면 OperationCanceledException을 던짐.
+        /// 같은 LAN 안 서버처럼 인터넷 없이 닿는 API는 requireInternetAccess를 false로 넘겨 Windows의 인터넷 판정으로 거르지 않게 할 것.
         /// </summary>
         // skipInEditorAndDevelopmentBuild 분기만 await 없이 반환하므로 CS1998은 발생하지 않음.
         public static async UniTask<(bool isSuccess, string responseText)> GetTextWithRetryAsync(
@@ -90,7 +94,8 @@ namespace HuliacDev.Network
             float retryDelaySeconds = DefaultRetryDelaySeconds,
             bool skipInEditorAndDevelopmentBuild = false,
             int attemptTimeoutSeconds = DefaultAttemptTimeoutSeconds,
-            LogLevel successLogLevel = LogLevel.Information)
+            LogLevel successLogLevel = LogLevel.Information,
+            bool requireInternetAccess = true)
         {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (skipInEditorAndDevelopmentBuild)
@@ -100,7 +105,7 @@ namespace HuliacDev.Network
             }
 #endif
             return await SendWithRetryAsync(url, logLabel, logger, cancellationToken, maxAttemptCount, retryDelaySeconds,
-                attemptTimeoutSeconds, successLogLevel);
+                attemptTimeoutSeconds, successLogLevel, requireInternetAccess);
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -117,6 +122,7 @@ namespace HuliacDev.Network
         /// 네트워크 연결을 확인한 뒤 GET 요청을 보내고, 실패하면 재시도 간격마다 다시 보내는 공통 재시도 루프.
         /// 성공하면 (true, 응답 본문)을, 네트워크 미연결이거나 재시도를 모두 소진하면 (false, null)을 반환함.
         /// attemptTimeoutSeconds가 양수면 시도마다 그 시간을 넘기면 실패로 보고, 성공 로그는 successLogLevel로 남김.
+        /// requireInternetAccess가 true면 어댑터 연결에 더해 Windows의 인터넷 판정도 확인함.
         /// </summary>
         private static async UniTask<(bool isSuccess, string responseText)> SendWithRetryAsync(
             string url,
@@ -126,13 +132,21 @@ namespace HuliacDev.Network
             int maxAttemptCount,
             float retryDelaySeconds,
             int attemptTimeoutSeconds,
-            LogLevel successLogLevel)
+            LogLevel successLogLevel,
+            bool requireInternetAccess)
         {
             // 네트워크 자체가 연결되어 있지 않으면 시도해도 무조건 실패하므로, 재시도 루프를
             // 돌리며 최대 대기 시간을 허비하지 않도록 먼저 걸러냄.
-            if (Application.internetReachability == NetworkReachability.NotReachable)
+            if (!InternetConnectivity.IsNetworkConnected)
             {
                 if (logger != null) logger.ZLogWarning($"[ApiRetryUtil] Network is not reachable; skipping send: {logLabel}");
+                return (false, null);
+            }
+
+            // 어댑터는 연결됐지만 인터넷이 끊긴 경우(지구본 아이콘)도 같은 이유로 거름. 어댑터만 보면 연결됨으로 나옴.
+            if (requireInternetAccess && !InternetConnectivity.IsInternetAvailable)
+            {
+                if (logger != null) logger.ZLogWarning($"[ApiRetryUtil] Windows reports no internet access; skipping send: {logLabel}");
                 return (false, null);
             }
 

@@ -131,12 +131,12 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
-        /// 네트워크 미연결로 판정되면 요청 전에 포기하므로, 이 경우 테스트를 판정 불가로 둠.
+        /// 네트워크 미연결이나 Windows의 인터넷 없음으로 판정되면 요청 전에 포기하므로, 이 경우 테스트를 판정 불가로 둠.
         /// </summary>
         private static void AssumeNetworkReachable()
         {
-            Assume.That(Application.internetReachability, Is.Not.EqualTo(NetworkReachability.NotReachable),
-                "네트워크 미연결로 판정되어 요청 전에 포기하므로 검증할 수 없음");
+            Assume.That(InternetConnectivity.IsInternetAvailable, Is.True,
+                "네트워크 미연결 또는 인터넷 없음으로 판정되어 요청 전에 포기하므로 검증할 수 없음");
         }
 
         /// <summary>
