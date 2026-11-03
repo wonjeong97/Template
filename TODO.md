@@ -13,8 +13,8 @@
 
 ## 완료
 
-- [x] 빌드를 Build Settings에서 손으로 만들고 버전 관리용 보관과 현장 PC로 옮길 복사를 따로 하던 것을 **Build > Windows 빌드 후 보관** 메뉴로 묶음(빌드 보관 폴더에 빌드마다 `<YYMMDD>-<N>` 폴더로 zip·`BuildInfo.txt`, 복사 폴더에 항상 최신 빌드 복사, 두 경로와 복사 방식은 Edit > Preferences > HuliacDev Build에서 PC별로 정함) — 완료: 2026-11-03
-- [x] `Tools > Update Stack Packages`가 UPM 패키지만 올려 ZLogger·R3의 UPM 연동 레이어와 NuGet 구현 DLL 버전이 어긋나고, 패키지를 하나씩 올리다 도메인 리로드로 순서가 끊겨 여러 번 실행해야 하던 문제. UPM은 한 번에 올리고 이어서 NuGet Updates 탭의 패키지도 올림(의존성이 내려가는 경우를 위해 반복 확인) — 완료: 2026-11-03
+- [x] 빌드를 Build Settings에서 손으로 만들고 버전 관리용 보관과 현장 PC로 옮길 복사를 따로 하던 것을 **Build > Windows 빌드 후 보관** 메뉴로 묶음(빌드 보관 폴더에 빌드마다 `<YYMMDD>-<N>` 폴더로 zip·`BuildInfo.txt`, 복사 폴더에 항상 최신 빌드 복사, 두 경로와 복사 방식은 Edit > Preferences > HuliacDev Build에서 PC별로 정함) — 완료: 2026-11-03 (#65)
+- [x] `Tools > Update Stack Packages`가 UPM 패키지만 올려 ZLogger·R3의 UPM 연동 레이어와 NuGet 구현 DLL 버전이 어긋나고, 패키지를 하나씩 올리다 도메인 리로드로 순서가 끊겨 여러 번 실행해야 하던 문제. UPM은 한 번에 올리고 이어서 NuGet Updates 탭의 패키지도 올림(의존성이 내려가는 경우를 위해 반복 확인) — 완료: 2026-11-03 (#65)
 
 - [x] 현장용 빌드가 크래시·강제 종료·응답 없음으로 끝나도 다시 켜지지 않던 문제. 앱이 시작할 때 숨은 PowerShell 감시 스크립트를 띄워 종료 코드가 0이 아니거나 응답 없음이 이어지면 다시 실행하는 `AutoRestartWatchdog` 추가(`Settings.json`의 `autoRestart`로 켬, 숨은 종료 버튼·예약 종료·창 닫기는 다시 켜지 않음) — 완료: 2026-11-03 (#64)
 
