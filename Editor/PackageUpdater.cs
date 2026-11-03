@@ -77,7 +77,7 @@ namespace HuliacDev.Editor
 
             EditorApplication.delayCall += () =>
             {
-                Debug.Log("[PackageUpdater] UPM 업데이트 뒤 다시 컴파일되어, 남은 NuGet 패키지 업데이트를 이어서 실행합니다.");
+                Debug.Log("[PackageUpdater] Recompiled after the UPM update; continuing with the remaining NuGet package updates.");
                 UpdateNugetPackages();
                 EditorUtility.ClearProgressBar();
             };
@@ -91,7 +91,7 @@ namespace HuliacDev.Editor
             if (_listRequest.Status != StatusCode.Success)
             {
                 EditorUtility.ClearProgressBar();
-                Debug.LogError($"[PackageUpdater] 목록 조회 실패: {_listRequest.Error.message}");
+                Debug.LogError($"[PackageUpdater] Failed to list packages: {_listRequest.Error.message}");
                 return;
             }
 
@@ -111,7 +111,7 @@ namespace HuliacDev.Editor
                     // packageId = "name@url" 형식 — 동일 URL로 재추가하면 최신 커밋으로 갱신됨
                     packagesToAdd.Add(pkg.packageId);
                     _requestedNames.Add(pkg.name);
-                    Debug.Log($"[PackageUpdater] Git 패키지 갱신 예정: {pkg.name}");
+                    Debug.Log($"[PackageUpdater] Will refresh git package: {pkg.name}");
                 }
                 else
                 {
@@ -122,14 +122,14 @@ namespace HuliacDev.Editor
                     {
                         packagesToAdd.Add($"{pkg.name}@{target}");
                         _requestedNames.Add(pkg.name);
-                        Debug.Log($"[PackageUpdater] 업데이트 예정: {pkg.name}  {pkg.version} → {target}");
+                        Debug.Log($"[PackageUpdater] Will update: {pkg.name}  {pkg.version} → {target}");
                     }
                 }
             }
 
             if (packagesToAdd.Count == 0)
             {
-                Debug.Log("[PackageUpdater] 대상 UPM 스택 패키지가 모두 최신 상태입니다.");
+                Debug.Log("[PackageUpdater] All target UPM stack packages are up to date.");
                 UpdateNugetPackages();
                 EditorUtility.ClearProgressBar();
                 return;
@@ -137,7 +137,7 @@ namespace HuliacDev.Editor
 
             // 패키지마다 Client.Add를 부르면 하나가 끝날 때마다 다시 해석·컴파일되어, 다음 요청이 "exclusive access" 오류로
             // 실패하거나 도메인 리로드로 남은 순서가 사라졌음. 한 번의 요청으로 모두 올려 해석·리로드를 한 번으로 줄임.
-            Debug.Log($"[PackageUpdater] UPM 패키지 {packagesToAdd.Count}개 업데이트 시작");
+            Debug.Log($"[PackageUpdater] Updating {packagesToAdd.Count} UPM package(s)");
             EditorUtility.DisplayProgressBar("Package Updater", $"UPM 패키지 {packagesToAdd.Count}개 업데이트 중...", 0.3f);
             SessionState.SetBool(PendingNugetUpdateKey, true);
             _addRequest = Client.AddAndRemove(packagesToAdd.ToArray());
@@ -161,7 +161,7 @@ namespace HuliacDev.Editor
             }
             else
             {
-                Debug.LogWarning($"[PackageUpdater] UPM 업데이트 실패: {_addRequest.Error.message}");
+                Debug.LogWarning($"[PackageUpdater] UPM update failed: {_addRequest.Error.message}");
             }
 
             UpdateNugetPackages();
@@ -200,8 +200,8 @@ namespace HuliacDev.Editor
                     if (updates.Count == 0)
                     {
                         Debug.Log(updatedCount == 0
-                            ? "[PackageUpdater] NuGet 패키지가 모두 최신 상태입니다."
-                            : $"[PackageUpdater] NuGet 패키지 업데이트 완료(모두 {updatedCount}건)");
+                            ? "[PackageUpdater] All NuGet packages are up to date."
+                            : $"[PackageUpdater] Updated NuGet packages ({updatedCount} in total)");
                         return;
                     }
 
@@ -212,14 +212,14 @@ namespace HuliacDev.Editor
                     updatedCount += updates.Count;
                 }
 
-                Debug.LogWarning($"[PackageUpdater] NuGet 업데이트를 {MaxNugetUpdatePasses}번 해도 남은 업데이트가 있습니다. NuGet > Manage NuGet Packages의 Updates 탭에서 확인하세요.");
+                Debug.LogWarning($"[PackageUpdater] Updates still remain after {MaxNugetUpdatePasses} NuGet update passes. Check the Updates tab in NuGet > Manage NuGet Packages.");
             }
             catch (Exception e)
             {
-                Debug.LogError($"[PackageUpdater] NuGet 패키지 업데이트 실패: {e}");
+                Debug.LogError($"[PackageUpdater] NuGet package update failed: {e}");
             }
 #else
-            Debug.Log("[PackageUpdater] NuGetForUnity가 설치되어 있지 않아 NuGet 패키지 업데이트는 건너뜁니다.");
+            Debug.Log("[PackageUpdater] NuGetForUnity is not installed; skipping NuGet package updates.");
 #endif
         }
 
@@ -236,7 +236,7 @@ namespace HuliacDev.Editor
                     continue;
 
                 updates.Add(update);
-                Debug.Log($"[PackageUpdater] NuGet 업데이트: {update.Id}  {current.Version} → {update.Version}");
+                Debug.Log($"[PackageUpdater] NuGet update: {update.Id}  {current.Version} → {update.Version}");
             }
 
             return updates;

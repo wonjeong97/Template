@@ -51,14 +51,14 @@ public static class TaskSchedulerIntegration
         }
 
         if (-not (Test-Path -LiteralPath $SettingsPath)) {
-            Write-BackupLog "설정 파일을 찾을 수 없어 중단: $SettingsPath"
+            Write-BackupLog "Settings file not found; aborting: $SettingsPath"
             exit 1
         }
 
         try {
             $config = Get-Content -LiteralPath $SettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
         } catch {
-            Write-BackupLog "설정 파일을 읽지 못해 중단: $_"
+            Write-BackupLog "Could not read the settings file; aborting: $_"
             exit 1
         }
 
@@ -78,25 +78,25 @@ public static class TaskSchedulerIntegration
         if ($null -ne $override) {
             $enabled = [bool]$override.enabled
             $timeText = $override.time
-            $source = "특정 날짜($dateKey)"
+            $source = "Date override ($dateKey)"
         } elseif ($config.$dayKey) {
             $enabled = [bool]$config.$dayKey.enabled
             $timeText = $config.$dayKey.time
-            $source = "요일($dayKey)"
+            $source = "Weekday ($dayKey)"
         } else {
-            Write-BackupLog "오늘($dayKey) 스케줄이 설정 파일에 없어 건너뜀"
+            Write-BackupLog "No schedule for today ($dayKey) in the settings file; skipping"
             exit 0
         }
 
         if (-not $enabled) {
-            Write-BackupLog "$source 설정이 '종료 안 함'이라 건너뜀"
+            Write-BackupLog "$source is set to not shut down; skipping"
             exit 0
         }
 
         $scheduled = [datetime]::MinValue
         $formats = [string[]]@('HH:mm')
         if (-not [datetime]::TryParseExact($timeText, $formats, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$scheduled)) {
-            Write-BackupLog "시간 형식이 올바르지 않아 중단: '$timeText'"
+            Write-BackupLog "Invalid time format; aborting: '$timeText'"
             exit 1
         }
 
@@ -109,7 +109,7 @@ public static class TaskSchedulerIntegration
         # 걸러내면 그날 백업을 통째로 놓치므로, 경계에 여유를 둠.
         $deadline = $now.Date.Add($scheduled.TimeOfDay).AddMinutes($DelayMinutes)
         if ($now -lt $deadline.AddSeconds(-30)) {
-            Write-BackupLog "아직 예정 시각($($deadline.ToString('HH:mm')))이 되지 않아 건너뜀"
+            Write-BackupLog "The scheduled time ($($deadline.ToString('HH:mm'))) has not been reached yet; skipping"
             exit 0
         }
 
@@ -126,18 +126,18 @@ public static class TaskSchedulerIntegration
                 $exitLogUrl = $appSettings.apiUrl + [uri]::EscapeDataString('end_kill (by Task Scheduler)')
                 try {
                     Invoke-WebRequest -Uri $exitLogUrl -UseBasicParsing -TimeoutSec 5 | Out-Null
-                    Write-BackupLog "백업 종료 로그 전송 성공: $exitLogUrl"
+                    Write-BackupLog "Sent the backup exit log: $exitLogUrl"
                 } catch {
-                    Write-BackupLog "백업 종료 로그 전송 실패(무시하고 종료 진행): $_"
+                    Write-BackupLog "Failed to send the backup exit log (continuing with the shutdown): $_"
                 }
             } else {
-                Write-BackupLog "Settings.json에 apiUrl이 없어 백업 종료 로그를 건너뜀"
+                Write-BackupLog "No apiUrl in Settings.json; skipping the backup exit log"
             }
         } catch {
-            Write-BackupLog "Settings.json을 읽지 못해 백업 종료 로그를 건너뜀: $_"
+            Write-BackupLog "Could not read Settings.json; skipping the backup exit log: $_"
         }
 
-        Write-BackupLog "$source 예정 시각이 지났으나 아직 실행 중이므로 종료 실행: shutdown $shutdownArguments"
+        Write-BackupLog "$source scheduled time has passed and the PC is still running; shutting down: shutdown $shutdownArguments"
         Start-Process -FilePath 'shutdown.exe' -ArgumentList $shutdownArguments -NoNewWindow
         """;
 

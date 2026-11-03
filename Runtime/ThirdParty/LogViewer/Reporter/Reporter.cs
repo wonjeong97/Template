@@ -1474,7 +1474,7 @@ namespace HuliacDev.Reporter
 
             if (content == null)
             {
-                Debug.LogWarning("[Reporter] Log Content가 null입니다. 기본 스타일로 대체합니다.");
+                Debug.LogWarning("[Reporter] Log Content is null. Falling back to the default style.");
                 content = logContent;
             }
 

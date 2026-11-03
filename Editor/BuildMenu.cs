@@ -79,12 +79,12 @@ namespace HuliacDev.Editor
             BuildReport report = BuildPipeline.BuildPlayer(options);
             if (report.summary.result != BuildResult.Succeeded)
             {
-                Debug.LogError($"[BuildMenu] 빌드 실패({report.summary.result}, 오류 {report.summary.totalErrors}개). 보관·복사는 하지 않습니다.");
+                Debug.LogError($"[BuildMenu] Build failed ({report.summary.result}, {report.summary.totalErrors} error(s)). Skipping archive and copy.");
                 return;
             }
 
             DateTime buildTime = DateTime.Now;
-            Debug.Log($"[BuildMenu] 빌드 완료: {exePath} ({report.summary.totalSize / (1024 * 1024)}MB, {report.summary.totalTime.TotalSeconds:F0}초)");
+            Debug.Log($"[BuildMenu] Build finished: {exePath} ({report.summary.totalSize / (1024 * 1024)}MB, {report.summary.totalTime.TotalSeconds:F0}s)");
 
             // 보관(공유 드라이브)이 실패해도 현장으로 옮길 복사는 하도록 둘을 따로 처리함.
             if (!string.IsNullOrEmpty(archiveRoot))
@@ -95,7 +95,7 @@ namespace HuliacDev.Editor
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError($"[BuildMenu] 빌드는 끝났지만 보관 중 오류가 났습니다: {e}");
+                    Debug.LogError($"[BuildMenu] The build finished, but archiving failed: {e}");
                 }
             }
 
@@ -105,7 +105,7 @@ namespace HuliacDev.Editor
             }
             catch (Exception e)
             {
-                Debug.LogError($"[BuildMenu] 빌드는 끝났지만 복사 중 오류가 났습니다: {e}");
+                Debug.LogError($"[BuildMenu] The build finished, but copying failed: {e}");
             }
             finally
             {
@@ -214,7 +214,7 @@ namespace HuliacDev.Editor
                 File.WriteAllText(Path.Combine(dateFolder, BuildInfoFileName),
                     BuildInfoText(projectFolderName, buildTime, buildNumber, isDevelopment, gitState), new UTF8Encoding(true));
 
-                Debug.Log($"[BuildMenu] 보관 완료: {archivedZip} ({new FileInfo(archivedZip).Length / (1024 * 1024)}MB)");
+                Debug.Log($"[BuildMenu] Archived: {archivedZip} ({new FileInfo(archivedZip).Length / (1024 * 1024)}MB)");
             }
             catch
             {
@@ -253,7 +253,7 @@ namespace HuliacDev.Editor
             }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
             {
-                Debug.LogWarning($"[BuildMenu] 정리하지 못한 파일이 있습니다: {e.Message}");
+                Debug.LogWarning($"[BuildMenu] Could not clean up some files: {e.Message}");
             }
         }
 
@@ -322,13 +322,13 @@ namespace HuliacDev.Editor
             BuildCopyMode mode = BuildMenuPreferences.CopyMode;
             if (mode == BuildCopyMode.Never)
             {
-                Debug.Log("[BuildMenu] 빌드 뒤 복사가 '복사 안 함'이라 복사하지 않았습니다(Edit > Preferences > HuliacDev Build에서 바꿈).");
+                Debug.Log("[BuildMenu] Copy after build is set to never copy, so the build was not copied (change it in Edit > Preferences > HuliacDev Build).");
                 return;
             }
 
             if (!Directory.Exists(copyRoot))
             {
-                Debug.Log($"[BuildMenu] 복사 폴더({copyRoot})가 없어(드라이브가 연결되지 않았을 수 있음) 복사하지 않았습니다.");
+                Debug.Log($"[BuildMenu] The copy folder ({copyRoot}) was not found (the drive may not be connected), so the build was not copied.");
                 return;
             }
 
@@ -346,7 +346,7 @@ namespace HuliacDev.Editor
                 }
                 catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
                 {
-                    Debug.LogError($"[BuildMenu] 복사 폴더를 비우지 못해 복사하지 않았습니다(그 폴더의 파일을 다른 프로그램이 쓰고 있을 수 있음): {target} ({e.Message})");
+                    Debug.LogError($"[BuildMenu] Could not empty the copy folder, so the build was not copied (another program may be using its files): {target} ({e.Message})");
                     return;
                 }
             }
@@ -367,7 +367,7 @@ namespace HuliacDev.Editor
                 File.Copy(files[i], destination, true);
             }
 
-            Debug.Log($"[BuildMenu] 복사 완료: {target}");
+            Debug.Log($"[BuildMenu] Copied: {target}");
         }
 
         static bool IsDoNotShip(string relativePath)
