@@ -4,6 +4,12 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-03 16:05] Claude → Antigravity · README 자동 재시작: 대기 중 직접 켜기 (docs/autorestart-manual-start)
+- 요청: 재시작을 기다리는 동안(최대 10분) 앱을 직접 켜면 나중에 또 켜지는지 문의 → 결과를 README에도 적기로 함(사용자 결정).
+- 변경: README 자동 재시작 절에 한 줄 추가. 대기 중 직접 켜도 Force Single Instance 때문에 감시가 실행한 두 번째 앱이 바로 정상 종료되고 예전 감시도 끝남, 끄면 앱이 두 개 뜸. 코드 변경 없음(CHANGELOG·버전 그대로).
+- Claude 확인: 검증 프로젝트 빌드(Force Single Instance 켬)를 실행 중일 때 같은 exe를 또 실행하면 0.1초 만에 종료 코드 0으로 끝남을 직접 확인.
+- agy (gemini-4-argon-high, 1묶음): 설명과 감시 스크립트 코드 일치(대기 중 실행 여부 확인 안 함, 종료 코드 0이면 감시 종료, 직접 켠 앱은 새 감시) → 통과. 주변 문장과 모순·개인 정보 → 통과.
+
 ### [2026-11-03 12:22] Claude → Antigravity + 서브에이전트 · Build 메뉴·NuGet 업데이트 (feat/update-nuget-packages)
 - 요청: Update Stack Packages가 NuGet Updates도 올리게, 에디터에 Build 메뉴를 만들어 빌드 뒤 버전 관리용 보관과 현장용 복사를 자동으로(경로는 팀원·PC마다 설정, "USB" 표현 없이, 복사 전에 묻되 다시 묻지 않음 체크박스, 보관은 날짜-번호 폴더, 복사는 비우고 최신만).
 - 변경: `PackageUpdater`가 UPM을 `AddAndRemove` 한 번으로 올리고 NuGet Updates를 최대 3번 올린 뒤 다시 확인(리로드 뒤 `SessionState`로 이어서 실행, asmdef versionDefines로 NuGetForUnity 없으면 건너뜀). `BuildMenu`·`BuildMenuPreferences`·`BuildCopyPromptWindow` 추가.
