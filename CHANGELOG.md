@@ -1,6 +1,17 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.11.3-2] - 2026-11-03
+
+### Added
+- **에디터 Build 메뉴 `BuildMenu`와 설정 `BuildMenuPreferences`·`BuildCopyPromptWindow` 추가(`Editor/BuildMenu.cs`, `Editor/BuildMenuPreferences.cs`, `Editor/BuildCopyPromptWindow.cs`):** 현장용 빌드를 File > Build Settings에서 손으로 만들고, 버전 관리용 보관과 현장 PC로 옮길 복사를 따로 하고 있었음. **Build > Windows 빌드 후 보관**은 Build Settings의 씬 목록과 Development 설정으로 Windows 64비트 빌드를 프로젝트의 `Build/<Product Name>.exe`에 만들고, 성공하면 빌드 보관 폴더의 `<프로젝트 폴더 이름>/<YYMMDD>-<N>/`(N은 그날 몇 번째로 보관한 빌드, 빌드마다 새 폴더)에 zip(`<프로젝트 폴더 이름>_v<bundleVersion>.zip`, 임시 폴더에 만든 뒤 복사하고 실패해도 임시 파일을 지움)과 `BuildInfo.txt`(버전, 빌드 시각과 그날 몇 번째 빌드인지, git 브랜치·커밋, 커밋하지 않은 변경 여부)를 둠. 복사 폴더가 정해져 있고 그 폴더가 있으면(드라이브가 연결돼 있으면) '빌드 뒤 복사' 설정에 따라 묻거나 바로 `<복사 폴더>/<프로젝트 폴더 이름>/`에 빌드 폴더를 압축 없이 복사함(그 폴더를 비운 뒤 최신 빌드만 둠, 보관이 실패해도 복사함). 이전 빌드 파일이 섞이지 않게 빌드 전에 `Build/`를 비우고(실행 중이라 못 비우면 알리고 멈춤), `*_DoNotShip`·IL2CPP `*_ButDontShipItWithYourGame` 폴더는 zip과 복사에서 뺌. 묻는 창의 **다시 묻지 않음**을 체크하면 누른 버튼에 따라 '항상 복사'·'복사 안 함'이 되고, **Edit > Preferences > HuliacDev Build**(또는 **Build > 설정...**)에서 두 폴더와 '빌드 뒤 복사'(매번 묻기/항상 복사/복사 안 함)를 정함. 경로는 팀원·PC마다 달라 프로젝트가 아니라 EditorPrefs에 저장함(그 PC의 모든 프로젝트가 같이 씀). 보관 폴더가 정해지지 않았거나 찾을 수 없으면 빌드 전에 설정 열기 / 보관 없이 빌드 / 취소를 물음. 설치 태그는 붙이지 않음. README에 "에디터 메뉴"를 적음. 에디터 메뉴라 자동 테스트는 추가하지 않고 검증 프로젝트에서 직접 시험함(보관 zip 항목 수가 빌드 폴더와 같고 `_DoNotShip` 제외, 같은 날 두 번 빌드하면 -1·-2 폴더에 따로 보관, 복사 폴더가 없을 때 건너뜀, 다시 묻지 않음 → 항상 복사 저장과 묻지 않고 복사, 설정 화면에서 매번 묻기로 되돌림).
+
+### Changed
+- **`PackageUpdater`(Tools > Update Stack Packages)가 NuGet 패키지도 올림(`Editor/PackageUpdater.cs`, `Editor/HuliacDev.Template.Editor.asmdef`):** ZLogger·R3는 UPM 패키지가 Unity 연동 레이어이고 구현 DLL은 NuGet에 있는데, 메뉴가 UPM 쪽만 올려 `com.cysharp.zlogger` 2.6.0과 NuGet `ZLogger` 2.5.10처럼 짝이 어긋났음. UPM 업데이트 뒤 NuGetForUnity 창의 Updates 탭과 같은 기준(정식 버전 중 설치된 것보다 새 버전)으로 NuGet 패키지를 모두 올림. NuGetForUnity가 패키지를 다시 설치하며 의존성을 최소 버전으로 다시 깔아 먼저 올린 의존성이 내려가는 경우(예: ZLogger 2.6.0 설치 때 `System.IO.Hashing` 10.x → 8.0.0)가 있어, 최대 3번 올리고 마지막에 한 번 더 확인해, 그래도 남으면 경고를 남김. Editor asmdef가 `NuGetForUnity`를 참조하고 `versionDefines`로 `HULIACDEV_NUGETFORUNITY`를 정의해, NuGetForUnity가 없는 프로젝트는 NuGet 단계를 건너뜀. README의 검증 버전을 ZLogger 2.6.0(UPM·NuGet), `Microsoft.*`·`System.Text.Json`·`System.Threading.Channels` 10.0.14로 올림(검증 프로젝트에서 이 버전으로 PlayMode 151/151 통과).
+
+### Fixed
+- **`PackageUpdater`가 패키지를 하나씩 올려 한 번에 끝나지 않던 문제 수정(`Editor/PackageUpdater.cs`):** 패키지마다 `Client.Add`를 불러, 하나가 끝날 때마다 다시 해석·컴파일되면서 다음 요청이 "exclusive access" 오류로 실패하거나 도메인 리로드로 남은 순서가 사라져 메뉴를 여러 번 실행해야 했음. `Client.AddAndRemove` 한 번으로 모두 올리고, UPM 업데이트로 다시 컴파일되어 완료 콜백을 놓쳐도 `SessionState`에 남긴 표시로 리로드 뒤 NuGet 단계를 이어서 실행함. 검증 프로젝트에서 메뉴를 한 번 실행해 UPM(ZLogger 2.6.0 등)과 NuGet이 함께 올라가는 것을 확인함.
+
 ## [26.11.3-1] - 2026-11-03
 
 ### Added

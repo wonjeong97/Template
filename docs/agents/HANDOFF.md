@@ -4,6 +4,19 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-03 12:22] Claude → Antigravity + 서브에이전트 · Build 메뉴·NuGet 업데이트 (feat/update-nuget-packages)
+- 요청: Update Stack Packages가 NuGet Updates도 올리게, 에디터에 Build 메뉴를 만들어 빌드 뒤 버전 관리용 보관과 현장용 복사를 자동으로(경로는 팀원·PC마다 설정, "USB" 표현 없이, 복사 전에 묻되 다시 묻지 않음 체크박스, 보관은 날짜-번호 폴더, 복사는 비우고 최신만).
+- 변경: `PackageUpdater`가 UPM을 `AddAndRemove` 한 번으로 올리고 NuGet Updates를 최대 3번 올린 뒤 다시 확인(리로드 뒤 `SessionState`로 이어서 실행, asmdef versionDefines로 NuGetForUnity 없으면 건너뜀). `BuildMenu`·`BuildMenuPreferences`·`BuildCopyPromptWindow` 추가.
+- Claude 확인: Unity 컴파일 에러 0, PlayMode 151/151(검증 프로젝트를 ZLogger 2.6.0·NuGet 10.0.14로 올린 뒤). 검증 프로젝트에서 직접 시험: 메뉴 한 번으로 UPM·NuGet이 함께 올라가고 1차에서 내려간 의존성(Immutable·Hashing 8.0.0, Utf8StringInterpolation 1.3.1)이 다음 실행에서 최신으로 돌아옴, 보관 zip 207항목(`_DoNotShip` 제외), 같은 날 두 번 빌드하면 `-1`·`-2` 폴더, 보관 폴더 없음 → 3갈래 창, 복사 폴더 없음 → 건너뜀, 묻는 창이 답할 때까지 기다림·Unity 창 가운데, 다시 묻지 않음 → 항상 복사 저장, 설정 화면에서 매번 묻기로 되돌림, 복사 전에 옛 파일을 지움.
+- 서브에이전트 (1묶음):
+  - 설정 화면·묻는 창 → 통과(ShowModalUtility가 막는지는 직접 시험으로 확인함)
+- 교차 검증 (agy gemini-4-argon-high + 서브에이전트, 2묶음):
+  - PackageUpdater → agy는 5분 시간 제한으로 빈 결과. 서브에이전트만 지적: 마지막 업데이트 뒤 다시 확인하지 않아 잘못된 경고(낮음) → 고침
+  - BuildMenu → 둘 다 지적: 묻는 창 위에 진행 표시줄이 남음, 실패 때 임시 zip이 남음, 새 zip 복사 전에 이전 zip을 지움, git 출력 앞 공백 잘림·한글 이스케이프 → 고침. agy만: 지우는 zip 패턴이 넓음, stderr 교착 가능성, Win32Exception 외 예외 → 고침. 서브에이전트만: IL2CPP `_ButDontShipItWithYourGame` 폴더 포함, 빌드 전 `Build/`를 비우지 않음, 보관 실패 때 복사도 건너뜀 → 고침
+- 문서(서브에이전트, 1묶음) → 지적(낮음): 보관 폴더 "찾을 수 없음" 경우, 반복 횟수 설명, 빼는 폴더 범위, "정해져 있고 있으면" 표현 → 고침
+- 재검증: agy(고친 BuildMenu·RunGit·NuGet 반복, 3묶음으로 나눠) → git 읽기를 끝까지 동기로 해 시간 제한이 듣지 않음, NuGetForUnity가 없을 때 쓰이지 않는 using → 고침, 그 밖 통과. 마지막 재검증(agy, 빈 폴더 정리·복사 폴더 비우기·git 시간 제한) → 통과, 정리 단계 예외가 원래 오류를 덮을 수 있음(낮음) → 고침. 서브에이전트(ExitGUI·문서) → 통과(붙여 넣은 경로의 큰따옴표, "N번째 보관" 문구는 고침).
+- 남은 것: 같은 날 두 PC에서 동시에 빌드하면 드라이브 동기화 전이라 같은 번호 폴더를 만들 수 있음(낮음, 기록만). 실행 중에 Unity 패키지 해석과 NuGet 단계가 겹치는 경우는 코드로 확인하지 못함.
+
 ### [2026-11-03 11:12] Claude → Antigravity + 서브에이전트 · 비정상 종료 시 자동 재시작 (feat/auto-restart)
 - 요청: 현장용 빌드가 크래시·강제 종료·응답 없음으로 끝나면 다시 실행하고, 숨은 종료 버튼·예약 종료·운영자가 끈 경우는 다시 켜지 않기. 켜고 끄기와 주요 값은 Settings.json으로.
 - 변경: `AutoRestartWatchdog`가 시작할 때 숨은 PowerShell 감시 스크립트를 띄우고, 감시가 종료 코드(0 = 일부러 끔)와 `IsHungAppWindow`로 재시작을 정함. 켜자마자 끝나는 일이 이어지면 간격을 늘림. 설정 해석은 `AutoRestartPolicy`. `Settings.autoRestart` 추가. 테스트 5건.
