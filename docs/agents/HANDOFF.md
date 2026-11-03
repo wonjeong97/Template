@@ -4,6 +4,12 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-03 17:20] Claude → Antigravity · BuildInfo의 git 상태를 빌드 전에 읽기 (fix/buildinfo-before-build)
+- 요청: 빌드 뒤 URP 설정이 바뀌어 BuildInfo.txt에 매번 '커밋하지 않은 변경'이 들어감 → Template 수정과 프로젝트 URP 값 커밋 둘 다(사용자 결정).
+- 변경: `BuildMenu` 가 커밋·브랜치·커밋하지 않은 변경을 빌드 전에 읽어 두는 `GitState` 로 바꿈(보관 폴더가 없으면 읽지 않음), BuildInfo 항목 이름에 "빌드 전". README에 URP `m_Prefilter…` 값은 한 번 커밋하면 다시 생기지 않는다는 안내. 26.11.3-3.
+- Claude 확인: 검증 프로젝트 컴파일 오류 0. `GitState.Read`·`BuildInfoText` 를 git 저장소에 넘겨 커밋하지 않은 변경 목록이, 기본값으로 "알 수 없음"이 나오는 것을 확인. 사용 프로젝트에서 연속 빌드·Development 켬/끔 빌드가 모두 같은 URP 값을 쓰는 것을 확인.
+- agy (gemini-4-argon-high, 1묶음): 빌드 전 읽기와 전달 경로·기존 흐름 유지 → 통과. `GitState` 기본값·문구·코딩 규칙 → 통과. CHANGELOG·README·버전 → 통과.
+
 ### [2026-11-03 16:05] Claude → Antigravity · README 자동 재시작: 대기 중 직접 켜기 (docs/autorestart-manual-start)
 - 요청: 재시작을 기다리는 동안(최대 10분) 앱을 직접 켜면 나중에 또 켜지는지 문의 → 결과를 README에도 적기로 함(사용자 결정).
 - 변경: README 자동 재시작 절에 한 줄 추가. 대기 중 직접 켜도 Force Single Instance 때문에 감시가 실행한 두 번째 앱이 바로 정상 종료되고 예전 감시도 끝남, 끄면 앱이 두 개 뜸. 코드 변경 없음(CHANGELOG·버전 그대로).
