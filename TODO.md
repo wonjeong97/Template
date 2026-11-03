@@ -13,7 +13,7 @@
 
 ## 완료
 
-- [x] Build 메뉴 항목(Windows 빌드 후 보관, 설정...)과 빌드·압축·복사 중에 뜨는 대화상자·진행 표시·복사 확인 창이 한국어였던 것. 메뉴를 Build > Windows Build / Build > Setting으로, 창 문구를 영어로 바꿈(Preferences 화면과 BuildInfo.txt는 그대로) — 완료: 2026-11-03
+- [x] Build 메뉴 항목(Windows 빌드 후 보관, 설정...)과 빌드·압축·복사 중에 뜨는 대화상자·진행 표시·복사 확인 창이 한국어였던 것. 메뉴를 Build > Windows Build / Build > Setting으로, 창 문구를 영어로 바꿈(Preferences 화면과 BuildInfo.txt는 그대로) — 완료: 2026-11-03 (#69)
 - [x] 런타임 로그는 영어인데 에디터 메뉴(`[BuildMenu]`·`[PackageUpdater]`·`[ShutdownScheduleEditorBuilder]`) 콘솔 로그, Reporter 경고 한 줄, 작업 스케줄러 백업 스크립트 로그가 한국어로 섞여 있던 것. 영어로 통일(UI 문구와 BuildInfo.txt 항목 이름은 그대로) — 완료: 2026-11-03 (#68)
 - [x] Build 메뉴가 BuildInfo.txt의 git 상태를 빌드가 끝난 뒤 읽어, 빌드 중 URP가 다시 쓴 URP 에셋의 셰이더 필터 값(`m_Prefilter…`)까지 "커밋하지 않은 변경"으로 적던 문제. 빌드 전에 읽어 둔 값을 쓰도록 바꾸고, 그 값은 한 번 커밋하면 다시 생기지 않는다는 안내를 README에 적음 — 완료: 2026-11-03 (#67)
 - [x] README 자동 재시작 절에 재시작을 기다리는 동안 앱을 직접 켜면 어떻게 되는지가 없던 것. Force Single Instance 때문에 감시가 실행한 두 번째 앱이 바로 정상 종료되고 예전 감시도 끝나며, 끄면 앱이 두 개 뜬다는 설명을 추가(실제 빌드로 종료 코드 0 확인) — 완료: 2026-11-03 (#66)
