@@ -106,6 +106,32 @@ namespace HuliacDev.Data
         public string shutdownArguments;
     }
 
+    /// <summary>
+    /// 비정상 종료 시 자동 재시작 설정(AutoRestartWatchdog, Windows 스탠드얼론 빌드 전용).
+    /// Settings.json에서 키를 통째로 빼면 enabled가 false라 감시를 띄우지 않음(기존 동작과 같음).
+    /// 값은 앱을 시작할 때 감시 스크립트에 넘기므로, 바꾸면 앱을 정상 종료한 뒤 다시 켜야 반영됨.
+    /// </summary>
+    [Serializable]
+    public class AutoRestartSetting
+    {
+        /// <summary>
+        /// "JSON에서 미지정"을 뜻하는 표시값. hangRestartSeconds는 0이 "끔"이라는 정상 값이라 이 값으로 미지정을 구분함.
+        /// </summary>
+        public const float UnsetValue = -1f;
+
+        /// <summary>true면 앱 시작 시 감시 스크립트를 띄워, 앱이 정상 종료(종료 코드 0)가 아닌 이유로 끝나면 다시 실행함. 생략하면 false(끔).</summary>
+        public bool enabled;
+
+        /// <summary>
+        /// 창이 Windows에 '응답 없음'으로 판정된 상태가 이 시간(초) 동안 이어지면 강제 종료 후 다시 실행함.
+        /// 표시값 -1(생략)을 포함한 음수면 미지정으로 보고 기본값 60초를 쓰며, 0이면 응답 없음 감지를 끔. 10초 미만 양수는 10초로 올려 적용함.
+        /// </summary>
+        public float hangRestartSeconds = UnsetValue;
+
+        /// <summary>앱이 끝난 뒤 다시 실행하기까지 기다리는 시간(초). 0 이하면 미지정으로 보고 기본값 5초를 씀. 1초 미만 양수는 1초로 올리고, 600초보다 크면 600초로 줄여 적용함.</summary>
+        public float restartDelaySeconds;
+    }
+
     // ---------------------- UISettingBase 상속-------------------------------
     
     [Serializable]
@@ -217,5 +243,11 @@ namespace HuliacDev.Data
         /// 켜 두면 작업 관리자·오류 창도 앱 뒤에 가려지므로, 점검할 때는 ToggleFocusRestore 키(기본 F)로 포커스 복구와 함께 끔.
         /// </summary>
         public bool alwaysOnTop;
+
+        /// <summary>
+        /// 크래시·강제 종료·응답 없음으로 앱이 끝나면 다시 실행하는 감시 설정(AutoRestartWatchdog, Windows 스탠드얼론 빌드 전용).
+        /// 생략하면 꺼짐이며 기존 동작과 같음.
+        /// </summary>
+        public AutoRestartSetting autoRestart;
     }
 }
