@@ -4,6 +4,13 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-03 17:30] Claude → Antigravity · 에디터·도구 로그 영어로 통일 (chore/english-logs)
+- 요청: "이건 템플릿이니까 로그는 영어로"(사용자 지시).
+- 변경: `BuildMenu`·`PackageUpdater`·`ShutdownScheduleEditorBuilder` 콘솔 로그, Reporter에 덧붙인 경고 한 줄, 작업 스케줄러 백업 스크립트(`Write-BackupLog`) 문구를 영어로. UI 문구와 `BuildInfo.txt` 항목 이름(설치 기록에서 읽음)은 그대로. 26.11.3-4.
+- Claude 확인: 로그 호출에 한글 문자열이 남지 않음(grep), 검증 프로젝트 컴파일 오류 0·새 문구가 DLL에 들어감, 종료 스케줄 편집기 `dotnet build` 오류·경고 0.
+- agy (gemini-4-argon-high, 1묶음): 뜻·보간 변수 유지 → 통과. C#·PowerShell 문자열 구문 → 통과. CHANGELOG·버전·개인 정보 → 통과.
+- 남은 것: 백업 스크립트 로그는 각 프로젝트에서 종료 스케줄 편집기를 다시 만들고 작업 스케줄러를 갱신해야 바뀜.
+
 ### [2026-11-03 17:20] Claude → Antigravity · BuildInfo의 git 상태를 빌드 전에 읽기 (fix/buildinfo-before-build)
 - 요청: 빌드 뒤 URP 설정이 바뀌어 BuildInfo.txt에 매번 '커밋하지 않은 변경'이 들어감 → Template 수정과 프로젝트 URP 값 커밋 둘 다(사용자 결정).
 - 변경: `BuildMenu` 가 커밋·브랜치·커밋하지 않은 변경을 빌드 전에 읽어 두는 `GitState` 로 바꿈(보관 폴더가 없으면 읽지 않음), BuildInfo 항목 이름에 "빌드 전". README에 URP `m_Prefilter…` 값은 한 번 커밋하면 다시 생기지 않는다는 안내. 26.11.3-3.

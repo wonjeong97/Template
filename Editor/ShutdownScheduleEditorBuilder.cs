@@ -30,13 +30,13 @@ namespace HuliacDev.Editor
                 string toolDir = FindToolDirectory();
                 if (toolDir == null)
                 {
-                    Debug.LogError($"[ShutdownScheduleEditorBuilder] {ToolRelativePath} 폴더를 찾을 수 없습니다. 패키지 설치 상태를 확인하세요.");
+                    Debug.LogError($"[ShutdownScheduleEditorBuilder] Folder not found: {ToolRelativePath}. Check that the package is installed correctly.");
                     return;
                 }
 
                 if (!IsDotnetAvailable())
                 {
-                    Debug.LogError("[ShutdownScheduleEditorBuilder] .NET SDK가 필요합니다. dotnet --version으로 설치를 확인하세요(.NET 8 SDK 이상 필요).");
+                    Debug.LogError("[ShutdownScheduleEditorBuilder] The .NET SDK is required (.NET 8 SDK or later). Check the installation with dotnet --version.");
                     return;
                 }
 
@@ -45,7 +45,7 @@ namespace HuliacDev.Editor
                 if (!RunPublish(toolDir, out string output, out string error, out int exitCode))
                 {
                     EditorUtility.ClearProgressBar();
-                    Debug.LogError($"[ShutdownScheduleEditorBuilder] dotnet publish 실패 (종료 코드 {exitCode}).\n--- stdout ---\n{output}\n--- stderr ---\n{error}");
+                    Debug.LogError($"[ShutdownScheduleEditorBuilder] dotnet publish failed (exit code {exitCode}).\n--- stdout ---\n{output}\n--- stderr ---\n{error}");
                     return;
                 }
 
@@ -53,7 +53,7 @@ namespace HuliacDev.Editor
                 if (!File.Exists(publishedExePath))
                 {
                     EditorUtility.ClearProgressBar();
-                    Debug.LogError($"[ShutdownScheduleEditorBuilder] 게시는 성공했지만 결과 파일을 찾을 수 없습니다: {publishedExePath}");
+                    Debug.LogError($"[ShutdownScheduleEditorBuilder] Publish succeeded, but the output file was not found: {publishedExePath}");
                     return;
                 }
 
@@ -68,14 +68,14 @@ namespace HuliacDev.Editor
                 EditorUtility.ClearProgressBar();
 
                 long sizeMb = new FileInfo(destExePath).Length / (1024 * 1024);
-                Debug.Log($"[ShutdownScheduleEditorBuilder] 완료: Assets/StreamingAssets/{ExeFileName} ({sizeMb}MB)");
+                Debug.Log($"[ShutdownScheduleEditorBuilder] Done: Assets/StreamingAssets/{ExeFileName} ({sizeMb}MB)");
                 EditorUtility.DisplayDialog("Shutdown Scheduler Exe 빌드 완료",
                     $"Assets/StreamingAssets/{ExeFileName}\n크기: {sizeMb}MB", "확인");
             }
             catch (Exception e)
             {
                 EditorUtility.ClearProgressBar();
-                Debug.LogError($"[ShutdownScheduleEditorBuilder] 예외 발생: {e}");
+                Debug.LogError($"[ShutdownScheduleEditorBuilder] Exception: {e}");
             }
         }
 

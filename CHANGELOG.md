@@ -1,6 +1,11 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.11.3-4] - 2026-11-03
+
+### Changed
+- **에디터·도구 로그를 영어로 통일(`Editor/BuildMenu.cs`, `Editor/PackageUpdater.cs`, `Editor/ShutdownScheduleEditorBuilder.cs`, `Runtime/ThirdParty/LogViewer/Reporter/Reporter.cs`, `Tools~/ShutdownScheduleEditor/TaskSchedulerIntegration.cs`):** 런타임 로그는 영어로 통일했지만, 에디터 메뉴의 콘솔 로그(`[BuildMenu]`, `[PackageUpdater]`, `[ShutdownScheduleEditorBuilder]`), Reporter에 덧붙인 경고 한 줄, 작업 스케줄러 백업 스크립트가 남기는 로그 파일 문구는 한국어로 남아 섞였음. 모두 영어로 바꿈(예: "All NuGet packages are up to date.", "Build finished: …"). 메뉴·대화상자·설정 화면 같은 UI 문구와 `BuildInfo.txt` 항목 이름(설치 기록에서 읽음)은 그대로 둠. 백업 스크립트 로그는 각 프로젝트에서 종료 스케줄 편집기를 다시 만들고(Tools > Build Shutdown Scheduler Exe) 작업 스케줄러를 갱신해야 바뀜. 콘솔 문구에 기대던 자동화가 있으면 새 문구로 맞출 것. 문구만 바뀌어 테스트는 추가하지 않고, 검증 프로젝트 컴파일(오류 0)과 종료 스케줄 편집기 빌드(오류·경고 0)를 확인함.
+
 ## [26.11.3-3] - 2026-11-03
 
 ### Fixed
