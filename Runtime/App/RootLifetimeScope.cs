@@ -81,6 +81,7 @@ namespace HuliacDev.App
             ConfigureSettings(builder);
             ConfigureNetwork(builder);
             ConfigureWindowFocus(builder);
+            ConfigureAutoRestart(builder);
             ConfigureCoreComponents(builder);
             ConfigureOptionalComponents(builder);
         }
@@ -103,6 +104,19 @@ namespace HuliacDev.App
         protected virtual void ConfigureWindowFocus(IContainerBuilder builder)
         {
             builder.RegisterEntryPoint<WindowFocusRestorer>(Lifetime.Singleton);
+        }
+
+        /// <summary>
+        /// 앱이 크래시·강제 종료·응답 없음으로 끝나면 다시 실행하는 감시 스크립트를 띄우는 AutoRestartWatchdog를 엔트리포인트로 등록함.
+        /// Settings.json의 autoRestart.enabled가 true일 때만 Windows 스탠드얼론 빌드에서 동작하며, 키가 없으면 아무것도 하지 않음.
+        /// 감시 로그(AutoRestart.log)를 앱 파일 로그와 같은 폴더에 두도록 LogDirectory를 넘김.
+        /// 기능을 아예 쓰지 않으려면 이 메서드를 빈 본문으로 override할 것.
+        /// </summary>
+        protected virtual void ConfigureAutoRestart(IContainerBuilder builder)
+        {
+            builder.RegisterEntryPoint<AutoRestartWatchdog>(
+                resolver => new AutoRestartWatchdog(LogDirectory, resolver.Resolve<AppSettingsProvider>(), resolver.Resolve<ILogger<AutoRestartWatchdog>>()),
+                Lifetime.Singleton);
         }
 
         /// <summary>

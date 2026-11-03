@@ -203,6 +203,7 @@ Runtime/
 │              InactivityTimer      — 무입력 감지 및 복귀 이벤트
 │              ShutdownScheduler    — 자동 종료 스케줄러
 │              WindowFocusRestorer  — 포커스를 잃은 앱 창 복구·항상 위 (Windows)
+│              AutoRestartWatchdog  — 비정상 종료·응답 없음 시 자동 재시작 (Windows)
 ├─ Data/       Settings 스키마 + AppSettingsProvider
 ├─ Hardware/   ArduinoManager       — 시리얼 통신 및 자동 재연결 (WebGL은 스텁)
 ├─ Input/      TemplateInputActions
@@ -223,6 +224,7 @@ Runtime/
 | | `InactivityTimer` | 키오스크 무입력 시간 감지 및 자동 복귀 이벤트(`InactivityTimeoutEvent`) 발행 |
 | | `ShutdownScheduler` | 일별/요일별 자동 종료 스케줄링 및 사전 알림(`BeforeShutdownEvent`) 발행 |
 | | `WindowFocusRestorer` | 앱 창이 포커스를 잃으면 다시 앞으로 가져와 키보드형 스캐너 입력 유지, 선택적으로 창을 항상 위로 둠 (Windows 스탠드얼론, `F` 키로 끄고 켬) |
+| | `AutoRestartWatchdog` | 크래시·강제 종료·응답 없음으로 앱이 끝나면 숨은 감시 스크립트가 다시 실행, 정상 종료(숨은 종료 버튼·예약 종료·창 닫기)는 다시 켜지 않음 (Windows 스탠드얼론, `autoRestart`로 켬) |
 | **UI & Media** | `UIManager` | uGUI/TextMeshPro 비동기 폰트 프리로드/일괄 적용, 텍스처 VRAM 압축(`compress`) 제어 |
 | | `FadeManager` | 화면 페이드 인/아웃(DOTween/UniTask), 커스텀 색상(`Color? color`) 및 `SortingOrder` 제어 |
 | | `SoundManager` | BGM/SFX 비동기 재생, 미리 불러오기(`PreloadAsync`), 마스터/BGM/SFX 개별 볼륨 및 음소거(`Mute`), DOTween 페이드 충돌 방어 |
@@ -438,6 +440,32 @@ if (result.isSuccess)
 
 > **바코드·QR 스캐너 주의:** 스캐너는 읽은 값을 키 입력으로 보내므로, 값에 대문자 `F`가 있으면 포커스 복구(항상 위를 켰으면 항상 위도 함께)가 꺼집니다(`D`·`I`·`M` 단축키도 같은 문제가 있습니다). 스캐너를 쓰는 프로젝트는 아래처럼 Ctrl 조합으로 바꾸세요. 스캐너는 Ctrl을 보내지 않습니다.
 
+### 자동 재시작 (AutoRestartWatchdog, Windows 전용)
+
+현장용 빌드가 크래시하거나 강제로 꺼지거나 '응답 없음'으로 멈췄을 때 앱을 다시 실행합니다. `Settings.json`에 아래처럼 적으면 켜집니다. 키가 없으면 꺼져 있어 기존 동작과 같습니다.
+
+```json
+"autoRestart": { "enabled": true, "hangRestartSeconds": 60, "restartDelaySeconds": 5 }
+```
+
+`RootLifetimeScope`가 `AutoRestartWatchdog`를 자동으로 만들므로 씬 배치나 등록 코드, 현장 PC의 설치·작업 스케줄러 등록은 필요 없습니다. 앱이 시작할 때 감시 스크립트(`AutoRestartWatchdog.ps1`, `persistentDataPath`에 매번 새로 씀)를 창 없는 PowerShell로 띄우고, 감시 스크립트가 앱 프로세스를 지켜봅니다.
+
+- **종료 코드로 구분합니다.** 숨은 종료 버튼(`GameCloser`), 예약 종료(`ShutdownScheduler`), Alt+F4·창 닫기는 모두 `Application.Quit` 경로로 끝나 종료 코드가 0이므로 다시 켜지지 않고 감시도 함께 끝납니다. 크래시(예: `0xC0000005`)와 `taskkill /F`처럼 프로세스를 바로 끝낸 경우(1)는 0이 아니므로 `restartDelaySeconds`초 뒤 같은 실행 파일과 인수로 다시 켭니다. 프로젝트 코드에서 `Application.Quit(코드)`로 0이 아닌 코드를 넘기면 다시 켜집니다.
+- **응답 없음:** 창이 Windows에 '응답 없음'으로 판정된 상태(메시지를 5초 넘게 처리하지 못함)가 `hangRestartSeconds`초 이어지면 강제로 끄고 다시 켭니다. 큰 씬·영상 로딩으로 잠깐 막혀도 걸리지 않도록 기본 60초이며, 0이면 이 감지를 끕니다.
+- **켜자마자 계속 끝나면** 앱이 60초 안에 끝나는 일이 이어질 때 두 번째부터 재시작 간격을 두 배씩 늘립니다(5초 → 10초 → 20초 …, 최대 10분). 크래시마다 Unity가 덤프를 남기므로 설정 오류 등으로 시작하자마자 죽는 상태에서 디스크가 차지 않게 하기 위함입니다. 60초 넘게 실행되면 간격이 원래대로 돌아옵니다.
+- Windows가 종료·로그오프 중이면 다시 켜지 않습니다.
+- 다시 켠 앱도 같은 감시 스크립트가 계속 지켜봅니다. 다시 켜진 앱은 시작 로그에 "Restarted by the watchdog ... (exit code -1073741819 (0xC0000005))"처럼 이유를 경고로 남기고, 감시를 또 띄우지 않습니다.
+- 감시 스크립트가 시작·재시작·종료한 시각과 이유는 앱 로그 폴더(`persistentDataPath/Logs`)의 `AutoRestart.log`에 남습니다.
+- 값은 앱을 시작할 때 감시 스크립트에 넘기므로, 바꾸면 앱을 정상 종료(Alt+F4 등)한 뒤 다시 켜야 반영됩니다. 크래시로 다시 켜진 동안에는 처음 띄운 감시의 값이 그대로 쓰입니다.
+- 점검 등으로 앱을 끄려면 Alt+F4나 숨은 종료 버튼을 씁니다.
+- 작업 관리자의 '작업 끝내기'는 앱이 응답하면 창 닫기와 같은 종료 요청을 보내는 것으로 보여(같은 Windows API `EndTask`로 시험), 앱이 정상 종료하면 다시 켜지지 않습니다. 앱이 응답하지 않을 때는 강제로 끝나므로 다시 켜지고, 응답 없음 감지도 따로 동작합니다.
+- 크래시가 이어져 재시작을 기다리는 동안에는 끌 앱 창이 없습니다. 이때 재시작을 멈추려면 감시 스크립트를 끝냅니다. 작업 관리자 **세부 정보** 탭의 열 머리글을 오른쪽 클릭해 **명령줄** 열을 켜고, 명령줄에 `AutoRestartWatchdog.ps1`이 있는 `powershell.exe`를 끝냅니다. `autoRestart.enabled`를 false로 바꾸는 것만으로는 이미 떠 있는 감시가 멈추지 않습니다.
+- 그룹 정책으로 PowerShell 스크립트 실행을 막아 둔 PC에서는 감시가 뜨지 않을 수 있습니다. 앱을 켠 뒤 `AutoRestart.log`에 "Watching" 줄이 생기는지 확인합니다.
+- `Settings.json`을 읽지 못해 대체 설정으로 동작할 때는 감시를 띄우지 않습니다.
+- PC 재부팅 뒤 앱을 켜는 일은 하지 않습니다. 기존처럼 시작 프로그램 등으로 켭니다.
+- 감시 스크립트만 작업 관리자에서 끄면 그 앱 실행 동안에는 감시가 없습니다. 다음에 앱이 시작될 때 다시 띄웁니다.
+- Windows 스탠드얼론 빌드에서만 동작하며, 에디터에서는 띄우지 않습니다. 기능을 아예 빼려면 `ConfigureAutoRestart`를 빈 본문으로 override합니다.
+
 ### 단축키 (기본 제공)
 
 | 키 | 동작 (System 맵 액션) |
@@ -485,6 +513,7 @@ public class GameLifetimeScope : RootLifetimeScope
   "focusRestoreDelay": 3,
   "focusRestoreRetryInterval": 3,
   "alwaysOnTop": false,
+  "autoRestart": { "enabled": true, "hangRestartSeconds": 60, "restartDelaySeconds": 5 },
   "closeSetting": {
     "position": { "x": 0, "y": 1 },
     "numToClose": 10,
@@ -507,6 +536,7 @@ public class GameLifetimeScope : RootLifetimeScope
 - `targetFrameRate`는 0 이하(또는 생략)면 적용되지 않고, 이 경우 실제 FPS는 현재 활성 품질 레벨의 `vSyncCount`에 좌우됩니다(본 템플릿 기준 Performant=0→무제한, Balanced/High Fidelity=1→디스플레이 주사율 고정). 품질 레벨이 바뀌면 미설정 시 동작도 함께 바뀌므로, 특정 FPS를 보장하려면 값을 명시적으로 지정하세요. 값을 지정하면 `vSyncCount`를 0으로 끄고 해당 FPS로 캡을 겁니다. 장시간 구동되는 키오스크 환경에서 발열·전력 소모를 줄이려면 30~60 사이 값을 권장합니다.
 - `focusRestoreDelay`(초)는 포커스를 잃은 뒤 첫 복구 시도까지 기다리는 시간, `focusRestoreRetryInterval`(초)은 포커스가 돌아오지 않았을 때 다시 시도하는 간격입니다. 0 이하(또는 생략)면 기본값 3초를 쓰고, 1초 미만 양수는 1초로 올려 적용합니다. 기능을 켜고 끄는 키는 Settings.json에 없고 `F` 키로 전환합니다([창 포커스 복구](#창-포커스-복구-windowfocusrestorer-windows-전용) 참고).
 - `alwaysOnTop`이 `true`면 Windows 스탠드얼론 빌드에서 앱 창을 항상 위로 둡니다. 생략하면 `false`(끔)이며, 점검할 때는 `F` 키로 포커스 복구와 함께 끕니다([항상 위](#항상-위-alwaysontop-선택) 참고).
+- `autoRestart.enabled`가 `true`면 Windows 스탠드얼론 빌드에서 크래시·강제 종료·응답 없음 뒤 앱을 다시 켭니다. 생략하면 꺼짐입니다. `hangRestartSeconds`는 생략하면 60초, 0이면 응답 없음 감지를 끄고, 10초 미만은 10초로 올립니다. `restartDelaySeconds`는 0 이하(또는 생략)면 5초, 1초 미만은 1초로 올리고 600초보다 크면 600초로 줄입니다([자동 재시작](#자동-재시작-autorestartwatchdog-windows-전용) 참고).
 - `closeSetting.position`은 **정규화 좌표(0~1)** 입니다. `(0,0)`이 좌하단, `(1,1)`이 우상단.
 - `fonts[].address`는 **Addressables 주소**이고, `sounds[].clipPath`는 **StreamingAssets 기준 상대 경로**입니다.
 - `fonts[].key`는 자유롭게 명명할 수 있으며 `TextSetting.fontName`에서 이 키로 참조합니다.

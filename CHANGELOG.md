@@ -1,6 +1,11 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.11.3-1] - 2026-11-03
+
+### Added
+- **비정상 종료 시 자동 재시작 `AutoRestartWatchdog` 추가(`Runtime/Core/AutoRestartWatchdog.cs`, `Runtime/Core/AutoRestartPolicy.cs`, `Runtime/Data/TemplateData.cs`, `Runtime/App/RootLifetimeScope.cs`):** 현장용 빌드가 크래시하거나 강제로 꺼지거나 '응답 없음'으로 멈추면 누가 다시 켤 때까지 화면이 비어 있었음. `Settings.json`에 `"autoRestart": { "enabled": true }`를 적으면 Windows 스탠드얼론 빌드에서 앱이 시작할 때 감시 스크립트(`persistentDataPath/AutoRestartWatchdog.ps1`, 이 클래스에 든 문자열을 매번 새로 씀)를 창 없는 PowerShell로 띄움. 감시 스크립트는 앱의 종료 코드로 구분해, 숨은 종료 버튼·예약 종료·Alt+F4·창 닫기처럼 `Application.Quit`으로 끝난 경우(0)는 다시 켜지 않고 함께 끝나고, 크래시(`0xC0000005` 등)·`taskkill /F` 같은 강제 종료(1)는 `restartDelaySeconds`(기본 5초, 최대 600초)초 뒤 같은 실행 파일과 인수로 다시 켬. 창이 Windows에 '응답 없음'으로 판정된 상태가 `hangRestartSeconds`(기본 60초, 0이면 끔, 최소 10초)초 이어지면 강제로 끄고 다시 켬. 앱이 60초 안에 끝나는 일이 이어지면 두 번째부터 간격을 두 배씩 늘리고(최대 10분, 크래시 덤프로 디스크가 차지 않게), Windows가 종료·로그오프 중이면 다시 켜지 않음. 다시 켠 앱도 같은 감시가 계속 지켜보며, 다시 켜진 앱은 환경 변수로 받은 이유를 시작 로그에 경고로 남기고 감시를 또 띄우지 않음. 감시의 시작·재시작·종료 시각과 이유는 로그 폴더의 `AutoRestart.log`에 남음. 키가 없거나 `Settings.json`을 읽지 못한 대체 설정이면 꺼져 있어 기존 동작과 같고, 에디터에서는 띄우지 않으며, `RootLifetimeScope.ConfigureAutoRestart`를 빈 본문으로 override하면 뺄 수 있음. README에 "자동 재시작"을 적음. `AutoRestartPolicyTests`에 테스트 5건 추가(판정 시간·대기 시간 기본값과 보정·상한, 명령줄 인수 이름·값과 스크립트 param 선언 일치, 환경 변수 이름 일치)하고 `AppSettingsProviderTests`의 대체 설정 테스트에 꺼짐 확인을 더함. 감시 스크립트 동작은 Windows 빌드에서 직접 시험함(`taskkill /F`·크래시·응답 없음은 다시 켜지고, 숨은 종료 버튼·예약 종료·창 닫기는 다시 켜지지 않음, 연속으로 일찍 끝날 때 5→10→20초로 늘어남). 작업 관리자의 '작업 끝내기'는 앱이 응답하면 창 닫기와 같은 종료 요청을 보내는 것으로 보여(같은 Windows API `EndTask`로 시험) 다시 켜지지 않으며, README에 적음.
+
 ## [26.10.30-1] - 2026-10-30
 
 ### Fixed
