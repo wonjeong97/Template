@@ -63,6 +63,10 @@ namespace HuliacDev.Editor
                 return;
             }
 
+            // 빌드가 URP 에셋의 셰이더 필터 값 같은 파일을 다시 쓰므로, 빌드 뒤에 읽으면 그 변경까지 "커밋하지 않은 변경"으로 잡힘.
+            // 빌드에 들어간 내용이 커밋돼 있었는지를 남기려고 빌드 전에 읽어 둠.
+            GitState gitState = string.IsNullOrEmpty(archiveRoot) ? default : GitState.Read(projectRoot);
+
             BuildPlayerOptions options = new BuildPlayerOptions
             {
                 scenes = scenes,
@@ -87,7 +91,7 @@ namespace HuliacDev.Editor
             {
                 try
                 {
-                    ArchiveBuild(buildDir, archiveRoot, projectRoot, projectFolderName, buildTime, isDevelopment);
+                    ArchiveBuild(buildDir, archiveRoot, projectFolderName, buildTime, isDevelopment, gitState);
                 }
                 catch (Exception e)
                 {
@@ -189,7 +193,7 @@ namespace HuliacDev.Editor
         /// N은 그날 몇 번째 빌드인지(1부터)이며, 빌드마다 새 폴더를 만들어 이전 보관본을 덮어쓰지 않음.
         /// 공유 드라이브 같은 동기화 폴더에 직접 쓰다 끊기면 깨진 zip이 동기화되므로 임시 폴더에 만든 뒤 복사함.
         /// </summary>
-        static void ArchiveBuild(string buildDir, string archiveRoot, string projectRoot, string projectFolderName, DateTime buildTime, bool isDevelopment)
+        static void ArchiveBuild(string buildDir, string archiveRoot, string projectFolderName, DateTime buildTime, bool isDevelopment, GitState gitState)
         {
             string projectArchiveDir = Path.Combine(archiveRoot, projectFolderName);
             int buildNumber = NextBuildNumber(projectArchiveDir, buildTime);
@@ -208,7 +212,7 @@ namespace HuliacDev.Editor
                 File.Copy(tempZip, archivedZip, true);
 
                 File.WriteAllText(Path.Combine(dateFolder, BuildInfoFileName),
-                    BuildInfoText(projectRoot, projectFolderName, buildTime, buildNumber, isDevelopment), new UTF8Encoding(true));
+                    BuildInfoText(projectFolderName, buildTime, buildNumber, isDevelopment, gitState), new UTF8Encoding(true));
 
                 Debug.Log($"[BuildMenu] 보관 완료: {archivedZip} ({new FileInfo(archivedZip).Length / (1024 * 1024)}MB)");
             }
@@ -380,13 +384,11 @@ namespace HuliacDev.Editor
 
         /// <summary>
         /// 보관한 zip이 어느 커밋에서 나왔는지 알 수 있게 빌드 정보를 만듦. 설치 태그를 붙일 커밋을 고를 때 씀.
-        /// git이 없거나 저장소가 아니면 "알 수 없음"으로 적음.
+        /// git 상태는 빌드 전에 읽은 값이며, git이 없거나 저장소가 아니면 "알 수 없음"으로 적음.
         /// </summary>
-        static string BuildInfoText(string projectRoot, string projectFolderName, DateTime buildTime, int buildNumber, bool isDevelopment)
+        static string BuildInfoText(string projectFolderName, DateTime buildTime, int buildNumber, bool isDevelopment, GitState gitState)
         {
-            string commit = RunGit(projectRoot, "rev-parse HEAD");
-            string branch = RunGit(projectRoot, "rev-parse --abbrev-ref HEAD");
-            string changes = RunGit(projectRoot, "status --porcelain -- Assets Packages ProjectSettings");
+            string changes = gitState.Changes;
             string changeText = changes == null ? "알 수 없음" : (changes.Length == 0 ? "없음" : "있음(빌드에 커밋하지 않은 변경이 들어갔을 수 있음)\n" + changes);
 
             StringBuilder builder = new StringBuilder();
@@ -396,10 +398,34 @@ namespace HuliacDev.Editor
             builder.AppendLine($"빌드 시각: {buildTime:yyyy-MM-dd HH:mm:ss} (그날 보관한 {buildNumber}번째 빌드)");
             builder.AppendLine($"대상: Windows 64비트{(isDevelopment ? " (Development)" : string.Empty)}");
             builder.AppendLine($"Unity: {Application.unityVersion}");
-            builder.AppendLine($"git 브랜치: {branch ?? "알 수 없음"}");
-            builder.AppendLine($"git 커밋: {commit ?? "알 수 없음"}");
-            builder.AppendLine($"커밋하지 않은 변경(Assets·Packages·ProjectSettings): {changeText}");
+            builder.AppendLine($"git 브랜치: {gitState.Branch ?? "알 수 없음"}");
+            builder.AppendLine($"git 커밋: {gitState.Commit ?? "알 수 없음"}");
+            builder.AppendLine($"커밋하지 않은 변경(빌드 전, Assets·Packages·ProjectSettings): {changeText}");
             return builder.ToString();
+        }
+
+        /// <summary>빌드 정보에 적을 git 상태(커밋, 브랜치, 커밋하지 않은 변경). 읽지 못한 값은 null.</summary>
+        readonly struct GitState
+        {
+            public readonly string Commit;
+            public readonly string Branch;
+            public readonly string Changes;
+
+            GitState(string commit, string branch, string changes)
+            {
+                Commit = commit;
+                Branch = branch;
+                Changes = changes;
+            }
+
+            /// <summary>프로젝트 폴더의 현재 커밋·브랜치와 Assets·Packages·ProjectSettings의 커밋하지 않은 변경을 읽음.</summary>
+            public static GitState Read(string projectRoot)
+            {
+                return new GitState(
+                    RunGit(projectRoot, "rev-parse HEAD"),
+                    RunGit(projectRoot, "rev-parse --abbrev-ref HEAD"),
+                    RunGit(projectRoot, "status --porcelain -- Assets Packages ProjectSettings"));
+            }
         }
 
         /// <summary>프로젝트 폴더에서 git 명령을 실행해 표준 출력을 돌려줌. 실패하면 null.</summary>
