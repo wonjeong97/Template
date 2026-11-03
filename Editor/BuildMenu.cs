@@ -12,7 +12,7 @@ using Debug = UnityEngine.Debug;
 namespace HuliacDev.Editor
 {
     /// <summary>
-    /// 에디터 상단의 Build 메뉴. "Windows 빌드 후 보관"은 Build Settings의 씬 목록과 Development 설정으로
+    /// 에디터 상단의 Build 메뉴. "Windows Build"는 Build Settings의 씬 목록과 Development 설정으로
     /// Windows 64비트 빌드를 프로젝트의 Build/ 폴더에 만들고, 성공하면 아래를 이어서 함.
     /// <list type="bullet">
     /// <item>빌드 보관 폴더가 정해져 있으면 &lt;프로젝트 폴더 이름&gt;/&lt;YYMMDD&gt;-&lt;N&gt;/에 버전 관리용 zip과 BuildInfo.txt(커밋·버전·빌드 시각)를 보관함.
@@ -37,13 +37,13 @@ namespace HuliacDev.Editor
         /// <summary>git이 멈췄을 때 Editor가 함께 멈추지 않도록 기다리는 최대 시간(밀리초).</summary>
         const int GitTimeoutMilliseconds = 10000;
 
-        [MenuItem("Build/Windows 빌드 후 보관", false, 0)]
+        [MenuItem("Build/Windows Build", false, 0)]
         static void BuildWindowsAndArchive()
         {
             string[] scenes = GetEnabledScenes();
             if (scenes.Length == 0)
             {
-                EditorUtility.DisplayDialog("Windows 빌드", "Build Settings에 켜진 씬이 없습니다. File > Build Settings에서 씬을 추가하세요.", "확인");
+                EditorUtility.DisplayDialog("Windows Build", "No scenes are enabled in Build Settings. Add scenes in File > Build Settings.", "OK");
                 return;
             }
 
@@ -128,12 +128,12 @@ namespace HuliacDev.Editor
             }
             catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
             {
-                EditorUtility.DisplayDialog("Windows 빌드", $"빌드 폴더를 비우지 못했습니다. 빌드한 앱이 실행 중이면 끄고 다시 시도하세요.\n\n{buildDir}\n{e.Message}", "확인");
+                EditorUtility.DisplayDialog("Windows Build", $"Could not empty the build folder. If the built app is running, close it and try again.\n\n{buildDir}\n{e.Message}", "OK");
                 return false;
             }
         }
 
-        [MenuItem("Build/설정...", false, 100)]
+        [MenuItem("Build/Setting", false, 100)]
         static void OpenSettings()
         {
             BuildMenuPreferences.Open();
@@ -170,10 +170,10 @@ namespace HuliacDev.Editor
             }
 
             string reason = string.IsNullOrEmpty(archiveRoot)
-                ? "빌드 보관 폴더가 정해지지 않았습니다."
-                : $"빌드 보관 폴더를 찾을 수 없습니다.\n{archiveRoot}";
+                ? "The build archive folder is not set."
+                : $"The build archive folder was not found.\n{archiveRoot}";
 
-            int choice = EditorUtility.DisplayDialogComplex("빌드 보관 폴더", reason + "\n\nEdit > Preferences > HuliacDev Build에서 정할 수 있습니다.", "설정 열기", "취소", "보관 없이 빌드");
+            int choice = EditorUtility.DisplayDialogComplex("Build Archive Folder", reason + "\n\nYou can set it in Edit > Preferences > HuliacDev Build.", "Open Settings", "Cancel", "Build Without Archiving");
             archiveRoot = null;
 
             switch (choice)
@@ -207,7 +207,7 @@ namespace HuliacDev.Editor
             {
                 CreateZip(buildDir, tempZip);
 
-                EditorUtility.DisplayProgressBar("빌드 보관", "보관 폴더로 복사 중...", 0.95f);
+                EditorUtility.DisplayProgressBar("Archiving Build", "Copying to the archive folder...", 0.95f);
                 string archivedZip = Path.Combine(dateFolder, zipName);
                 File.Copy(tempZip, archivedZip, true);
 
@@ -296,7 +296,7 @@ namespace HuliacDev.Editor
 
                     if (i % 20 == 0)
                     {
-                        EditorUtility.DisplayProgressBar("빌드 보관", $"압축 중: {relativePath}", (float)i / files.Length * 0.9f);
+                        EditorUtility.DisplayProgressBar("Archiving Build", $"Compressing: {relativePath}", (float)i / files.Length * 0.9f);
                     }
 
                     ZipArchiveEntry entry = zip.CreateEntry(relativePath.Replace('\\', '/'), System.IO.Compression.CompressionLevel.Optimal);
@@ -359,7 +359,7 @@ namespace HuliacDev.Editor
 
                 if (i % 20 == 0)
                 {
-                    EditorUtility.DisplayProgressBar("빌드 복사", relativePath, (float)i / files.Length);
+                    EditorUtility.DisplayProgressBar("Copying Build", relativePath, (float)i / files.Length);
                 }
 
                 string destination = Path.Combine(target, relativePath);
