@@ -27,7 +27,7 @@ namespace HuliacDev.Editor
             _isAnswered = false;
 
             BuildCopyPromptWindow window = CreateInstance<BuildCopyPromptWindow>();
-            window.titleContent = new GUIContent("빌드 복사");
+            window.titleContent = new GUIContent("Copy Build");
             window._targetPath = targetPath;
             Vector2 size = new Vector2(480f, 150f);
             window.minSize = size;
@@ -43,21 +43,21 @@ namespace HuliacDev.Editor
         void OnGUI()
         {
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField("빌드를 복사 폴더에 복사할까요?", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Copy the build to the copy folder?", EditorStyles.boldLabel);
             EditorGUILayout.LabelField(_targetPath, EditorStyles.wordWrappedLabel);
-            EditorGUILayout.LabelField("이 폴더를 비운 뒤 최신 빌드를 복사합니다. 따로 넣어 둔 파일도 지워집니다.", EditorStyles.wordWrappedMiniLabel);
+            EditorGUILayout.LabelField("This folder is emptied before the latest build is copied. Any other files in it are deleted too.", EditorStyles.wordWrappedMiniLabel);
 
             GUILayout.FlexibleSpace();
-            _isDontAskAgain = EditorGUILayout.ToggleLeft("다시 묻지 않음 (Edit > Preferences > HuliacDev Build에서 되돌림)", _isDontAskAgain);
+            _isDontAskAgain = EditorGUILayout.ToggleLeft("Don't ask again (undo in Edit > Preferences > HuliacDev Build)", _isDontAskAgain);
 
             EditorGUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button("복사", GUILayout.Width(90f)))
+            if (GUILayout.Button("Copy", GUILayout.Width(90f)))
             {
                 Answer(true);
             }
 
-            if (GUILayout.Button("건너뛰기", GUILayout.Width(90f)))
+            if (GUILayout.Button("Skip", GUILayout.Width(90f)))
             {
                 Answer(false);
             }

@@ -4,6 +4,12 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-03 18:05] Claude → Antigravity · Build 메뉴와 빌드 중 창 영어로 (chore/english-build-menu)
+- 요청: Build 하위 메뉴를 "Windows Build", "Setting"으로, 빌드 중 압축·복사 때 뜨는 창도 영어로. Template만 바꾸고 버전만 올림(사용자 결정, 프로젝트 반영은 사용자가 함).
+- 변경: 메뉴 Build/Windows Build·Build/Setting, 빌드 대화상자(씬 없음, Build 폴더 비우기 실패, 보관 폴더 없음: Open Settings / Build Without Archiving / Cancel), 진행 표시(Archiving Build, Compressing, Copying Build), 복사 확인 창(Copy Build, Don't ask again, Copy / Skip). Preferences 화면 도움말의 메뉴 이름, README·package.json 설명의 메뉴·버튼 이름을 맞춤. Preferences 화면과 BuildInfo.txt 항목 이름은 그대로. 26.11.3-5(메뉴 경로 Breaking).
+- Claude 확인: 검증 프로젝트 컴파일 오류 0, Build 메뉴 항목이 "Build/Windows Build | Build/Setting", 복사 확인 창을 띄워 영어 문구가 창 크기 안에 들어가는 것을 화면으로 확인(Skip으로 닫음, 설정값 그대로).
+- agy (gemini-4-argon-high, 1묶음): 문구 뜻·버튼 순서와 처리 → 통과. README 메뉴·버튼 이름 → 지적: package.json 설명에 옛 메뉴 이름 → 고침. CHANGELOG·버전·개인 정보 → 통과.
+
 ### [2026-11-03 17:30] Claude → Antigravity · 에디터·도구 로그 영어로 통일 (chore/english-logs)
 - 요청: "이건 템플릿이니까 로그는 영어로"(사용자 지시).
 - 변경: `BuildMenu`·`PackageUpdater`·`ShutdownScheduleEditorBuilder` 콘솔 로그, Reporter에 덧붙인 경고 한 줄, 작업 스케줄러 백업 스크립트(`Write-BackupLog`) 문구를 영어로. UI 문구와 `BuildInfo.txt` 항목 이름(설치 기록에서 읽음)은 그대로. 26.11.3-4.

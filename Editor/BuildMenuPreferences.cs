@@ -83,7 +83,7 @@ namespace HuliacDev.Editor
 
         static void DrawGui()
         {
-            EditorGUILayout.HelpBox("Build > Windows 빌드 후 보관 메뉴가 쓰는 설정입니다. 이 PC의 모든 프로젝트에 같이 적용됩니다.", MessageType.Info);
+            EditorGUILayout.HelpBox("Build > Windows Build 메뉴가 쓰는 설정입니다. 이 PC의 모든 프로젝트에 같이 적용됩니다.", MessageType.Info);
             EditorGUILayout.Space();
 
             DrawFolderField(

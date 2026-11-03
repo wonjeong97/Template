@@ -1,6 +1,12 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.11.3-5] - 2026-11-03
+
+### Changed
+- **Build 메뉴 이름과 빌드 중 창 문구를 영어로 바꿈(`Editor/BuildMenu.cs`, `Editor/BuildCopyPromptWindow.cs`, `Editor/BuildMenuPreferences.cs`):** 로그는 영어로 통일했지만 Build 메뉴 항목과 빌드·압축·복사 중에 뜨는 창은 한국어였음. 메뉴를 **Build > Windows Build**(이전 "Windows 빌드 후 보관")와 **Build > Setting**(이전 "설정...")으로 바꾸고, 켜진 씬이 없을 때·`Build/`를 비우지 못할 때·보관 폴더가 없을 때의 대화상자(Open Settings / Build Without Archiving / Cancel), 보관·압축·복사 진행 표시(Archiving Build, Compressing, Copying Build), 복사 확인 창(Copy Build, Don't ask again, Copy / Skip)을 영어로 바꿈. Preferences 화면(HuliacDev Build)과 `BuildInfo.txt` 항목 이름은 그대로 둠. README의 메뉴·버튼 이름을 맞춤. 에디터 UI라 테스트는 추가하지 않고, 검증 프로젝트에서 컴파일(오류 0), Build 메뉴 항목 두 개, 복사 확인 창의 영어 문구가 창 크기 안에 들어가는 것을 확인함.
+  - **Breaking:** 메뉴 경로가 바뀌어 `EditorApplication.ExecuteMenuItem("Build/Windows 빌드 후 보관")`처럼 메뉴 경로로 부르던 자동화는 `"Build/Windows Build"`로 바꿀 것.
+
 ## [26.11.3-4] - 2026-11-03
 
 ### Changed
