@@ -9,6 +9,7 @@
 ## 할 일
 
 - [ ] `VideoManager.PrepareAndPlayAsync`가 준비 성공·실패를 돌려주지 않아, 호출부가 재생이 시작됐는지 알려면 `VideoPlayer.isPrepared`·`isPlaying`을 다시 확인해야 함. 준비 중 오류와 준비 완료가 같은 프레임에 오면 Play하지 않았는데도 `isPrepared`가 true라 호출부가 성공으로 볼 수 있음. 성공 여부(또는 실패 사유)를 돌려주도록 바꾸기 — 발견일: 2026-10-29
+- [ ] README 설치 3단계가 Api Compatibility Level을 `.NET Standard 2.1`로 두라고 안내하지만, `ArduinoManager`가 쓰는 `System.IO.Ports`(SerialPort)는 Unity의 `.NET Framework` 프로필에만 있어 안내대로 설정하면 Windows 빌드에서 컴파일되지 않음. 안내를 `.NET Framework`로 고치고, NuGet DLL도 이 설정에서 로드된다는 점을 함께 적기 — 발견일: 2026-11-03
 
 ## 완료
 
