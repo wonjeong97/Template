@@ -1,7 +1,9 @@
 {
     "name": "HuliacDev.Template.Editor",
     "rootNamespace": "HuliacDev.Editor",
-    "references": [],
+    "references": [
+        "NuGetForUnity"
+    ],
     "includePlatforms": [
         "Editor"
     ],
@@ -11,6 +13,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.github-glitchenzo.nugetforunity",
+            "expression": "",
+            "define": "HULIACDEV_NUGETFORUNITY"
+        }
+    ],
     "noEngineReferences": false
 }

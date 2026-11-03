@@ -40,7 +40,7 @@ Package Manager의 **Add package by name**으로 아래를 설치합니다. 괄�
 |---|---|---|
 | VContainer | `jp.hadashikick.vcontainer` (1.19.0) | DI 컨테이너 |
 | UniTask | `com.cysharp.unitask` (2.5.11) | async/await (zero-allocation) |
-| ZLogger | `com.cysharp.zlogger` (2.5.10) | zero-GC 구조적 로깅 |
+| ZLogger | `com.cysharp.zlogger` (2.6.0) | zero-GC 구조적 로깅 |
 | ZString | `com.cysharp.zstring` (2.6.0) | zero-allocation 문자열 결합 |
 | R3 | `com.cysharp.r3` (1.3.1) | 반응형 스트림 |
 | MessagePipe | `com.cysharp.messagepipe` (1.8.2) | 전역 pub/sub |
@@ -62,19 +62,19 @@ ZLogger와 R3는 UPM 패키지가 Unity 연동 레이어만 제공하고, **실�
 
 | 패키지 | 버전 |
 |---|---|
-| `ZLogger` | 2.5.10 |
+| `ZLogger` | 2.6.0 |
 | `R3` | 1.3.1 |
-| `Microsoft.Extensions.Logging` | 10.0.10 |
-| `Microsoft.Bcl.AsyncInterfaces` | 10.0.10 |
-| `Microsoft.Bcl.TimeProvider` | 10.0.10 |
-| `System.Text.Json` | 10.0.10 |
-| `System.Threading.Channels` | 10.0.10 |
+| `Microsoft.Extensions.Logging` | 10.0.14 |
+| `Microsoft.Bcl.AsyncInterfaces` | 10.0.14 |
+| `Microsoft.Bcl.TimeProvider` | 10.0.14 |
+| `System.Text.Json` | 10.0.14 |
+| `System.Threading.Channels` | 10.0.14 |
 | `System.Runtime.CompilerServices.Unsafe` | 6.1.2 |
 | `System.ComponentModel.Annotations` | 5.0.0 |
 
 > - 위는 **직접 설치**해야 하는 목록입니다. `Microsoft.Extensions.Options`, `System.IO.Pipelines` 등 나머지는 의존 관계로 자동 설치됩니다.
 > - **Player Settings → Api Compatibility Level**을 `.NET Standard 2.1`로 두어야 위 DLL들이 로드됩니다. `Microsoft.Extensions.*` 10.x도 netstandard 2.0/2.1 타깃을 제공하므로 Unity 2022.3에서 동작합니다.
-> - `R3`는 UPM 패키지(`com.cysharp.r3`)와 **버전을 맞춰야 합니다.** 한쪽만 올리면 런타임에 타입 불일치가 날 수 있습니다.
+> - `R3`·`ZLogger`는 UPM 패키지(`com.cysharp.r3`·`com.cysharp.zlogger`)와 **버전을 맞춰야 합니다.** 한쪽만 올리면 런타임에 타입 불일치가 날 수 있습니다. 설치한 뒤에는 `Tools > Update Stack Packages`가 UPM과 NuGet을 함께 올립니다([에디터 메뉴](#에디터-메뉴) 참고).
 
 ### 4. 본 패키지 설치
 
@@ -214,6 +214,11 @@ Runtime/
 ├─ UI/         UIManager · SoundManager · VideoManager · FadeManager
 ├─ Utils/      SingletonGuard<T> · JsonLoader · GameCloser · ConsecutiveClickCounter · SystemCanvas
 └─ ThirdParty/ RuntimeInspector · LogViewer(Reporter)
+Editor/
+├─ PackageUpdater          — Tools > Update Stack Packages (스택 UPM 패키지와 NuGet 업데이트)
+├─ BuildMenu               — Build > Windows 빌드 후 보관 (빌드, 버전 관리용 zip 보관, 복사 폴더에 복사)
+├─ BuildMenuPreferences    — Edit > Preferences > HuliacDev Build (보관·복사 경로, PC별)
+└─ ShutdownScheduleEditorBuilder — Tools > Build Shutdown Scheduler Exe
 ```
 
 ### 주요 클래스 및 기능
@@ -496,6 +501,34 @@ public class GameLifetimeScope : RootLifetimeScope
 ```
 
 > `RootLifetimeScope`를 쓰지 않거나 `ConfigureCoreComponents`에서 `TemplateInputActions` 등록을 뺀 프로젝트는 `GameManagerBase`가 입력 액션을 직접 만들므로 이 override가 적용되지 않고, 포커스 복구 토글 키도 동작하지 않습니다(포커스 복구는 켜진 채로 동작). 이때 `alwaysOnTop`을 켜면 항상 위도 끌 수 없으므로 시작할 때 경고 로그가 남습니다.
+
+---
+
+## 에디터 메뉴
+
+### 스택 패키지 업데이트 (Tools > Update Stack Packages)
+
+이 템플릿 스택의 UPM 패키지(VContainer, UniTask, MessagePipe, R3, ZLogger, ZString, NuGetForUnity, MCP for Unity, 이 패키지)만 골라 최신으로 올리고, 이어서 NuGetForUnity 창의 **Updates** 탭에 뜨는 NuGet 패키지(정식 버전)를 모두 올립니다. URP·Input System·Addressables처럼 프로젝트가 버전을 고정한 UPM 패키지는 건드리지 않습니다.
+
+- UPM 패키지는 한 번의 요청으로 함께 올립니다. 하나씩 올리면 패키지가 바뀔 때마다 다시 컴파일되어 다음 요청이 "exclusive access" 오류로 실패하거나 남은 순서가 사라졌습니다.
+- UPM 업데이트로 다시 컴파일되더라도 NuGet 업데이트는 컴파일이 끝난 뒤 이어서 실행됩니다.
+- NuGetForUnity는 패키지를 다시 설치할 때 의존성을 최소 버전으로 다시 깔아, 먼저 올린 의존성이 도로 내려갈 수 있습니다(예: ZLogger 2.6.0을 설치하며 `System.IO.Hashing`이 8.0.0으로). 그래서 업데이트가 없을 때까지 최대 3번 올리고, 마지막에 한 번 더 확인합니다. 그래도 남으면 경고를 남깁니다.
+- NuGetForUnity가 없는 프로젝트에서는 NuGet 단계를 건너뜁니다.
+- 결과는 콘솔에 `[PackageUpdater]`로 남습니다. 업데이트 뒤에는 컴파일 오류와 테스트를 확인하세요.
+
+### 빌드와 보관 (Build > Windows 빌드 후 보관)
+
+Build Settings의 씬 목록과 **Development Build** 설정으로 Windows 64비트 빌드를 프로젝트의 `Build/` 폴더(`<Product Name>.exe`)에 만들고, 성공하면 이어서 아래를 합니다. 이전 빌드의 파일이 섞이지 않도록 빌드 전에 `Build/` 폴더를 비우므로, 이 폴더에는 다른 파일을 두지 않습니다(빌드한 앱이 실행 중이라 비우지 못하면 알리고 멈춥니다).
+
+1. **빌드 보관 폴더**가 정해져 있으면 `<보관 폴더>/<프로젝트 폴더 이름>/<YYMMDD>-<N>/`에 버전 관리용 zip(`<프로젝트 폴더 이름>_v<bundleVersion>.zip`)과 `BuildInfo.txt`(버전, 빌드 시각과 그날 몇 번째 빌드인지, git 브랜치·커밋, 커밋하지 않은 변경이 있었는지)를 둡니다. N은 그날 몇 번째로 보관한 빌드인지이며(예: `261103-1`, `261103-2`), 빌드마다 새 폴더를 만들어 이전 보관본을 덮어쓰지 않습니다.
+2. **복사 폴더**가 정해져 있고 그 폴더가 있으면(드라이브가 연결돼 있으면) '빌드 뒤 복사' 설정에 따라 묻거나 바로 `<복사 폴더>/<프로젝트 폴더 이름>/`에 빌드 폴더를 압축 없이 복사합니다(현장 PC로 옮길 빌드, 항상 최신 빌드만 둠). 복사 전에 `<복사 폴더>/<프로젝트 폴더 이름>/`을 비우므로 그 폴더에 따로 넣어 둔 파일도 지워집니다. 다른 프로그램이 그 폴더의 파일을 쓰고 있어 비우지 못하면 복사하지 않고 오류 로그를 남깁니다. 묻는 창에서 **다시 묻지 않음**을 체크하면 누른 버튼에 따라 '항상 복사'나 '복사 안 함'으로 바뀝니다. 보관이 실패해도 복사는 합니다.
+
+Unity가 함께 만드는 현장에 보내면 안 되는 폴더(`*_BurstDebugInformation_DoNotShip`, IL2CPP의 `*_BackUpThisFolder_ButDontShipItWithYourGame`)는 zip과 복사에서 모두 뺍니다.
+
+두 폴더와 '빌드 뒤 복사'(매번 묻기 / 항상 복사 / 복사 안 함)는 **Edit > Preferences > HuliacDev Build**(또는 **Build > 설정...**)에서 정합니다. 팀원·PC마다 다를 수 있어 프로젝트가 아니라 그 PC의 Unity 환경설정(EditorPrefs)에 저장되며, 그 PC의 모든 프로젝트가 같은 값을 씁니다. 보관 폴더가 정해지지 않았거나 찾을 수 없으면(드라이브가 연결되지 않음) 빌드 전에 설정 열기 / 보관 없이 빌드 / 취소 중에서 고릅니다. 두 경로는 저장소에 들어가지 않으므로, 저장소를 받은 팀원은 처음 빌드할 때 자기 경로를 정합니다.
+
+- 설치 태그는 붙이지 않습니다. 현장에 설치한 버전은 `BuildInfo.txt`의 커밋을 보고 따로 태그합니다.
+- 프로젝트의 `.gitignore`에 `/[Bb]uild/`가 있어야 빌드 결과가 git에 들어가지 않습니다.
 
 ---
 
