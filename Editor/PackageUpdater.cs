@@ -3,6 +3,12 @@ using UnityEditor;
 using UnityEditor.PackageManager;
 using UnityEditor.PackageManager.Requests;
 using UnityEngine;
+#if HULIACDEV_NUGETFORUNITY
+using System;
+using NugetForUnity;
+using NugetForUnity.Configuration;
+using NugetForUnity.Models;
+#endif
 
 namespace HuliacDev.Editor
 {
@@ -15,6 +21,11 @@ namespace HuliacDev.Editor
     /// <para>
     /// Git 패키지는 동일 URL로 재추가해 최신 커밋으로 갱신하고, 레지스트리 패키지는
     /// 현재 에디터와 호환되는 최신 버전(versions.latestCompatible)으로만 올린다.
+    /// </para>
+    /// <para>
+    /// UPM 패키지를 올린 뒤 NuGetForUnity가 설치된 프로젝트면 NuGet 창의 Updates 탭에 뜨는 패키지(정식 버전)도
+    /// 모두 올림. ZLogger·R3처럼 UPM 패키지는 Unity 연동 레이어이고 실제 구현 DLL은 NuGet에 있어, UPM 쪽만 올리면
+    /// 두 버전이 어긋나기 때문.
     /// </para>
     /// </summary>
     public static class PackageUpdater
@@ -37,11 +48,15 @@ namespace HuliacDev.Editor
             "com.huliacdev.template",           // 현재 템플릿
         };
 
+        /// <summary>
+        /// UPM 업데이트 뒤 NuGet 업데이트가 남아 있음을 도메인 리로드 너머로 전하는 SessionState 키.
+        /// UPM 패키지가 바뀌면 다시 컴파일되며 정적 상태가 사라지므로, 완료 콜백보다 리로드가 먼저 오면 이 값으로 이어서 실행함.
+        /// </summary>
+        const string PendingNugetUpdateKey = "HuliacDev.PackageUpdater.PendingNugetUpdate";
+
         static ListRequest _listRequest;
-        static Queue<string> _updateQueue;
-        static AddRequest _addRequest;
-        static int _total;
-        static int _done;
+        static AddAndRemoveRequest _addRequest;
+        static HashSet<string> _requestedNames;
 
         [MenuItem("Tools/Update Stack Packages")]
         static void Run()
@@ -50,6 +65,22 @@ namespace HuliacDev.Editor
             _listRequest = Client.List(offlineMode: false, includeIndirectDependencies: false);
             EditorApplication.update += WaitForList;
             EditorUtility.DisplayProgressBar("Package Updater", "패키지 목록 조회 중...", 0f);
+        }
+
+        /// <summary>
+        /// UPM 업데이트 중 도메인 리로드가 먼저 와서 NuGet 업데이트를 하지 못했으면, 리로드 뒤 이어서 실행함.
+        /// </summary>
+        [InitializeOnLoadMethod]
+        static void ResumePendingNugetUpdate()
+        {
+            if (!SessionState.GetBool(PendingNugetUpdateKey, false)) return;
+
+            EditorApplication.delayCall += () =>
+            {
+                Debug.Log("[PackageUpdater] UPM 업데이트 뒤 다시 컴파일되어, 남은 NuGet 패키지 업데이트를 이어서 실행합니다.");
+                UpdateNugetPackages();
+                EditorUtility.ClearProgressBar();
+            };
         }
 
         static void WaitForList()
@@ -64,7 +95,8 @@ namespace HuliacDev.Editor
                 return;
             }
 
-            _updateQueue = new Queue<string>();
+            List<string> packagesToAdd = new List<string>();
+            _requestedNames = new HashSet<string>();
 
             foreach (UnityEditor.PackageManager.PackageInfo pkg in _listRequest.Result)
             {
@@ -77,7 +109,8 @@ namespace HuliacDev.Editor
                 if (pkg.source == PackageSource.Git)
                 {
                     // packageId = "name@url" 형식 — 동일 URL로 재추가하면 최신 커밋으로 갱신됨
-                    _updateQueue.Enqueue(pkg.packageId);
+                    packagesToAdd.Add(pkg.packageId);
+                    _requestedNames.Add(pkg.name);
                     Debug.Log($"[PackageUpdater] Git 패키지 갱신 예정: {pkg.name}");
                 }
                 else
@@ -87,37 +120,27 @@ namespace HuliacDev.Editor
                     string target = pkg.versions.latestCompatible;
                     if (!string.IsNullOrEmpty(target) && target != pkg.version)
                     {
-                        _updateQueue.Enqueue($"{pkg.name}@{target}");
+                        packagesToAdd.Add($"{pkg.name}@{target}");
+                        _requestedNames.Add(pkg.name);
                         Debug.Log($"[PackageUpdater] 업데이트 예정: {pkg.name}  {pkg.version} → {target}");
                     }
                 }
             }
 
-            if (_updateQueue.Count == 0)
+            if (packagesToAdd.Count == 0)
             {
+                Debug.Log("[PackageUpdater] 대상 UPM 스택 패키지가 모두 최신 상태입니다.");
+                UpdateNugetPackages();
                 EditorUtility.ClearProgressBar();
-                Debug.Log("[PackageUpdater] 대상 스택 패키지가 모두 최신 상태입니다.");
                 return;
             }
 
-            _total = _updateQueue.Count;
-            _done = 0;
-            Debug.Log($"[PackageUpdater] 총 {_total}개 패키지 업데이트 시작");
-            ProcessNext();
-        }
-
-        static void ProcessNext()
-        {
-            if (_updateQueue.Count == 0)
-            {
-                EditorUtility.ClearProgressBar();
-                Debug.Log($"[PackageUpdater] 완료 ({_done}/{_total}개)");
-                return;
-            }
-
-            string id = _updateQueue.Dequeue();
-            EditorUtility.DisplayProgressBar("Package Updater", $"업데이트 중: {id}", (float)_done / _total);
-            _addRequest = Client.Add(id);
+            // 패키지마다 Client.Add를 부르면 하나가 끝날 때마다 다시 해석·컴파일되어, 다음 요청이 "exclusive access" 오류로
+            // 실패하거나 도메인 리로드로 남은 순서가 사라졌음. 한 번의 요청으로 모두 올려 해석·리로드를 한 번으로 줄임.
+            Debug.Log($"[PackageUpdater] UPM 패키지 {packagesToAdd.Count}개 업데이트 시작");
+            EditorUtility.DisplayProgressBar("Package Updater", $"UPM 패키지 {packagesToAdd.Count}개 업데이트 중...", 0.3f);
+            SessionState.SetBool(PendingNugetUpdateKey, true);
+            _addRequest = Client.AddAndRemove(packagesToAdd.ToArray());
             EditorApplication.update += WaitForAdd;
         }
 
@@ -128,15 +151,110 @@ namespace HuliacDev.Editor
 
             if (_addRequest.Status == StatusCode.Success)
             {
-                _done++;
-                Debug.Log($"[PackageUpdater] ✓ {_addRequest.Result.name}@{_addRequest.Result.version}");
+                foreach (UnityEditor.PackageManager.PackageInfo pkg in _addRequest.Result)
+                {
+                    if (_requestedNames.Contains(pkg.name))
+                    {
+                        Debug.Log($"[PackageUpdater] ✓ {pkg.name}@{pkg.version}");
+                    }
+                }
             }
             else
             {
-                Debug.LogWarning($"[PackageUpdater] 실패: {_addRequest.Error.message}");
+                Debug.LogWarning($"[PackageUpdater] UPM 업데이트 실패: {_addRequest.Error.message}");
             }
 
-            ProcessNext();
+            UpdateNugetPackages();
+            EditorUtility.ClearProgressBar();
         }
+
+#if HULIACDEV_NUGETFORUNITY
+        /// <summary>
+        /// NuGet 업데이트를 하는 최대 횟수. NuGetForUnity는 패키지를 다시 설치할 때 그 의존성을 nuspec의 최소 버전으로
+        /// 다시 깔아, 같은 차례에 먼저 올린 의존성이 도로 내려갈 수 있음(예: ZLogger 2.6.0을 설치하며 System.IO.Hashing 10.x → 8.0.0).
+        /// 업데이트가 없을 때까지 다시 확인해 최신으로 맞추되, 서로 내려 주며 끝나지 않는 경우를 막도록 업데이트 횟수를 둠.
+        /// </summary>
+        const int MaxNugetUpdatePasses = 3;
+#endif
+
+        /// <summary>
+        /// NuGetForUnity 창의 Updates 탭과 같은 기준(정식 버전 중 설치된 것보다 새 버전)으로 NuGet 패키지를 모두 올림.
+        /// NuGetForUnity가 없는 프로젝트에서는 건너뜀(asmdef versionDefines로 HULIACDEV_NUGETFORUNITY를 정의함).
+        /// </summary>
+        static void UpdateNugetPackages()
+        {
+            SessionState.SetBool(PendingNugetUpdateKey, false);
+
+#if HULIACDEV_NUGETFORUNITY
+            EditorUtility.DisplayProgressBar("Package Updater", "NuGet 패키지 업데이트 확인 중...", 0.8f);
+
+            try
+            {
+                int updatedCount = 0;
+                // 업데이트를 최대 MaxNugetUpdatePasses번 하고, 마지막 업데이트 뒤에도 한 번 더 확인함(확인은 최대 횟수 + 1번).
+                for (int pass = 0; pass <= MaxNugetUpdatePasses; pass++)
+                {
+                    List<INugetPackage> installed = new List<INugetPackage>(InstalledPackagesManager.InstalledPackages);
+                    List<INugetPackage> updates = FindNugetUpdates(installed);
+
+                    if (updates.Count == 0)
+                    {
+                        Debug.Log(updatedCount == 0
+                            ? "[PackageUpdater] NuGet 패키지가 모두 최신 상태입니다."
+                            : $"[PackageUpdater] NuGet 패키지 업데이트 완료(모두 {updatedCount}건)");
+                        return;
+                    }
+
+                    if (pass == MaxNugetUpdatePasses)
+                        break;
+
+                    NugetPackageUpdater.UpdateAll(updates, installed);
+                    updatedCount += updates.Count;
+                }
+
+                Debug.LogWarning($"[PackageUpdater] NuGet 업데이트를 {MaxNugetUpdatePasses}번 해도 남은 업데이트가 있습니다. NuGet > Manage NuGet Packages의 Updates 탭에서 확인하세요.");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[PackageUpdater] NuGet 패키지 업데이트 실패: {e}");
+            }
+#else
+            Debug.Log("[PackageUpdater] NuGetForUnity가 설치되어 있지 않아 NuGet 패키지 업데이트는 건너뜁니다.");
+#endif
+        }
+
+#if HULIACDEV_NUGETFORUNITY
+        /// <summary>설치된 것보다 새 정식 버전이 있는 NuGet 패키지를 찾아 로그로 남기고 돌려줌.</summary>
+        static List<INugetPackage> FindNugetUpdates(List<INugetPackage> installed)
+        {
+            List<INugetPackage> updates = new List<INugetPackage>();
+
+            foreach (INugetPackage update in ConfigurationManager.GetUpdates(installed))
+            {
+                INugetPackage current = FindInstalled(installed, update.Id);
+                if (current == null || current.PackageVersion >= update.PackageVersion)
+                    continue;
+
+                updates.Add(update);
+                Debug.Log($"[PackageUpdater] NuGet 업데이트: {update.Id}  {current.Version} → {update.Version}");
+            }
+
+            return updates;
+        }
+#endif
+
+#if HULIACDEV_NUGETFORUNITY
+        /// <summary>설치된 NuGet 패키지 중 같은 ID(대소문자 무시)를 찾음. 없으면 null.</summary>
+        static INugetPackage FindInstalled(List<INugetPackage> installed, string id)
+        {
+            foreach (INugetPackage package in installed)
+            {
+                if (string.Equals(package.Id, id, StringComparison.OrdinalIgnoreCase))
+                    return package;
+            }
+
+            return null;
+        }
+#endif
     }
 }
