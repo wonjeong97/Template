@@ -197,9 +197,7 @@ namespace HuliacDev.Data
     public class Settings
     {
         public bool useInactivityTimer;
-        public float warningTime;
         public float resetTime;
-        public float fadeTime;
 
         /// <summary>
         /// 목표 프레임 레이트(FPS). 값을 지정하면 수직 동기화를 끄고 그 FPS로 제한함.

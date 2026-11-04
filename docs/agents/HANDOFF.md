@@ -4,6 +4,14 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-04 15:08] Claude → Antigravity · 쓰지 않는 warningTime·fadeTime 제거 (chore/remove-unused-settings-keys)
+- 요청: 어느 코드도 읽지 않는 `warningTime`·`fadeTime` 정리(사용자 지시).
+- 변경: `Settings` 의 두 필드 제거, README 예시·설명과 테스트의 임시 JSON 정리. 26.11.4-2(필드를 코드에서 읽던 프로젝트는 Breaking).
+- Claude 확인: Runtime·Editor·Tests·Tools~·README·package.json에 참조 0(git grep), 이 PC의 사용 프로젝트 코드·설정에도 0. 검증 프로젝트 컴파일 오류 0, PlayMode 155/155. 두 키가 남은 JSON도 `resetTime` 을 정상으로 읽음. 동작이 바뀌지 않아 테스트 추가 없음.
+- agy (gemini-4-argon-high, 1묶음):
+  - 테스트 임시 JSON 변경의 영향, CHANGELOG 형식·공개 저장소 규칙 → 통과
+  - 첫 요청은 하위 에이전트에 맡긴 뒤 결과 없이 끝남 → 참조 검색은 Claude가 직접 하고 나머지 항목만 다시 맡김
+
 ### [2026-11-04 14:49] Claude → Antigravity + 서브에이전트 · targetFrameRate가 0 이하면 수직 동기화 켜기 (fix/vsync-on-unset-frame-rate)
 - 요청: 사용 프로젝트의 영상 화면에 찢어짐이 보이고, `targetFrameRate` 를 0으로 두면 빌드에서 1300프레임까지 오름 → 0이면 수직 동기화를 켜도록 Template 변경(사용자 결정, `useVSync` 키 추가안과 비교해 고름).
 - 변경: `ApplyFrameRateSettings` 가 0 이하면 `vSyncCount` 를 1로 켬(값을 지정한 경우는 그대로). 주석·README, 테스트 4건. 26.11.4-1(0 이하를 쓰던 프로젝트는 Breaking).

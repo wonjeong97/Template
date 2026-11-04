@@ -15,6 +15,7 @@
 
 ## 완료
 
+- [x] 어느 코드도 읽지 않아 `Settings.json` 에 적어도 효과가 없던 `Settings.warningTime`·`fadeTime` 제거 — 완료: 2026-11-04
 - [x] `targetFrameRate` 를 지정하면 수직 동기화가 꺼져 영상처럼 화면 전체가 움직이는 장면에 찢어짐이 보일 수 있고, 0 이하면 아무것도 바꾸지 않아 품질 레벨의 `vSyncCount` 가 0일 때 프레임 제한이 전혀 없던 것(빌드에서 1000프레임 이상). 0 이하면 수직 동기화를 켜도록 바꿈 — 완료: 2026-11-04 (#70)
 - [x] Build 메뉴 항목(Windows 빌드 후 보관, 설정...)과 빌드·압축·복사 중에 뜨는 대화상자·진행 표시·복사 확인 창이 한국어였던 것. 메뉴를 Build > Windows Build / Build > Setting으로, 창 문구를 영어로 바꿈(Preferences 화면과 BuildInfo.txt는 그대로) — 완료: 2026-11-03 (#69)
 - [x] 런타임 로그는 영어인데 에디터 메뉴(`[BuildMenu]`·`[PackageUpdater]`·`[ShutdownScheduleEditorBuilder]`) 콘솔 로그, Reporter 경고 한 줄, 작업 스케줄러 백업 스크립트 로그가 한국어로 섞여 있던 것. 영어로 통일(UI 문구와 BuildInfo.txt 항목 이름은 그대로) — 완료: 2026-11-03 (#68)
