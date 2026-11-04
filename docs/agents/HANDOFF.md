@@ -4,6 +4,18 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-04 14:49] Claude → Antigravity + 서브에이전트 · targetFrameRate가 0 이하면 수직 동기화 켜기 (fix/vsync-on-unset-frame-rate)
+- 요청: 사용 프로젝트의 영상 화면에 찢어짐이 보이고, `targetFrameRate` 를 0으로 두면 빌드에서 1300프레임까지 오름 → 0이면 수직 동기화를 켜도록 Template 변경(사용자 결정, `useVSync` 키 추가안과 비교해 고름).
+- 변경: `ApplyFrameRateSettings` 가 0 이하면 `vSyncCount` 를 1로 켬(값을 지정한 경우는 그대로). 주석·README, 테스트 4건. 26.11.4-1(0 이하를 쓰던 프로젝트는 Breaking).
+- Claude 확인: 검증 프로젝트 컴파일 오류 0. 고치기 전 새 테스트 3/4 실패(`vSyncCount` 기대 1, 실제 0), 고친 뒤 PlayMode 155/155. Play 중 바꾼 `vSyncCount` 는 Play를 끝내면 원래 값으로 돌아오고 `QualitySettings.asset` 해시도 그대로임. MCP PlayMode 실행으로 켜진 검증 프로젝트의 Enter Play Mode Options는 되돌림.
+- agy (gemini-4-argon-high, 1묶음):
+  - 문서(README·CHANGELOG·package.json)의 코드 일치·형식·공개 저장소 규칙 → 통과
+- 교차 검증 (agy gemini-4-argon-high + 서브에이전트, 1묶음):
+  - 두 경로와 대체 설정 경로, 코드 규칙, 테스트 타당성 → 둘 다 통과
+- PR 리뷰(Claude `/code-review`, 1건): 코드에서 넣은 `Application.targetFrameRate` 가 수직 동기화가 켜지면 무시된다는 안내가 Breaking에 없음 → 고침. 사용자 요청으로 적용 로그에 `VSync on`/`VSync off` 추가.
+- 재검증: agy(gemini-4-argon-high) 로그 문구·CHANGELOG 추가 문장 → 통과. PlayMode 155/155. 검증 프로젝트 Play에서 값 60은 `VSync off`·`vSyncCount` 0·제한 60, 값 0은 `VSync on`·`vSyncCount` 1을 로그와 실제 값으로 확인(설정은 되돌림).
+- 남은 것: 실제 프레임 제한과 찢어짐 해소는 스탠드얼론 빌드에서 아직 확인하지 않음(사용자가 빌드 확인을 건너뛰고 바로 수정하기로 함). 그래픽 드라이버가 수직 동기화를 강제로 끄면 프레임이 제한되지 않음.
+
 ### [2026-11-03 18:05] Claude → Antigravity · Build 메뉴와 빌드 중 창 영어로 (chore/english-build-menu)
 - 요청: Build 하위 메뉴를 "Windows Build", "Setting"으로, 빌드 중 압축·복사 때 뜨는 창도 영어로. Template만 바꾸고 버전만 올림(사용자 결정, 프로젝트 반영은 사용자가 함).
 - 변경: 메뉴 Build/Windows Build·Build/Setting, 빌드 대화상자(씬 없음, Build 폴더 비우기 실패, 보관 폴더 없음: Open Settings / Build Without Archiving / Cancel), 진행 표시(Archiving Build, Compressing, Copying Build), 복사 확인 창(Copy Build, Don't ask again, Copy / Skip). Preferences 화면 도움말의 메뉴 이름, README·package.json 설명의 메뉴·버튼 이름을 맞춤. Preferences 화면과 BuildInfo.txt 항목 이름은 그대로. 26.11.3-5(메뉴 경로 Breaking).
