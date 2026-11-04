@@ -11,7 +11,8 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 - agy (gemini-4-argon-high, 2묶음):
   - 설치 안내·프로젝트 스코프 예시·폴더 트리·클래스 표 → 통과
   - 예약 종료 절·Settings.json 절·공개 저장소 규칙 → 통과
-- 남은 것: `[Inject]` 지점의 소스 제너레이터 적용은 예전 확인 기록뿐이고, 검증 프로젝트에 제너레이터가 없어 다시 확인하지 못함(README에 그대로 적음). 새 설치 절차를 처음부터 따라 해 보지는 않음.
+- 추가 변경: 더 이상 다루지 않는 WebGL 내용을 README에서 삭제(사용자 지시). README에 WebGL 언급 0(grep), agy(gemini-4-argon-high) 다른 설명 유지·파일 끝 구조 → 통과.
+- 남은 것: `[Inject]` 지점의 소스 제너레이터 적용은 예전 확인 기록뿐이고, 검증 프로젝트에 제너레이터가 없어 다시 확인하지 못함(README에 그대로 적음). 새 설치 절차를 처음부터 따라 해 보지는 않음. 코드의 WebGL 분기는 그대로 둠.
 
 ### [2026-11-04 15:08] Claude → Antigravity · 쓰지 않는 warningTime·fadeTime 제거 (chore/remove-unused-settings-keys)
 - 요청: 어느 코드도 읽지 않는 `warningTime`·`fadeTime` 정리(사용자 지시).

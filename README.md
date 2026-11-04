@@ -4,7 +4,7 @@
 `Settings.json` 하나로 사운드·폰트·비활동 타이머·숨은 종료 버튼 같은 현장 설정을 제어하므로, 빌드 후에도 코드 수정 없이 기획 변경에 대응할 수 있습니다.
 
 - **Unity:** 2022.3 이상
-- **플랫폼:** Windows (주 타깃) / WebGL (기획 검수용 빌드)
+- **플랫폼:** Windows
 - **라이선스:** MIT
 
 ---
@@ -211,7 +211,7 @@ Runtime/
 │              AutoRestartWatchdog  — 비정상 종료·응답 없음 시 자동 재시작 (Windows)
 │              StateMachine · IState — 상태 머신
 ├─ Data/       Settings 스키마 + AppSettingsProvider
-├─ Hardware/   ArduinoManager       — 시리얼 통신 및 자동 재연결 (WebGL은 스텁)
+├─ Hardware/   ArduinoManager       — 시리얼 통신 및 자동 재연결
 ├─ Input/      TemplateInputActions
 ├─ Network/    NetworkStatusService — R3 기반 실시간 네트워크 모니터링
 │              ApiManagerBase       — 서버 상태 로깅 베이스
@@ -603,16 +603,3 @@ Unity가 함께 만드는 현장에 보내면 안 되는 폴더(`*_BurstDebugInf
 - `fonts`·`sounds`를 생략하면 등록되는 폰트·사운드가 없습니다. `sounds[].volume`을 생략하면 1.0입니다.
 - `fonts[].address`는 **Addressables 주소**이고, `sounds[].clipPath`는 **StreamingAssets 기준 상대 경로**입니다.
 - `fonts[].key`는 자유롭게 명명할 수 있으며 `TextSetting.fontName`에서 이 키로 참조합니다.
-
----
-
-## 플랫폼별 제약 (WebGL)
-
-WebGL 빌드는 기획 검수 목적이며 다음 기능이 동작하지 않습니다.
-
-| 기능 | WebGL 동작 |
-|---|---|
-| `ArduinoManager` (시리얼 통신) | 스텁. 호출은 컴파일되지만 경고 로그만 출력 |
-| ZLogger 파일 출력 | 비활성 (브라우저 콘솔로만 출력) |
-| `GameCloser`의 앱 종료 | 안내 로그만 출력 (브라우저는 `Application.Quit()` 무시) |
-| `JsonLoader.SaveAsync` | StreamingAssets가 읽기 전용이라 저장 불가 |
