@@ -8,6 +8,7 @@
 
 ## 할 일
 
+- [ ] `ApiManagerBase` 가 `wantsToQuit` 으로 종료를 보류했다가 인수 없는 `Application.Quit()` 으로 다시 끝내, `Application.Quit(코드)` 의 종료 코드가 0으로 바뀜. 재현: `autoRestart` 를 켠 빌드에서 `Application.Quit(1)` 을 부르면 감시 스크립트가 일부러 끈 것으로 보고 다시 켜지 않음. 앱이 스스로 다시 켜져야 할 때(모니터 재연결 등) 프로세스를 직접 끝내야 해서 종료 로그도 못 보냄. 보류 전 종료 코드를 유지하거나 재시작 요청 API를 두기 — 발견일: 2026-11-04
 - [ ] `VideoManager.PrepareAndPlayAsync`가 준비 성공·실패를 돌려주지 않아, 호출부가 재생이 시작됐는지 알려면 `VideoPlayer.isPrepared`·`isPlaying`을 다시 확인해야 함. 준비 중 오류와 준비 완료가 같은 프레임에 오면 Play하지 않았는데도 `isPrepared`가 true라 호출부가 성공으로 볼 수 있음. 성공 여부(또는 실패 사유)를 돌려주도록 바꾸기 — 발견일: 2026-10-29
 - [ ] README 설치 3단계가 Api Compatibility Level을 `.NET Standard 2.1`로 두라고 안내하지만, `ArduinoManager`가 쓰는 `System.IO.Ports`(SerialPort)는 Unity의 `.NET Framework` 프로필에만 있어 안내대로 설정하면 Windows 빌드에서 컴파일되지 않음. 안내를 `.NET Framework`로 고치고, NuGet DLL도 이 설정에서 로드된다는 점을 함께 적기 — 발견일: 2026-11-03
 
