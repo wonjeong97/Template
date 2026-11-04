@@ -1,7 +1,7 @@
 # HuliacDev Template
 
 전시/키오스크형 Unity 앱을 위한 기본 템플릿 패키지입니다.
-`Settings.json` 하나로 UI 레이아웃·사운드·종료 조건을 제어하므로, 빌드 후에도 코드 수정 없이 기획 변경에 대응할 수 있습니다.
+`Settings.json` 하나로 사운드·폰트·비활동 타이머·숨은 종료 버튼 같은 현장 설정을 제어하므로, 빌드 후에도 코드 수정 없이 기획 변경에 대응할 수 있습니다.
 
 - **Unity:** 2022.3 이상
 - **플랫폼:** Windows (주 타깃) / WebGL (기획 검수용 빌드)
@@ -50,7 +50,7 @@ Package Manager의 **Add package by name**으로 아래를 설치합니다. 괄�
 > - 위 7개는 스코프 레지스트리 없이는 해석에 실패하므로 `dependencies`에 넣지 않고 수동 설치로 분리했습니다. **1번을 건너뛰면 2번이 실패합니다.**
 > - `com.cysharp.messagepipe.vcontainer`를 빠뜨리면 `RootLifetimeScope`의 `builder.RegisterMessagePipe()`가 컴파일되지 않습니다.
 > - `com.cysharp.zstring`을 빠뜨리면 `JsonLoader`·`SoundManager`의 `ZString.Concat`이 컴파일되지 않습니다.
-> - Unity 레지스트리 의존성(Addressables, Input System, uGUI, 각종 모듈)은 이 패키지의 `dependencies`에 선언되어 있어 자동 설치됩니다.
+> - Unity 레지스트리 의존성(Addressables, Input System, uGUI, TextMeshPro, Test Framework, 각종 모듈)은 이 패키지의 `dependencies`에 선언되어 있어 자동 설치됩니다.
 
 ### 3. NuGet 코어 패키지 설치 (NuGetForUnity)
 
@@ -73,10 +73,20 @@ ZLogger와 R3는 UPM 패키지가 Unity 연동 레이어만 제공하고, **실�
 | `System.ComponentModel.Annotations` | 5.0.0 |
 
 > - 위는 **직접 설치**해야 하는 목록입니다. `Microsoft.Extensions.Options`, `System.IO.Pipelines` 등 나머지는 의존 관계로 자동 설치됩니다.
-> - **Player Settings → Api Compatibility Level**을 `.NET Standard 2.1`로 두어야 위 DLL들이 로드됩니다. `Microsoft.Extensions.*` 10.x도 netstandard 2.0/2.1 타깃을 제공하므로 Unity 2022.3에서 동작합니다.
+> - **Player Settings → Api Compatibility Level**을 `.NET Framework`로 둡니다. `ArduinoManager`가 쓰는 `System.IO.Ports`(SerialPort)가 이 프로필에만 있어, `.NET Standard 2.1`로 두면 Windows 빌드에서 컴파일되지 않습니다. 위 DLL들은 이 설정에서도 로드되며, `Microsoft.Extensions.*` 10.x도 netstandard 2.0/2.1 타깃을 제공하므로 Unity 2022.3에서 동작합니다.
 > - `R3`·`ZLogger`는 UPM 패키지(`com.cysharp.r3`·`com.cysharp.zlogger`)와 **버전을 맞춰야 합니다.** 한쪽만 올리면 런타임에 타입 불일치가 날 수 있습니다. 설치한 뒤에는 `Tools > Update Stack Packages`가 UPM과 NuGet을 함께 올립니다([에디터 메뉴](#에디터-메뉴) 참고).
 
-### 4. 본 패키지 설치
+### 4. DOTween 설치
+
+`FadeManager`·`SoundManager`의 페이드가 DOTween을 씁니다. DOTween은 UPM 배포가 없어 `dependencies`로 선언할 수 없으므로 프로젝트마다 직접 설치합니다.
+
+1. 에셋스토어에서 DOTween(무료판)을 임포트하고 `Tools > Demigiant > DOTween Utility Panel`에서 셋업합니다.
+2. 같은 패널의 **Create ASMDEF**로 `DOTween.Modules` 어셈블리를 만듭니다.
+3. **Player Settings → Scripting Define Symbols**에 `UNITASK_DOTWEEN_SUPPORT`를 추가합니다.
+
+> 2번과 3번을 빠뜨리면 이 패키지의 트윈 코드(`ToUniTask(TweenCancelBehaviour...)`)가 컴파일되지 않습니다.
+
+### 5. 본 패키지 설치
 
 Package Manager → **Add package from git URL** 로 이 저장소 주소를 입력합니다.
 로컬 개발 중이라면 `manifest.json`에 파일 참조로 걸어도 됩니다.
@@ -85,7 +95,7 @@ Package Manager → **Add package from git URL** 로 이 저장소 주소를 입
 "com.huliacdev.template": "file:C:/Projects/Template"
 ```
 
-### 5. VContainer 소스 제너레이터 (선택, 권장)
+### 6. VContainer 소스 제너레이터 (선택, 권장)
 
 **하지 않아도 정상 동작합니다.** 다만 DI 주입이 런타임 리플렉션으로 처리됩니다.
 
@@ -126,7 +136,7 @@ Debug.Log(injector.GetType().Name);
 // 폴백 중   -> ReflectionInjector
 ```
 
-검증 환경(Unity 2022.3.62f3 / VContainer 1.19.0)에서 템플릿의 `[Inject]` 지점 8개 전부 생성분으로 확인했습니다.
+검증 환경(Unity 2022.3.62f3 / VContainer 1.19.0)에서 당시 템플릿의 `[Inject]` 지점이 모두 생성분으로 나오는 것을 확인했습니다. 그 뒤에 추가된 클래스는 다시 확인하지 않았으므로, 적용한 프로젝트에서 위 코드로 확인하세요.
 
 ---
 
@@ -134,7 +144,7 @@ Debug.Log(injector.GetType().Name);
 
 이 패키지를 **개발·수정할 때** 쓰는 별도 Unity 프로젝트를 만드는 방법입니다. 패키지 자체는 UPM 패키지라 Unity로 직접 열 수 없으므로, 이를 `file:` 참조로 물린 프로젝트가 필요합니다.
 
-위 설치 1~5단계를 마친 뒤 아래를 추가합니다.
+위 설치 1~6단계를 마친 뒤 아래를 추가합니다.
 
 ### 테스트 노출
 
@@ -152,8 +162,8 @@ Test Runner는 기본적으로 `Assets/` 안의 테스트만 스캔합니다. �
 SampleScene
 ├─ GameManager        : GameManagerBase를 상속한 프로젝트 고유 클래스
 ├─ TestLifetimeScope  : RootLifetimeScope를 상속한 씬 스코프
-├─ SystemCanvas       : SystemCanvas
-│   └─ (하위) GameCloser  : Button + Image + GameCloser
+├─ SystemCanvas       : Runtime/Prefabs/SystemCanvas.prefab (필수)
+│   └─ (하위) GameCloser  : Button + Image + GameCloser (필수)
 ├─ Reporter           : Reporter + ReporterMessageReceiver
 ├─ Managers           : UIManager + SoundManager + VideoManager
 └─ EventSystem        : InputSystemUIInputModule
@@ -164,19 +174,14 @@ public class TestLifetimeScope : RootLifetimeScope
 {
     protected override void Configure(IContainerBuilder builder)
     {
-        base.Configure(builder);   // 로깅 / MessagePipe / AppSettingsProvider
+        base.Configure(builder);   // 로깅 / MessagePipe / 설정 / 입력 / 공통 컴포넌트 / 씬에 있는 선택 매니저
 
         builder.RegisterComponentInHierarchy<GameManager>();
-        builder.RegisterComponentInHierarchy<SystemCanvas>();
-        builder.RegisterComponentInHierarchy<GameCloser>();
-
-        // UIManager는 VideoManager를 주입받으므로 VideoManager도 반드시 함께 등록해야 함
-        builder.RegisterComponentInHierarchy<VideoManager>();
-        builder.RegisterComponentInHierarchy<SoundManager>();
-        builder.RegisterComponentInHierarchy<UIManager>();
     }
 }
 ```
+
+> `RootLifetimeScope`가 `SystemCanvas`·`GameCloser`를 등록하고, 씬에 있는 `FadeManager`·`UIManager`·`SoundManager`·`VideoManager`·`ArduinoManager`·`ApiManagerBase`·`InactivityTimer`·`ShutdownScheduler`도 자동으로 찾아 등록하므로, 프로젝트 스코프에서는 `GameManager`만 등록합니다. `UIManager`는 `VideoManager`를 주입받으므로 씬에 함께 두어야 합니다.
 
 > **소비자를 전부 올려두는 것이 중요합니다.** `Settings.json`을 요청하는 컴포넌트가 여럿이어야 같은 프레임에 동시 요청이 발생하고, 그 경합에서만 드러나는 결함을 잡을 수 있습니다. 실제로 `AppSettingsProvider`의 동시 요청 예외가 이 구성 덕분에 발견되었습니다. 소비자를 하나만 올리면 해당 유형의 문제는 재현되지 않습니다.
 
@@ -184,11 +189,11 @@ public class TestLifetimeScope : RootLifetimeScope
 
 폰트·오디오·비디오는 대응 에셋이 있어야 로드 경로가 실행됩니다. 없으면 설정 로드까지만 확인됩니다.
 
-| 대상 | 준비물 | `Settings.json` 항목 |
+| 대상 | 준비물 | 설정 항목 |
 |---|---|---|
-| 폰트 | `.ttf`를 Addressable로 등록하고 주소 지정 | `fonts[].address` |
-| 오디오 | `StreamingAssets/`에 `.wav`/`.mp3`/`.ogg` | `sounds[].clipPath` |
-| 비디오 | `StreamingAssets/`에 `.mp4` | `VideoSetting.fileName` |
+| 폰트 | `.ttf`를 Addressable로 등록하고 주소 지정 | `Settings.json`의 `fonts[].address` |
+| 오디오 | `StreamingAssets/`에 `.wav`/`.mp3`/`.ogg` | `Settings.json`의 `sounds[].clipPath` |
+| 비디오 | `StreamingAssets/`에 `.mp4` | `UIManager.SetVideo`에 넘기는 `VideoSetting.fileName` |
 
 > Addressables는 Play Mode Script를 **Use Asset Database (fastest)** 로 두면 콘텐츠 빌드 없이 동작합니다.
 
@@ -204,21 +209,29 @@ Runtime/
 │              ShutdownScheduler    — 자동 종료 스케줄러
 │              WindowFocusRestorer  — 포커스를 잃은 앱 창 복구·항상 위 (Windows)
 │              AutoRestartWatchdog  — 비정상 종료·응답 없음 시 자동 재시작 (Windows)
+│              StateMachine · IState — 상태 머신
 ├─ Data/       Settings 스키마 + AppSettingsProvider
 ├─ Hardware/   ArduinoManager       — 시리얼 통신 및 자동 재연결 (WebGL은 스텁)
 ├─ Input/      TemplateInputActions
-├─ Logging/    LogRetentionService  — 로그 파일 회전 및 만료 정리
 ├─ Network/    NetworkStatusService — R3 기반 실시간 네트워크 모니터링
 │              ApiManagerBase       — 서버 상태 로깅 베이스
 │              ApiRetryUtil         — 네트워크 예외 격리 재시도
+│              PacketUtility        — 바이너리 패킷과 구조체 변환
+├─ Prefabs/    SystemCanvas         — 숨은 종료 버튼이 들어 있는 시스템 캔버스
 ├─ UI/         UIManager · SoundManager · VideoManager · FadeManager
 ├─ Utils/      SingletonGuard<T> · JsonLoader · GameCloser · ConsecutiveClickCounter · SystemCanvas
+│              LogRetentionService  — 로그 파일 회전 및 만료 정리
 └─ ThirdParty/ RuntimeInspector · LogViewer(Reporter)
 Editor/
 ├─ PackageUpdater          — Tools > Update Stack Packages (스택 UPM 패키지와 NuGet 업데이트)
 ├─ BuildMenu               — Build > Windows Build (빌드, 버전 관리용 zip 보관, 복사 폴더에 복사)
 ├─ BuildMenuPreferences    — Edit > Preferences > HuliacDev Build (보관·복사 경로, PC별)
+├─ BuildCopyPromptWindow   — 빌드 뒤 복사 확인 창
 └─ ShutdownScheduleEditorBuilder — Tools > Build Shutdown Scheduler Exe
+Tools~/
+└─ ShutdownScheduleEditor  — ShutdownSettings.json 편집 도구 (독립 Windows 프로그램)
+Tests/
+└─ Runtime/                — PlayMode 테스트
 ```
 
 ### 주요 클래스 및 기능
@@ -230,6 +243,7 @@ Editor/
 | | `ShutdownScheduler` | 일별/요일별 자동 종료 스케줄링 및 사전 알림(`BeforeShutdownEvent`) 발행 |
 | | `WindowFocusRestorer` | 앱 창이 포커스를 잃으면 다시 앞으로 가져와 키보드형 스캐너 입력 유지, 선택적으로 창을 항상 위로 둠 (Windows 스탠드얼론, `F` 키로 끄고 켬) |
 | | `AutoRestartWatchdog` | 크래시·강제 종료·응답 없음으로 앱이 끝나면 숨은 감시 스크립트가 다시 실행, 정상 종료(숨은 종료 버튼·예약 종료·창 닫기)는 다시 켜지 않음 (Windows 스탠드얼론, `autoRestart`로 켬) |
+| | `StateMachine<TContext>` | `IState<TContext>` 기반 상태 머신. 전환할 때 상태를 새로 만들지 않고 미리 만든 인스턴스의 참조만 바꿈 |
 | **UI & Media** | `UIManager` | uGUI/TextMeshPro 비동기 폰트 프리로드/일괄 적용, 텍스처 VRAM 압축(`compress`) 제어 |
 | | `FadeManager` | 화면 페이드 인/아웃(DOTween/UniTask), 커스텀 색상(`Color? color`) 및 `SortingOrder` 제어 |
 | | `SoundManager` | BGM/SFX 비동기 재생, 미리 불러오기(`PreloadAsync`), 마스터/BGM/SFX 개별 볼륨 및 음소거(`Mute`), DOTween 페이드 충돌 방어 |
@@ -237,6 +251,7 @@ Editor/
 | **Network** | `NetworkStatusService` | R3 기반 실시간 네트워크 도달성/끊김/복구 모니터링, Windows의 인터넷 판정 반영 (오프라인 키오스크 초기 알림 억제) |
 | | `ApiManagerBase` | 시작/종료/비활동/외부 API 호출 이력 사내 서버 전송 추상 베이스 클래스 |
 | | `ApiRetryUtil` | 고정 간격 재시도 및 소켓/DNS 네트워크 예외 격리를 지원하는 WebRequest 안정적 재시도, 응답 본문 반환(`GetTextWithRetryAsync`), 인터넷이 없으면 전송 생략 |
+| | `PacketUtility` | 바이너리 패킷과 구조체 변환(`FromBytes<T>`, `ToBytes<T>`, `GetPacketSize<T>`) |
 | **Logging** | `LogRetentionService` | 일별 로그 파일 회전(`AddZLoggerRollingFile`) 및 30일 보관 주기 만료 파일 자동 정리 |
 | **Hardware** | `ArduinoManager` | 시리얼 통신, 읽기 스레드 예외 격리 및 메인 스레드 마샬링 기반 자동 재연결(`AutoReconnect`) |
 | **Data & Utils**| `AppSettingsProvider` | `Settings.json` 단일 로드/캐싱 및 런타임 핫 리로드(`ReloadAsync`) 지원, 읽기 실패 시 비활동 타이머를 켠 대체 설정 사용 |
@@ -250,7 +265,7 @@ Editor/
 - **코루틴 대신 UniTask** — 파일 I/O와 연출 로직 전부 async. 프레임 드랍과 GC 할당을 줄입니다.
 - **`Settings.json` 단일 로드** — `AppSettingsProvider`가 로드를 일원화하여 공유합니다. 매니저가 개별 로드하지 않습니다.
 - **로깅은 ZLogger** — `Debug.Log` 대신 주입받은 `ILogger<T>`를 사용합니다.
-- **리플렉션 최소화** — 런타임 코드에 `System.Reflection` 직접 사용이 없습니다. DI 주입도 소스 제너레이터로 대체할 수 있습니다([설치 5단계](#5-vcontainer-소스-제너레이터-선택-권장)). 인스펙터 `UnityEvent` 바인딩 대신 코드로 직접 연결하는 것(`GameCloser`)도 같은 맥락입니다.
+- **리플렉션 최소화** — 런타임 코드에 `System.Reflection` 직접 사용이 없습니다. DI 주입도 소스 제너레이터로 대체할 수 있습니다([설치 6단계](#6-vcontainer-소스-제너레이터-선택-권장)). 인스펙터 `UnityEvent` 바인딩 대신 코드로 직접 연결하는 것(`GameCloser`)도 같은 맥락입니다.
 
 > **예외:** `ThirdParty/Plugins/RuntimeInspector`는 런타임 필드 조사가 존재 이유이므로 리플렉션을 사용합니다.
 > 디버그 전용이라 릴리즈 빌드에서 제외하면 해당 비용도 사라집니다.
@@ -277,7 +292,7 @@ public class GameManager : GameManagerBase
         // 프로젝트 고유 시작 로직
     }
 
-    protected override void OnSettingsLoaded(AppSettings settings)
+    protected override void OnSettingsLoaded(Settings loadedSettings)
     {
         // 설정 로드 완료 직후 초기화 로직
     }
@@ -472,6 +487,16 @@ if (result.isSuccess)
 - 감시 스크립트만 작업 관리자에서 끄면 그 앱 실행 동안에는 감시가 없습니다. 다음에 앱이 시작될 때 다시 띄웁니다.
 - Windows 스탠드얼론 빌드에서만 동작하며, 에디터에서는 띄우지 않습니다. 기능을 아예 빼려면 `ConfigureAutoRestart`를 빈 본문으로 override합니다.
 
+### 예약 종료 (ShutdownScheduler)
+
+`StreamingAssets/ShutdownSettings.json`(`Settings.json`과 별개 파일)에 적은 시각이 되면 Windows `shutdown` 명령으로 PC 종료를 예약하고 앱을 정상 종료합니다. 씬에 `ShutdownScheduler`를 두면 `RootLifetimeScope`가 자동으로 찾아 등록하고, 두지 않으면 동작하지 않습니다.
+
+- 예정 시각은 기본 15초마다 확인합니다(인스펙터의 `checkIntervalSeconds`). 시각이 되면 `BeforeShutdownEvent`를 발행하므로, 페이드아웃 같은 마무리는 이 이벤트를 구독해 연결합니다.
+- 요일별 기본 스케줄이 있고, `dateOverrides`에 등록한 날짜는 그날의 요일 스케줄 대신 적용됩니다.
+- `shutdownArguments`가 비어 있으면 `-s -f -t 45`(45초 뒤 강제 종료)를 씁니다. 지연 시간은 종료 로그를 보낼 여유입니다.
+- 예정 시각이 지난 뒤에 앱을 켜면 그날은 건너뜁니다. 켜자마자 다시 꺼지는 것을 막기 위함입니다.
+- 파일은 `Tools > Build Shutdown Scheduler Exe`로 만든 편집 도구로 고칩니다. 메뉴를 실행하면 도구를 게시해 현재 프로젝트의 `StreamingAssets`로 복사하며, 약 150MB라 git에 커밋하지 않습니다. 파일 형식과 앱이 멈췄을 때를 대비한 작업 스케줄러 백업은 `Tools~/ShutdownScheduleEditor/README.md`를 참고하세요.
+
 ### 단축키 (기본 제공)
 
 | 키 | 동작 (System 맵 액션) |
@@ -547,6 +572,7 @@ Unity가 함께 만드는 현장에 보내면 안 되는 폴더(`*_BurstDebugInf
   "focusRestoreRetryInterval": 3,
   "alwaysOnTop": false,
   "autoRestart": { "enabled": true, "hangRestartSeconds": 60, "restartDelaySeconds": 5 },
+  "apiUrl": "https://example.com/api/log?device=1&message=",
   "closeSetting": {
     "position": { "x": 0, "y": 1 },
     "numToClose": 10,
@@ -564,13 +590,17 @@ Unity가 함께 만드는 현장에 보내면 안 되는 폴더(`*_BurstDebugInf
 }
 ```
 
-- `Settings.json`을 읽지 못하면(파일 없음, 빈 파일, 끝 쉼표 같은 형식 오류) 오류 로그를 남기고 **비활동 타이머만 켠 대체 설정**(`resetTime` 90초, `AppSettingsProvider.FallbackResetTimeSeconds`)으로 동작합니다. 효과음·폰트·`closeSetting`·`alwaysOnTop`은 적용되지 않으므로, 콘솔이나 로그 파일에 "Failed to load Settings.json"이 보이면 파일을 고치고 앱을 다시 시작하세요. 이때 숨은 종료 버튼은 `SystemCanvas` 프리팹 기본값(좌상단 150x150, 투명, 3초 안에 10번)으로 동작합니다.
-- `useInactivityTimer`가 `true`이고 `resetTime`(초)이 0보다 크면 `InactivityTimer`가 활성화됩니다.
+- 키를 생략해도 오류는 나지 않고 `false`, `0`, 빈 값으로 읽히며, 각 키의 동작은 아래와 같습니다. 모르는 키는 무시합니다. 키 이름은 대소문자를 구분하므로 `ResetTime`처럼 잘못 적으면 오류 없이 생략한 것과 같습니다.
+- `Settings.json`을 읽지 못하면(파일 없음, 빈 파일, 끝 쉼표 같은 형식 오류) 오류 로그를 남기고 **비활동 타이머만 켠 대체 설정**(`resetTime` 90초, `AppSettingsProvider.FallbackResetTimeSeconds`)으로 동작합니다. 효과음·폰트·`closeSetting`·`alwaysOnTop`·`autoRestart`·`apiUrl`은 적용되지 않고 `targetFrameRate`도 값이 없어 수직 동기화가 켜지므로, 콘솔이나 로그 파일에 "Failed to load Settings.json"이 보이면 파일을 고치고 앱을 다시 시작하세요. 이때 숨은 종료 버튼은 `SystemCanvas` 프리팹 기본값(좌상단 150x150, 투명, 3초 안에 10번)으로 동작합니다.
+- `useInactivityTimer`가 `true`이고 `resetTime`(초)이 0보다 크면 `InactivityTimer`가 활성화됩니다. 둘 중 하나라도 생략하면 꺼집니다(`useInactivityTimer`만 켜고 `resetTime`을 생략하면 경고 로그가 남습니다).
 - `targetFrameRate`는 값을 지정하면 `vSyncCount`를 0으로 끄고 해당 FPS로 제한합니다. 0 이하(또는 생략)면 `vSyncCount`를 1로 켜서 프레임을 고정하지 않고 모니터 주사율을 따르며, 이때 품질 레벨의 `vSyncCount`는 쓰지 않습니다. 수직 동기화가 꺼져 있으면 영상처럼 화면 전체가 움직이는 장면에서 찢어짐이 보일 수 있으므로, 이런 앱은 0을 쓰세요. 고주사율 모니터에서는 0일 때 그만큼 더 많이 그리므로, 찢어짐보다 발열·전력 소모가 더 중요하면 30~60 사이 값을 지정하세요. 수직 동기화가 켜져 있으면 `Application.targetFrameRate`가 무시되어 다른 제한이 없으므로, 그래픽 드라이버가 수직 동기화를 강제로 끄면 프레임이 제한되지 않습니다.
 - `focusRestoreDelay`(초)는 포커스를 잃은 뒤 첫 복구 시도까지 기다리는 시간, `focusRestoreRetryInterval`(초)은 포커스가 돌아오지 않았을 때 다시 시도하는 간격입니다. 0 이하(또는 생략)면 기본값 3초를 쓰고, 1초 미만 양수는 1초로 올려 적용합니다. 기능을 켜고 끄는 키는 Settings.json에 없고 `F` 키로 전환합니다([창 포커스 복구](#창-포커스-복구-windowfocusrestorer-windows-전용) 참고).
 - `alwaysOnTop`이 `true`면 Windows 스탠드얼론 빌드에서 앱 창을 항상 위로 둡니다. 생략하면 `false`(끔)이며, 점검할 때는 `F` 키로 포커스 복구와 함께 끕니다([항상 위](#항상-위-alwaysontop-선택) 참고).
 - `autoRestart.enabled`가 `true`면 Windows 스탠드얼론 빌드에서 크래시·강제 종료·응답 없음 뒤 앱을 다시 켭니다. 생략하면 꺼짐입니다. `hangRestartSeconds`는 생략하면 60초, 0이면 응답 없음 감지를 끄고, 10초 미만은 10초로 올립니다. `restartDelaySeconds`는 0 이하(또는 생략)면 5초, 1초 미만은 1초로 올리고 600초보다 크면 600초로 줄입니다([자동 재시작](#자동-재시작-autorestartwatchdog-windows-전용) 참고).
+- `apiUrl`은 `ApiManagerBase`가 로그를 보낼 서버 주소입니다. `message=`까지 포함한 전체 주소를 적으면 로그 내용을 뒤에 이어 붙여 GET으로 보냅니다. 생략하면 보내지 않습니다.
+- `closeSetting.numToClose`를 생략하거나 0 이하로 적으면 `closeSetting` 전체를 무시하고 `GameCloser` 인스펙터 값을 씁니다. `position`·`resetClickTime`·`imageAlpha`는 생략한 항목만 인스펙터 값을 유지합니다.
 - `closeSetting.position`은 **정규화 좌표(0~1)** 입니다. `(0,0)`이 좌하단, `(1,1)`이 우상단.
+- `fonts`·`sounds`를 생략하면 등록되는 폰트·사운드가 없습니다. `sounds[].volume`을 생략하면 1.0입니다.
 - `fonts[].address`는 **Addressables 주소**이고, `sounds[].clipPath`는 **StreamingAssets 기준 상대 경로**입니다.
 - `fonts[].key`는 자유롭게 명명할 수 있으며 `TextSetting.fontName`에서 이 키로 참조합니다.
 

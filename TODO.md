@@ -11,10 +11,10 @@
 - [ ] 앱이 `AutoRestartWatchdog` 가 떠 있는지 알 방법이 없어, 설정만 보고 일부러 0이 아닌 코드로 끝내면 감시 실행이 실패했거나 아직 앱을 잡기 전일 때 앱이 꺼진 채 남음. 재현: 앱 시작 직후(감시 PowerShell이 앱 핸들을 열기 전) 0이 아닌 코드로 끝냄. 감시 상태를 알려 주는 API를 두기 — 발견일: 2026-11-04
 - [ ] `ApiManagerBase` 가 `wantsToQuit` 으로 종료를 보류했다가 인수 없는 `Application.Quit()` 으로 다시 끝내, `Application.Quit(코드)` 의 종료 코드가 0으로 바뀜. 재현: `autoRestart` 를 켠 빌드에서 `Application.Quit(1)` 을 부르면 감시 스크립트가 일부러 끈 것으로 보고 다시 켜지 않음. 앱이 스스로 다시 켜져야 할 때(모니터 재연결 등) 프로세스를 직접 끝내야 해서 종료 로그도 못 보냄. 보류 전 종료 코드를 유지하거나 재시작 요청 API를 두기 — 발견일: 2026-11-04
 - [ ] `VideoManager.PrepareAndPlayAsync`가 준비 성공·실패를 돌려주지 않아, 호출부가 재생이 시작됐는지 알려면 `VideoPlayer.isPrepared`·`isPlaying`을 다시 확인해야 함. 준비 중 오류와 준비 완료가 같은 프레임에 오면 Play하지 않았는데도 `isPrepared`가 true라 호출부가 성공으로 볼 수 있음. 성공 여부(또는 실패 사유)를 돌려주도록 바꾸기 — 발견일: 2026-10-29
-- [ ] README 설치 3단계가 Api Compatibility Level을 `.NET Standard 2.1`로 두라고 안내하지만, `ArduinoManager`가 쓰는 `System.IO.Ports`(SerialPort)는 Unity의 `.NET Framework` 프로필에만 있어 안내대로 설정하면 Windows 빌드에서 컴파일되지 않음. 안내를 `.NET Framework`로 고치고, NuGet DLL도 이 설정에서 로드된다는 점을 함께 적기 — 발견일: 2026-11-03
 
 ## 완료
 
+- [x] README를 코드와 대조해 정리: Api Compatibility Level 안내를 `.NET Framework`로, 빠져 있던 DOTween 설치 단계와 예약 종료·`apiUrl` 설명 추가, 없는 `Runtime/Logging` 폴더와 `AppSettings` 타입, 프로젝트 스코프 예시, 키를 생략했을 때의 동작 등 수정 — 완료: 2026-11-04
 - [x] 어느 코드도 읽지 않아 `Settings.json` 에 적어도 효과가 없던 `Settings.warningTime`·`fadeTime` 제거 — 완료: 2026-11-04 (#71)
 - [x] `targetFrameRate` 를 지정하면 수직 동기화가 꺼져 영상처럼 화면 전체가 움직이는 장면에 찢어짐이 보일 수 있고, 0 이하면 아무것도 바꾸지 않아 품질 레벨의 `vSyncCount` 가 0일 때 프레임 제한이 전혀 없던 것(빌드에서 1000프레임 이상). 0 이하면 수직 동기화를 켜도록 바꿈 — 완료: 2026-11-04 (#70)
 - [x] Build 메뉴 항목(Windows 빌드 후 보관, 설정...)과 빌드·압축·복사 중에 뜨는 대화상자·진행 표시·복사 확인 창이 한국어였던 것. 메뉴를 Build > Windows Build / Build > Setting으로, 창 문구를 영어로 바꿈(Preferences 화면과 BuildInfo.txt는 그대로) — 완료: 2026-11-03 (#69)

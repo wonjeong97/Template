@@ -4,6 +4,15 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-04 15:23] Claude → Antigravity · README를 코드와 대조해 정리 (main)
+- 요청: README를 내용에 맞게 수정, PR 없이 main에 바로 푸시(사용자 지시).
+- 변경: Api Compatibility Level 안내 수정, DOTween 설치 단계와 예약 종료 절·`apiUrl`·키 생략 동작 추가, 없는 `Runtime/Logging` 폴더와 `AppSettings` 타입, 프로젝트 스코프 예시, 폴더 트리·클래스 표 수정. 코드 변경 없음(CHANGELOG·버전 그대로).
+- Claude 확인: README의 코드 이름을 저장소와 대조, 설치 표의 버전이 검증 프로젝트 manifest·packages.config와 일치, 프리팹에 `GameCloser`·`SystemCanvas` 있음, `JsonUtility` 키 대소문자 구분을 에디터에서 실행해 확인(`ResetTime` 0, `resetTime` 5).
+- agy (gemini-4-argon-high, 2묶음):
+  - 설치 안내·프로젝트 스코프 예시·폴더 트리·클래스 표 → 통과
+  - 예약 종료 절·Settings.json 절·공개 저장소 규칙 → 통과
+- 남은 것: `[Inject]` 지점의 소스 제너레이터 적용은 예전 확인 기록뿐이고, 검증 프로젝트에 제너레이터가 없어 다시 확인하지 못함(README에 그대로 적음). 새 설치 절차를 처음부터 따라 해 보지는 않음.
+
 ### [2026-11-04 15:08] Claude → Antigravity · 쓰지 않는 warningTime·fadeTime 제거 (chore/remove-unused-settings-keys)
 - 요청: 어느 코드도 읽지 않는 `warningTime`·`fadeTime` 정리(사용자 지시).
 - 변경: `Settings` 의 두 필드 제거, README 예시·설명과 테스트의 임시 JSON 정리. 26.11.4-2(필드를 코드에서 읽던 프로젝트는 Breaking).
