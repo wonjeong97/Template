@@ -40,7 +40,7 @@ namespace HuliacDev.Tests
             if (File.Exists(_settingsPath)) return;
 
             Directory.CreateDirectory(Application.streamingAssetsPath);
-            File.WriteAllText(_settingsPath, "{\"warningTime\":60,\"resetTime\":90,\"fadeTime\":0.5}");
+            File.WriteAllText(_settingsPath, "{\"resetTime\":90}");
             _createdByTest = true;
         }
 

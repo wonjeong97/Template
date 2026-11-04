@@ -1,6 +1,12 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.11.4-2] - 2026-11-04
+
+### Removed
+- **쓰지 않는 `Settings.warningTime`·`Settings.fadeTime` 필드 제거(`Runtime/Data/TemplateData.cs`):** 경고 단계·전환 연출용으로 예약해 뒀지만 어느 코드도 읽지 않아 `Settings.json`에 적어도 효과가 없었음. README의 설정 예시·설명과 테스트의 임시 설정 JSON에서도 지움. 동작이 바뀌지 않아 테스트는 추가하지 않고 기존 테스트로 확인함.
+  - **Breaking:** 코드에서 `settings.warningTime`·`settings.fadeTime`을 읽는 프로젝트는 컴파일되지 않으므로 그 참조를 지울 것. `Settings.json`에 남은 두 키는 무시되므로 동작에 영향이 없고, 함께 지워도 됨.
+
 ## [26.11.4-1] - 2026-11-04
 
 ### Changed

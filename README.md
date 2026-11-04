@@ -541,9 +541,7 @@ Unity가 함께 만드는 현장에 보내면 안 되는 폴더(`*_BurstDebugInf
 ```json
 {
   "useInactivityTimer": true,
-  "warningTime": 60,
   "resetTime": 90,
-  "fadeTime": 0.5,
   "targetFrameRate": 60,
   "focusRestoreDelay": 3,
   "focusRestoreRetryInterval": 3,
@@ -567,7 +565,7 @@ Unity가 함께 만드는 현장에 보내면 안 되는 폴더(`*_BurstDebugInf
 ```
 
 - `Settings.json`을 읽지 못하면(파일 없음, 빈 파일, 끝 쉼표 같은 형식 오류) 오류 로그를 남기고 **비활동 타이머만 켠 대체 설정**(`resetTime` 90초, `AppSettingsProvider.FallbackResetTimeSeconds`)으로 동작합니다. 효과음·폰트·`closeSetting`·`alwaysOnTop`은 적용되지 않으므로, 콘솔이나 로그 파일에 "Failed to load Settings.json"이 보이면 파일을 고치고 앱을 다시 시작하세요. 이때 숨은 종료 버튼은 `SystemCanvas` 프리팹 기본값(좌상단 150x150, 투명, 3초 안에 10번)으로 동작합니다.
-- `useInactivityTimer`가 `true`이고 `resetTime`(초)이 0보다 크면 `InactivityTimer`가 활성화됩니다. `warningTime`/`fadeTime`은 향후 경고 단계·전환 연출용으로 예약된 필드이며 아직 `InactivityTimer`에서 사용하지 않습니다.
+- `useInactivityTimer`가 `true`이고 `resetTime`(초)이 0보다 크면 `InactivityTimer`가 활성화됩니다.
 - `targetFrameRate`는 값을 지정하면 `vSyncCount`를 0으로 끄고 해당 FPS로 제한합니다. 0 이하(또는 생략)면 `vSyncCount`를 1로 켜서 프레임을 고정하지 않고 모니터 주사율을 따르며, 이때 품질 레벨의 `vSyncCount`는 쓰지 않습니다. 수직 동기화가 꺼져 있으면 영상처럼 화면 전체가 움직이는 장면에서 찢어짐이 보일 수 있으므로, 이런 앱은 0을 쓰세요. 고주사율 모니터에서는 0일 때 그만큼 더 많이 그리므로, 찢어짐보다 발열·전력 소모가 더 중요하면 30~60 사이 값을 지정하세요. 수직 동기화가 켜져 있으면 `Application.targetFrameRate`가 무시되어 다른 제한이 없으므로, 그래픽 드라이버가 수직 동기화를 강제로 끄면 프레임이 제한되지 않습니다.
 - `focusRestoreDelay`(초)는 포커스를 잃은 뒤 첫 복구 시도까지 기다리는 시간, `focusRestoreRetryInterval`(초)은 포커스가 돌아오지 않았을 때 다시 시도하는 간격입니다. 0 이하(또는 생략)면 기본값 3초를 쓰고, 1초 미만 양수는 1초로 올려 적용합니다. 기능을 켜고 끄는 키는 Settings.json에 없고 `F` 키로 전환합니다([창 포커스 복구](#창-포커스-복구-windowfocusrestorer-windows-전용) 참고).
 - `alwaysOnTop`이 `true`면 Windows 스탠드얼론 빌드에서 앱 창을 항상 위로 둡니다. 생략하면 `false`(끔)이며, 점검할 때는 `F` 키로 포커스 복구와 함께 끕니다([항상 위](#항상-위-alwaysontop-선택) 참고).
