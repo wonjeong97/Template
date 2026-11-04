@@ -1,6 +1,12 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.11.4-3] - 2026-11-04
+
+### Removed
+- **WebGL 지원 코드 제거(`Runtime/Hardware/ArduinoManager.cs`, `Runtime/Utils/GameCloser.cs`, `Runtime/App/RootLifetimeScope.cs`):** 더 이상 WebGL로 빌드하지 않아 `ArduinoManager`의 WebGL 스텁, `GameCloser`의 WebGL 분기, 파일 로깅 조건의 `!UNITY_WEBGL`을 지우고 주석과 `JsonLoader` 로그의 WebGL 언급을 정리함. Windows·Android 빌드에서 컴파일되는 코드는 바뀌지 않고, Android도 쓰는 URL 경로 처리(`JsonLoader`·`UIManager`·`SoundManager`)는 그대로 둠. 동작이 바뀌지 않아 테스트는 추가하지 않고 기존 테스트로 확인함.
+  - **Breaking:** WebGL 빌드는 더 이상 지원하지 않음. WebGL 빌드가 필요한 프로젝트는 이전 버전을 쓸 것.
+
 ## [26.11.4-2] - 2026-11-04
 
 ### Removed

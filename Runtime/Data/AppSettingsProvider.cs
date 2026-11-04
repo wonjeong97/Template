@@ -12,7 +12,7 @@ namespace HuliacDev.Data
 {
     /// <summary>
     /// Settings.json을 단 한 번만 로드하여 모든 소비자에게 공유하는 싱글톤 제공자.
-    /// 각 매니저가 개별적으로 로드하면 WebGL에서 동일 파일에 대한 HTTP 요청이 중복 발생하고
+    /// 각 매니저가 개별적으로 로드하면 동일 파일을 중복으로 읽고
     /// 로드 완료 시점이 서로 달라 초기화 순서가 비결정적이 되므로, 로드를 이곳으로 일원화함.
     /// VContainer에 Lifetime.Singleton으로 등록하여 사용함.
     /// </summary>

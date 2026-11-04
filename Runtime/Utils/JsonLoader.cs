@@ -22,7 +22,7 @@ namespace HuliacDev.Utils
     /// <summary>
     /// JSON 직렬화 및 파일 입출력을 담당하는 정적 유틸리티 클래스.
     /// 모든 데이터 파일 I/O 스트림의 최적화를 수행함.
-    /// WebGL/Android처럼 StreamingAssets가 URL인 플랫폼에서는 UnityWebRequest로 로드함.
+    /// Android처럼 StreamingAssets가 URL인 플랫폼에서는 UnityWebRequest로 로드함.
     /// </summary>
     public static class JsonLoader
     {
@@ -47,7 +47,7 @@ namespace HuliacDev.Utils
         }
 
         /// <summary>
-        /// 직접 파일 접근이 불가능한 URL 경로(WebGL, Android APK 내부)인지 판별함.
+        /// 직접 파일 접근이 불가능한 URL 경로(Android APK 내부)인지 판별함.
         /// </summary>
         private static bool IsRemotePath(string path)
         {
@@ -85,7 +85,7 @@ namespace HuliacDev.Utils
         /// 파일이 없거나 형식이 잘못되었으면 new T()를 반환하므로, 읽기 실패와 파일에 적힌 기본값을 구분해야 하면
         /// <see cref="TryLoadAsync{T}(string, JsonStorageLocation, CancellationToken, Microsoft.Extensions.Logging.ILogger)"/>를 쓸 것.
         /// 취소되면 기본값을 반환하지 않고 OperationCanceledException을 던짐.
-        /// URL 기반 플랫폼(WebGL, Android)에서는 UnityWebRequest, 그 외에는 파일 I/O를 사용함.
+        /// URL 기반 플랫폼(Android)에서는 UnityWebRequest, 그 외에는 파일 I/O를 사용함.
         /// logger를 넘기면 실패 로그를 ZLogger로 남기고, 없으면 Unity 콘솔로 대신 출력함.
         /// </summary>
         public static async UniTask<T> LoadAsync<T>(string fileName, JsonStorageLocation location,
@@ -170,7 +170,7 @@ namespace HuliacDev.Utils
 
         /// <summary>
         /// 지정된 저장 위치에서 JSON 파일을 동기적으로 읽어옴.
-        /// WebGL/Android처럼 직접 파일 접근이 불가능한 URL 기반 플랫폼에서는 동기 I/O 자체가
+        /// Android처럼 직접 파일 접근이 불가능한 URL 기반 플랫폼에서는 동기 I/O 자체가
         /// 불가능하므로 지원하지 않으며, 호출 시 에러를 로그로 남기고 기본값을 반환함.
         /// 메인 스레드를 블로킹하므로 비동기 컨텍스트를 쓸 수 없는 초기화 극초반이나
         /// 에디터 전용 툴링 코드에서만 사용하고, 런타임 로직은 <see cref="LoadAsync{T}(string, JsonStorageLocation, CancellationToken, Microsoft.Extensions.Logging.ILogger)"/>를 쓸 것.
@@ -181,7 +181,7 @@ namespace HuliacDev.Utils
 
             if (IsRemotePath(path))
             {
-                Debug.LogError(ZString.Concat("[JsonLoader] Synchronous load is not supported for remote paths (WebGL/Android): ", path));
+                Debug.LogError(ZString.Concat("[JsonLoader] Synchronous load is not supported for remote paths (Android): ", path));
                 return new T();
             }
 
@@ -241,7 +241,7 @@ namespace HuliacDev.Utils
         /// 임시 파일에 먼저 쓴 뒤 대상 파일과 바꾸므로, 저장 도중 전원이 꺼지거나 디스크가 가득 차도 기존 파일이 비거나 잘리지 않음.
         /// 쓰기에 실패하면(읽기 전용 위치, 권한 없음, 디스크 부족 등) 오류를 로그로 남기고 false를 반환함.
         /// 취소되면 기존 파일을 그대로 두고 OperationCanceledException을 던짐.
-        /// StreamingAssets가 읽기 전용인 플랫폼(WebGL, Android)에서는 저장할 수 없어 false를 반환함.
+        /// StreamingAssets가 읽기 전용인 플랫폼(Android)에서는 저장할 수 없어 false를 반환함.
         /// logger를 넘기면 실패 로그를 ZLogger로 남기고, 없으면 Unity 콘솔로 대신 출력함.
         /// </summary>
         public static async UniTask<bool> SaveAsync<T>(string fileName, T data, JsonStorageLocation location,
@@ -281,7 +281,7 @@ namespace HuliacDev.Utils
         /// <summary>
         /// 데이터를 JSON 형식으로 동기적으로 저장하고 성공 여부를 반환함 (.json 확장자 자동 부착).
         /// 임시 파일을 거쳐 저장하는 방식과 실패 시 false를 반환하는 규칙은 SaveAsync와 같음.
-        /// StreamingAssets가 읽기 전용인 플랫폼(WebGL, Android)에서는 저장할 수 없어 false를 반환함.
+        /// StreamingAssets가 읽기 전용인 플랫폼(Android)에서는 저장할 수 없어 false를 반환함.
         /// 메인 스레드를 블로킹하므로 <see cref="SaveAsync{T}(string, T, JsonStorageLocation, CancellationToken, Microsoft.Extensions.Logging.ILogger)"/>를 쓸 수 없는 제한적인
         /// 상황(에디터 전용 툴링 등)에서만 사용할 것.
         /// </summary>
