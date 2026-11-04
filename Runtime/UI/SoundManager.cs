@@ -120,7 +120,7 @@ namespace HuliacDev.UI
 
         /// <summary>
         /// JSON 설정 파일에서 사운드 데이터를 비동기로 읽어와 딕셔너리에 캐싱함.
-        /// WebGL 등 URL 기반 플랫폼 지원을 위해 비동기로 동작함.
+        /// Android 등 URL 기반 플랫폼 지원을 위해 비동기로 동작함.
         /// </summary>
         private async UniTask LoadSoundSettingsAsync(CancellationToken cancellationToken)
         {
@@ -511,7 +511,7 @@ namespace HuliacDev.UI
         private async UniTask<AudioClip> ExecuteDownloadAsync(SoundSetting setting, CancellationToken cancellationToken)
         {
             string path = Path.Combine(Application.streamingAssetsPath, setting.clipPath).Replace("\\", "/");
-            // WebGL/Android에서는 streamingAssetsPath가 이미 URL이므로 로컬 경로일 때만 file:// 접두어를 붙임.
+            // Android에서는 streamingAssetsPath가 이미 URL이므로 로컬 경로일 때만 file:// 접두어를 붙임.
             string uri = path.Contains("://") ? path : ZString.Concat("file://", path);
 
             using (UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, GetAudioType(path)))

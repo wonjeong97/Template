@@ -14,6 +14,7 @@
 
 ## 완료
 
+- [x] 더 이상 빌드하지 않는 WebGL 코드 삭제(`ArduinoManager` 스텁, `GameCloser` 분기, 파일 로깅 조건, 주석). Android도 쓰는 URL 경로 처리는 유지 — 완료: 2026-11-04 (#72)
 - [x] README를 코드와 대조해 정리: Api Compatibility Level 안내를 `.NET Framework`로, 빠져 있던 DOTween 설치 단계와 예약 종료·`apiUrl` 설명 추가, 없는 `Runtime/Logging` 폴더와 `AppSettings` 타입, 프로젝트 스코프 예시, 키를 생략했을 때의 동작 등 수정 — 완료: 2026-11-04
 - [x] 어느 코드도 읽지 않아 `Settings.json` 에 적어도 효과가 없던 `Settings.warningTime`·`fadeTime` 제거 — 완료: 2026-11-04 (#71)
 - [x] `targetFrameRate` 를 지정하면 수직 동기화가 꺼져 영상처럼 화면 전체가 움직이는 장면에 찢어짐이 보일 수 있고, 0 이하면 아무것도 바꾸지 않아 품질 레벨의 `vSyncCount` 가 0일 때 프레임 제한이 전혀 없던 것(빌드에서 1000프레임 이상). 0 이하면 수직 동기화를 켜도록 바꿈 — 완료: 2026-11-04 (#70)

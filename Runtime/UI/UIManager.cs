@@ -782,7 +782,7 @@ namespace HuliacDev.UI
 
         /// <summary>
         /// StreamingAssets에서 이미지 파일을 비동기로 읽어와 Sprite로 변환함.
-        /// URL 기반 플랫폼(WebGL, Android)에서는 UnityWebRequest, 그 외에는 파일 I/O를 사용함.
+        /// URL 기반 플랫폼(Android)에서는 UnityWebRequest, 그 외에는 파일 I/O를 사용함.
         /// 메모리 최적화를 위해 이미 로드된 이미지는 캐싱하여 재사용함.
         /// </summary>
         private async UniTask<Sprite> LoadSpriteAsync(string fileName, CancellationToken cancellationToken, bool compress = false)
@@ -864,7 +864,7 @@ namespace HuliacDev.UI
 
         /// <summary>
         /// 경로 유형에 맞춰 이미지 바이트 데이터를 읽어옴.
-        /// URL 경로(WebGL, Android)는 UnityWebRequest, 로컬 경로는 파일 I/O를 사용함.
+        /// URL 경로(Android)는 UnityWebRequest, 로컬 경로는 파일 I/O를 사용함.
         /// </summary>
         private async UniTask<byte[]> ReadSpriteBytesAsync(string path, CancellationToken cancellationToken)
         {

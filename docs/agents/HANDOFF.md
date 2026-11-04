@@ -4,6 +4,15 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-04 15:46] Claude → Antigravity · WebGL 코드 삭제 (chore/remove-webgl-branches)
+- 요청: 더 이상 다루지 않는 WebGL을 코드에서도 삭제. 사용자가 Android를 가끔 빌드하므로 Android 영향 확인(사용자 결정, Android도 쓰는 URL 경로 처리는 유지).
+- 변경: `ArduinoManager` WebGL 스텁, `GameCloser` WebGL 분기, 파일 로깅 조건의 `!UNITY_WEBGL` 제거. 주석과 `JsonLoader` 로그의 WebGL 언급 정리. README 플랫폼을 `Windows (주 타깃) / Android` 로, `UNITASK_DOTWEEN_SUPPORT` 는 플랫폼별 값이라는 안내 추가. 26.11.4-3(WebGL 빌드 지원 중단은 Breaking).
+- Claude 확인: 코드에 WebGL 언급 0(git grep, ThirdParty 제외). 검증 프로젝트 PlayMode 155/155. `CompilePlayerScripts` 로 Windows·Android 스크립트 컴파일 통과(오류 0). 검증 프로젝트는 Android 심볼에 `UNITASK_DOTWEEN_SUPPORT` 가 없어 잠시 넣어 컴파일한 뒤 원래 값으로 되돌림(사용 프로젝트 8곳은 모두 이미 있음). 임시 확인 스크립트는 삭제.
+- agy (gemini-4-argon-high, 2묶음):
+  - 전처리 지시문 짝·삭제 범위·Windows/Android 컴파일 동일성 → 통과
+  - 주석·로그 뜻 유지와 테스트 기대 문구, CHANGELOG 형식·공개 저장소 규칙 → 통과
+- 남은 것: Android는 스크립트 컴파일만 확인했고 실제 APK 빌드·실행은 하지 않음. WebGL 스크립트 컴파일은 지운 뒤에도 통과하지만 파일 로깅·앱 종료 등 런타임 동작은 지원 대상이 아님.
+
 ### [2026-11-04 15:23] Claude → Antigravity · README를 코드와 대조해 정리 (main)
 - 요청: README를 내용에 맞게 수정, PR 없이 main에 바로 푸시(사용자 지시).
 - 변경: Api Compatibility Level 안내 수정, DOTween 설치 단계와 예약 종료 절·`apiUrl`·키 생략 동작 추가, 없는 `Runtime/Logging` 폴더와 `AppSettings` 타입, 프로젝트 스코프 예시, 폴더 트리·클래스 표 수정. 코드 변경 없음(CHANGELOG·버전 그대로).

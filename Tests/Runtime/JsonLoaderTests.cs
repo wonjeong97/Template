@@ -85,7 +85,7 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
-        /// 원격 경로(WebGL/Android 등 URL 기반 StreamingAssets)에서 동기 Load를 호출하면
+        /// 원격 경로(Android 등 URL 기반 StreamingAssets)에서 동기 Load를 호출하면
         /// 실제 I/O를 시도하지 않고 에러 로그와 함께 기본값을 반환해야 함.
         /// GetPath는 파일명을 StreamingAssets 경로에 이어 붙이므로, "://"를 포함한 파일명을
         /// 넘기면 결과 경로에도 "://"가 남아 IsRemotePath 판정을 재현할 수 있음.

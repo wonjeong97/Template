@@ -204,7 +204,7 @@ namespace HuliacDev.App
         
         /// <summary>
         /// ZLogger를 기반으로 전역 로깅 시스템을 설정함.
-        /// Unity 콘솔 출력은 항상 등록하고, 에디터·WebGL을 제외한 빌드에서는 날짜·용량 단위로 회전하는 파일 로그를 추가로 등록함.
+        /// Unity 콘솔 출력은 항상 등록하고, 에디터를 제외한 빌드에서는 날짜·용량 단위로 회전하는 파일 로그를 추가로 등록함.
         /// </summary>
         protected virtual void ConfigureLogging(IContainerBuilder builder)
         {
@@ -239,8 +239,8 @@ namespace HuliacDev.App
                         });
                     });
 
-// WebGL에서는 파일 시스템 및 백그라운드 스레드 기반 파일 로깅이 불가능하므로 Unity 콘솔 로그만 사용함.
-#if !UNITY_EDITOR && !UNITY_WEBGL
+// 에디터에서는 Unity 콘솔 로그만 사용함.
+#if !UNITY_EDITOR
                     // 회전(Rolling) 파일로 출력함. 단일 GameLog.txt에 무한 append하던 기존 방식은
                     // 몇 주~몇 달 무중단으로 도는 키오스크에서 파일 하나가 계속 커져 디스크를 잠식했음.
                     // 날짜(일) 단위로 회전하고, 같은 날에도 용량 상한을 넘기면 시퀀스로 분할하여
@@ -286,11 +286,11 @@ namespace HuliacDev.App
         /// 오래된 로그 파일을 주기적으로 정리하는 LogRetentionService를 VContainer 엔트리포인트로
         /// 등록함. 로깅 프로바이더 구성(ConfigureLogging)과 파일 정리 책임을 분리하여, 정리 정책
         /// (주기·보관일)을 로깅 설정과 독립적으로 바꿀 수 있고 순수 로직을 단위 테스트할 수 있게 함.
-        /// 에디터/WebGL은 애초에 파일 로깅을 하지 않으므로 등록 자체를 생략함.
+        /// 에디터는 애초에 파일 로깅을 하지 않으므로 등록 자체를 생략함.
         /// </summary>
         protected virtual void ConfigureLogRetention(IContainerBuilder builder)
         {
-#if !UNITY_EDITOR && !UNITY_WEBGL
+#if !UNITY_EDITOR
             builder.RegisterEntryPoint<LogRetentionService>(
                 resolver => new LogRetentionService(LogDirectory, LogRetentionDays, resolver.Resolve<ILogger<LogRetentionService>>()),
                 Lifetime.Singleton);

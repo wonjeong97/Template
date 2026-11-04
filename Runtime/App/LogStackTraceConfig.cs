@@ -13,7 +13,7 @@ namespace HuliacDev.App
     /// (1) 정보성 로그(플레이 기록 등)에 매번 붙는 스택은 노이즈이고 원인 파악에 도움이 안 되는 반면,
     ///     Warning 이상에는 발생 라인·호출 경로가 필요함.
     /// (2) 성능: 로그마다 스택을 캡처하면 CPU(스택 워크) + GC 할당이 발생해, 로그가 잦거나
-    ///     WebGL/모바일 타깃일수록 프레임 히칭 요인이 됨. 일반 로그의 스택만 꺼서 이를 없앰.
+    ///     모바일 타깃일수록 프레임 히칭 요인이 됨. 일반 로그의 스택만 꺼서 이를 없앰.
     /// </para>
     /// <para>
     /// ZLogger의 LogLevel은 Unity <see cref="LogType"/>으로 매핑되므로(Information→Log, Warning→Warning, Error→Error)

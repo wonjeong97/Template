@@ -4,7 +4,7 @@
 `Settings.json` 하나로 사운드·폰트·비활동 타이머·숨은 종료 버튼 같은 현장 설정을 제어하므로, 빌드 후에도 코드 수정 없이 기획 변경에 대응할 수 있습니다.
 
 - **Unity:** 2022.3 이상
-- **플랫폼:** Windows
+- **플랫폼:** Windows (주 타깃) / Android
 - **라이선스:** MIT
 
 ---
@@ -82,7 +82,7 @@ ZLogger와 R3는 UPM 패키지가 Unity 연동 레이어만 제공하고, **실�
 
 1. 에셋스토어에서 DOTween(무료판)을 임포트하고 `Tools > Demigiant > DOTween Utility Panel`에서 셋업합니다.
 2. 같은 패널의 **Create ASMDEF**로 `DOTween.Modules` 어셈블리를 만듭니다.
-3. **Player Settings → Scripting Define Symbols**에 `UNITASK_DOTWEEN_SUPPORT`를 추가합니다.
+3. **Player Settings → Scripting Define Symbols**에 `UNITASK_DOTWEEN_SUPPORT`를 추가합니다. 플랫폼별 값이므로 Android도 빌드한다면 Android 탭에도 넣습니다.
 
 > 2번과 3번을 빠뜨리면 이 패키지의 트윈 코드(`ToUniTask(TweenCancelBehaviour...)`)가 컴파일되지 않습니다.
 
