@@ -206,15 +206,21 @@ namespace HuliacDev.Core
         }
 
         /// <summary>
-        /// Settings.json의 targetFrameRate를 적용함. 0 이하(미설정)면 아무것도 바꾸지 않아
-        /// 프로젝트의 QualitySettings 기본값을 그대로 따름.
-        /// vSyncCount가 켜져 있으면 Application.targetFrameRate가 무시되고 디스플레이 주사율에
-        /// 종속되므로, 값이 설정된 경우에만 vSyncCount를 0으로 끄고 targetFrameRate를 적용함.
+        /// Settings.json의 targetFrameRate를 적용함. 0 이하(미설정)면 vSyncCount를 1로 켜서
+        /// 프레임을 고정하지 않고 디스플레이 주사율을 따름(품질 레벨의 vSyncCount가 0이면 프레임 제한이 전혀 없어지므로).
+        /// vSyncCount가 켜져 있으면 Application.targetFrameRate가 무시되므로, 값이 설정된 경우에는
+        /// vSyncCount를 0으로 끄고 targetFrameRate를 적용함. 이때는 화면 전체가 움직이는 장면에 찢어짐이 보일 수 있음.
         /// 프로젝트별로 다른 정책이 필요하면 override하여 재정의 가능.
         /// </summary>
         protected virtual void ApplyFrameRateSettings()
         {
-            if (settings.targetFrameRate <= 0) return;
+            if (settings.targetFrameRate <= 0)
+            {
+                QualitySettings.vSyncCount = 1;
+
+                if (_logger != null) _logger.ZLogInformation($"[GameManagerBase] targetFrameRate is not set. VSync enabled (follows the display refresh rate).");
+                return;
+            }
 
             QualitySettings.vSyncCount = 0;
             Application.targetFrameRate = settings.targetFrameRate;

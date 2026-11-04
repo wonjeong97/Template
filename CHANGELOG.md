@@ -1,6 +1,12 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.11.4-1] - 2026-11-04
+
+### Changed
+- **`targetFrameRate`가 0 이하(또는 생략)면 수직 동기화를 켜도록 바꿈(`Runtime/Core/GameManagerBase.cs`, `Runtime/Data/TemplateData.cs`):** 값을 지정하면 수직 동기화가 꺼져 영상처럼 화면 전체가 움직이는 장면에 찢어짐이 보일 수 있고, 0 이하면 아무것도 바꾸지 않아 활성 품질 레벨의 `vSyncCount`가 0일 때(기본 Performant) 수직 동기화도 프레임 제한도 없이 1000프레임 넘게 돌았음. 이제 0 이하면 `vSyncCount`를 1로 켜서 모니터 주사율을 따르고, 값을 지정했을 때의 동작(수직 동기화 끔, 해당 FPS로 제한)은 그대로임. `Settings.json`을 읽지 못해 쓰는 대체 설정도 값이 0이라 같은 동작을 함. 찢어짐을 없애려는 프로젝트는 `targetFrameRate`를 0으로 바꾸면 되고, 값을 그대로 둔 프로젝트는 바뀌지 않음. README 설명을 맞추고 테스트 4건을 추가함(`Tests/Runtime/GameManagerFrameRateTests.cs`).
+  - **Breaking:** `targetFrameRate`를 0 이하로 두거나 생략한 프로젝트는 품질 레벨의 `vSyncCount`를 더 이상 따르지 않음. 프레임 무제한이나 `vSyncCount` 2 이상이 필요하면 `ApplyFrameRateSettings`를 override할 것.
+
 ## [26.11.3-5] - 2026-11-03
 
 ### Changed
