@@ -218,14 +218,14 @@ namespace HuliacDev.Core
             {
                 QualitySettings.vSyncCount = 1;
 
-                if (_logger != null) _logger.ZLogInformation($"[GameManagerBase] targetFrameRate is not set. VSync enabled (follows the display refresh rate).");
+                if (_logger != null) _logger.ZLogInformation($"[GameManagerBase] targetFrameRate is not set. VSync on (follows the display refresh rate).");
                 return;
             }
 
             QualitySettings.vSyncCount = 0;
             Application.targetFrameRate = settings.targetFrameRate;
 
-            if (_logger != null) _logger.ZLogInformation($"[GameManagerBase] targetFrameRate applied: {settings.targetFrameRate}");
+            if (_logger != null) _logger.ZLogInformation($"[GameManagerBase] targetFrameRate applied: {settings.targetFrameRate}. VSync off.");
         }
 
         /// <summary>

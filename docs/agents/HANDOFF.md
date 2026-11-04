@@ -12,6 +12,8 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
   - 문서(README·CHANGELOG·package.json)의 코드 일치·형식·공개 저장소 규칙 → 통과
 - 교차 검증 (agy gemini-4-argon-high + 서브에이전트, 1묶음):
   - 두 경로와 대체 설정 경로, 코드 규칙, 테스트 타당성 → 둘 다 통과
+- PR 리뷰(Claude `/code-review`, 1건): 코드에서 넣은 `Application.targetFrameRate` 가 수직 동기화가 켜지면 무시된다는 안내가 Breaking에 없음 → 고침. 사용자 요청으로 적용 로그에 `VSync on`/`VSync off` 추가.
+- 재검증: agy(gemini-4-argon-high) 로그 문구·CHANGELOG 추가 문장 → 통과. PlayMode 155/155. 검증 프로젝트 Play에서 값 60은 `VSync off`·`vSyncCount` 0·제한 60, 값 0은 `VSync on`·`vSyncCount` 1을 로그와 실제 값으로 확인(설정은 되돌림).
 - 남은 것: 실제 프레임 제한과 찢어짐 해소는 스탠드얼론 빌드에서 아직 확인하지 않음(사용자가 빌드 확인을 건너뛰고 바로 수정하기로 함). 그래픽 드라이버가 수직 동기화를 강제로 끄면 프레임이 제한되지 않음.
 
 ### [2026-11-03 18:05] Claude → Antigravity · Build 메뉴와 빌드 중 창 영어로 (chore/english-build-menu)
