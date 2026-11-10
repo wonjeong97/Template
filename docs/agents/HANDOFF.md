@@ -24,7 +24,11 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
   - 기계적 정리(필드 순서·summary) → 통과
   - 테스트·문서 → CHANGELOG 누락(SetText·SetTMPText·TMP), 시간 제한 실패 메시지(낮음) → 고침
   - 2차 수정 재검증 → `ExecuteWithExternalApiLoggingAsync`가 await 뒤에 파괴 토큰을 얻음(중간) → 시작할 때 받아 둠. OnDestroy와 파괴 토큰 순서(불확실) → 파괴 표시로 막음
-- 남은 것: IL2CPP 빌드 미시험. 실제 시리얼 장치로 ArduinoManager를 시험하지 않음(스캔·재연결은 코드 리뷰와 간격 계산 테스트만). 백그라운드 스레드에서 `Disconnect`를 부르면 ConnectAsync 이어지는 코드가 그 스레드에서 돌 수 있음(기존 StopAutoReconnect와 같은 성질, 기록만). 새 ConnectAsync가 이전 스캔을 기다리지 않아 같은 포트를 동시에 열 수 있음(추정, 기록만). 영구 접근 거부도 저장을 약 200ms 늦춤(낮음, 기록만). agy 인증이 한 번 만료됐다가 이후 요청은 됐으므로, 다음 세션 전에 `agy` 로그인 상태를 확인할 것.
+- PR 리뷰(Claude `/code-review` high, 3건, 모두 낮음) → 사용자 지시로 1번만 고침: `ConnectAsync`를 연달아 부르면 이전 스캔과 같은 포트를 다툼 → `_connectGate`(SemaphoreSlim)로 스캔 차례를 하나로 묶고 호출 번호로 가장 새 호출만 스캔. 2번(빈 handshake는 예외 없이 반환)·3번(영구 접근 거부도 재시도)은 의도한 동작이라 그대로 둠.
+  - 교차 검증(agy + 서브에이전트) → 둘 다 통과. agy만: 차례를 얻은 직후 파괴되면 OCE가 빠짐(낮음) → 맨 앞에서 파괴 확인. 서브에이전트만: 자동 재연결 스캔과 ConnectAsync가 같은 포트를 다툼(중간, 기존 문제) → 재연결 스캔도 같은 차례를 거치고 시도마다 이미 연결됐는지 확인
+  - 재검증(서브에이전트) → ConnectAsync가 자동 재연결을 멈추게 했더니 그 연결이 실패하면 재연결이 다시 시작되지 않음(중간) → 멈추지 않도록 되돌림(차례만으로 다툼이 막힘)
+  - Claude 확인: PlayMode 174/174, Windows 빌드 성공, 마지막 수정 뒤 ArduinoManagerTests 2/2·컴파일 오류 0
+- 남은 것: IL2CPP 빌드 미시험. 실제 시리얼 장치로 ArduinoManager를 시험하지 않음(스캔·재연결은 코드 리뷰와 간격 계산 테스트만). 백그라운드 스레드에서 `Disconnect`를 부르면 ConnectAsync 이어지는 코드가 그 스레드에서 돌 수 있음(기존 StopAutoReconnect와 같은 성질, 기록만). 영구 접근 거부도 저장을 약 200ms 늦춤(낮음, 기록만). agy 인증이 한 번 만료됐다가 이후 요청은 됐으므로, 다음 세션 전에 `agy` 로그인 상태를 확인할 것.
 
 ### [2026-11-10 10:45] Claude → Antigravity + 서브에이전트 · 자동 재시작 상태 API·종료 코드 유지·영상 재생 결과 (feat/auto-restart-status-api)
 - 요청: TODO 할 일 중 Reporter 항목을 뺀 4건 처리(재시작 이유 공개 API, 감시 상태 API, ApiManagerBase 종료 코드 0 문제, `PrepareAndPlayAsync` 성공 여부).

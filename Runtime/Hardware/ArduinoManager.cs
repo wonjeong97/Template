@@ -45,6 +45,11 @@ namespace HuliacDev.Hardware
         // 호출될 수 있으므로 상태 전이를 직렬화함.
         private readonly object _connectionLock = new object();
 
+        // 첫 연결(ConnectAsync)의 포트 스캔을 한 번에 하나만 돌게 함. 새 호출이 앞선 호출을 멈추라고 한 뒤에도
+        // 스레드 풀에서 돌던 앞선 스캔은 끝까지 진행되므로, 그 스캔이 포트를 닫고 끝날 때까지 기다렸다가 스캔함.
+        // 기다리지 않으면 두 스캔이 같은 COM 포트를 동시에 열려다 한쪽이 접근 거부로 실패함.
+        private readonly SemaphoreSlim _connectGate = new SemaphoreSlim(1, 1);
+
         private SerialPort _serialPort;
         private Thread _readThread;
         private ILogger<ArduinoManager> _logger;
@@ -55,6 +60,9 @@ namespace HuliacDev.Hardware
         private CancellationTokenSource _connectCts;
 
         private int _lastBaudRate;
+
+        // ConnectAsync를 부를 때마다 늘리는 번호. 스캔 차례를 기다리는 사이 더 새 호출이 오면 앞선 호출은 스캔하지 않음.
+        private int _connectGeneration;
 
         private bool _isOriginal;
         private volatile bool _isRunning;
@@ -129,6 +137,8 @@ namespace HuliacDev.Hardware
         /// expectedHandshake로 장치를 식별하며, 전체 포트 스캔을 maxRetries만큼 반복함.
         /// 부팅 직후 장치 인식이 늦는 환경에서는 maxRetries를 늘리고, 빠른 실패가 필요하면 줄임.
         /// 모두 실패하면 마지막 스캔에서 포트별로 실패한 이유를 경고 로그에 남김.
+        /// 앞선 ConnectAsync는 멈추고, 앞선 스캔이나 진행 중인 자동 재연결 스캔이 끝난 뒤 스캔함. 기다리는 사이 더 새 ConnectAsync가 오거나
+        /// Disconnect가 불리면 스캔하지 않고 끝나므로, 끝난 뒤 연결됐는지는 IsConnected로 확인함.
         /// </summary>
         public async UniTask ConnectAsync(int baudRate, string expectedHandshake,
             int maxRetries = DefaultMaxRetries, int retryDelayMs = DefaultRetryDelayMs)
@@ -151,8 +161,48 @@ namespace HuliacDev.Hardware
             if (maxRetries < 1) maxRetries = 1;
             if (retryDelayMs < 0) retryDelayMs = 0;
 
-            // 앞서 진행 중인 첫 연결이 있으면 멈추고, 이번 연결은 수동 해제(Disconnect)로도 멈출 수 있게 함.
+            // 앞서 진행 중인 첫 연결이 있으면 멈추게 하고, 그 스캔이 끝날 때까지 기다림(파괴되면 기다림을 멈추고 OCE를 전달함).
+            // 자동 재연결은 멈추지 않음(이 연결이 실패해도 장치가 돌아오면 다시 연결되게 함). 두 스캔은 같은 차례(_connectGate)를
+            // 거쳐 같은 포트를 동시에 열지 않음.
+            int generation = Interlocked.Increment(ref _connectGeneration);
             StopConnect();
+            await _connectGate.WaitAsync(destroyToken);
+
+            try
+            {
+                await ConnectWithGateAsync(generation, baudRate, expectedHandshake, maxRetries, retryDelayMs, destroyToken);
+            }
+            finally
+            {
+                _connectGate.Release();
+            }
+        }
+
+        /// <summary>
+        /// 스캔 차례를 얻은 뒤 실제로 포트를 스캔해 연결함. 기다리는 사이 더 새 ConnectAsync가 왔거나 수동 해제됐거나
+        /// 이미 연결됐으면 스캔하지 않으며, 이번 연결은 수동 해제(Disconnect)나 새 ConnectAsync로도 멈출 수 있게 함.
+        /// </summary>
+        private async UniTask ConnectWithGateAsync(int generation, int baudRate, string expectedHandshake, int maxRetries, int retryDelayMs,
+            CancellationToken destroyToken)
+        {
+            // 차례를 얻은 직후 파괴됐으면 OnDestroy가 수동 해제 표시를 세워도 파괴 취소로 전달함(예전처럼 OCE).
+            if (_isDestroyed) throw new OperationCanceledException(destroyToken);
+            destroyToken.ThrowIfCancellationRequested();
+
+            if (generation != Volatile.Read(ref _connectGeneration))
+            {
+                if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Connection attempt skipped because a newer ConnectAsync was called.");
+                return;
+            }
+
+            if (_isManuallyDisconnected)
+            {
+                if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Connection attempt stopped before scanning because Disconnect was called.");
+                return;
+            }
+
+            if (IsConnected) return;
+
             CancellationTokenSource connectCts = CancellationTokenSource.CreateLinkedTokenSource(destroyToken);
             _connectCts = connectCts;
 
@@ -206,6 +256,9 @@ namespace HuliacDev.Hardware
 
             for (int i = 0; i < maxRetries; i++)
             {
+                // 기다리는 사이 다른 경로로 이미 연결됐으면 더 스캔하지 않고 성공으로 끝냄(연결됐는데 실패 경고가 남지 않게 함).
+                if (IsConnected) return (true, string.Empty);
+
                 (bool isEstablished, string failures) = await TryEstablishConnectionAsync(baudRate, expectedHandshake, cancellationToken);
                 if (isEstablished)
                 {
@@ -579,7 +632,20 @@ namespace HuliacDev.Hardware
                     if (cancellationToken.IsCancellationRequested || IsConnected) break;
 
                     attemptCount++;
-                    (bool isEstablished, _) = await TryEstablishConnectionAsync(_lastBaudRate, _lastExpectedHandshake, cancellationToken);
+                    bool isEstablished;
+
+                    // ConnectAsync와 같은 차례를 거쳐 두 스캔이 같은 포트를 동시에 열지 않게 함.
+                    await _connectGate.WaitAsync(cancellationToken);
+                    try
+                    {
+                        if (IsConnected) break;
+                        (isEstablished, _) = await TryEstablishConnectionAsync(_lastBaudRate, _lastExpectedHandshake, cancellationToken);
+                    }
+                    finally
+                    {
+                        _connectGate.Release();
+                    }
+
                     if (isEstablished)
                     {
                         if (!cancellationToken.IsCancellationRequested && _logger != null)
