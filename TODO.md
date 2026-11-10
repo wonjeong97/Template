@@ -8,6 +8,7 @@
 
 ## 할 일
 
+- [ ] README "프로젝트 코드에서 쓰기"의 `WaitUntilWatchingAsync` 예시가 시간 제한을 `CancelAfter` 로 걸어, 시간이 다 되면 스레드 풀 타이머에서 취소되고 이어지는 코드가 메인 스레드 밖에서 돎(예시 자체는 그 뒤에 Unity API를 부르지 않아 문제없지만, 따라 쓴 프로젝트가 취소 뒤 화면을 바꾸면 메인 스레드 밖에서 Unity API를 부름). 예시에 `CancelAfterSlim`(PlayerLoop에서 취소)이나 대기 뒤 `UniTask.SwitchToMainThread()` 를 쓰고 이유를 적기 — 발견일: 2026-11-10
 
 ## 완료
 
