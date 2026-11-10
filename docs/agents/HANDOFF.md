@@ -4,6 +4,21 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-10 10:45] Claude → Antigravity + 서브에이전트 · 자동 재시작 상태 API·종료 코드 유지·영상 재생 결과 (feat/auto-restart-status-api)
+- 요청: TODO 할 일 중 Reporter 항목을 뺀 4건 처리(재시작 이유 공개 API, 감시 상태 API, ApiManagerBase 종료 코드 0 문제, `PrepareAndPlayAsync` 성공 여부).
+- 변경: `AutoRestartWatchdog` 에 `WasRestarted`·`RestartReason`·`IsWatching`·`WaitUntilWatchingAsync`·`TryRequestRestart` 추가. 앱이 `CreateEventW` 로 이벤트를 만들고 감시가 앱 핸들을 연 뒤 Set하면 지켜보는 것으로 봄. 종료 코드 75는 "restart requested by the app"으로 기록. `QuitReason.ExitCode`·`Set(reason, exitCode)` 추가, `ApiManagerBase` 가 그 코드로 다시 끝냄. `PrepareAndPlayAsync` 가 `UniTask<bool>` 을 돌려줌. 26.11.10-1. 테스트 8건 추가.
+- Claude 확인: 로컬 경로로 패키지를 참조하는 검증 프로젝트 복사본을 명령줄 Unity(2022.3.62f3)로 실행해 컴파일 오류 0, PlayMode 163/163(리뷰 반영 뒤 다시 163/163). Windows 플레이어 빌드 성공(플레이어 조건 코드 컴파일). 임시 확인 스크립트를 넣은 빌드를 실행해 확인함: 감시 시작 1초 뒤 "now watching" → `TryRequestRestart` → 종료 로그 경로를 거쳐 종료 코드 75 → 5초 뒤 재시작 → 다시 켜진 앱이 `WasRestarted=True`, 이유 "restart requested by the app (exit code 75)", 기존 감시 연결 → 정상 종료(0)로 감시도 끝남. 없는 영상 파일 테스트는 시간 초과가 아니라 오류 경로로 0.02초에 끝남.
+- agy (gemini-4-argon-high, 재검증 1묶음):
+  - 리뷰 뒤 고친 부분(설정 읽기 취소 시 결과 확정, 취소와 준비 완료가 같은 프레임일 때 재생 안 함, 핸들·신호 순서 단언) → 앞 2개 통과. 순서 단언이 핸들 줄이 없으면 늘 통과함(낮음) → 존재 확인을 먼저 하도록 고침
+- 서브에이전트 (2묶음):
+  - VideoManager 반환값·테스트 → 통과. 취소와 준비 완료가 같은 프레임이면 재생함(낮음) → Play 전에 취소 확인. 같은 프레임 오류 경우는 테스트로 재현하지 않음 → CHANGELOG에 적음. Breaking 범위 → `UniTask<T>`→`UniTask` 암시적 변환이 있어 메서드 그룹을 `Func<…, UniTask>` 에 넘기는 경우로 좁힘
+  - 문서(CHANGELOG·README·TODO·package.json) → 통과. 시간 제한 시 `OperationCanceledException` 누락, `Application.Quit(코드)` 가 0이 되는 조건(`ApiManagerBase` 사용) 누락(둘 다 낮음) → 고침
+- 교차 검증 (agy gemini-4-argon-high + 서브에이전트, 3묶음):
+  - 감시 C#(WatchDecided 완료 경로·핸들 수명·P/Invoke·TryRequestRestart 흐름) → 둘 다 지적: 설정을 읽다 취소되면 WatchDecided가 완료되지 않음(낮음) → 고침. 서브에이전트만 지적: 신호 대기 중 스코프가 파기되면 `IsWatching` 이 그 실행 동안 false로 남음, 다른 종료가 보류 중일 때 `TryRequestRestart` 가 QuitReason을 덮어씀, `IsWatching` 이 호출마다 OS에 물음(모두 낮음) → summary에 적음(동작 유지)
+  - 감시 스크립트·명령줄·테스트 → 둘 다 통과. 서브에이전트만 지적: 신호 위치(핸들을 연 뒤)를 테스트가 지키지 않음(낮음) → 순서 단언 추가
+  - 종료 코드(QuitReason·ApiManagerBase) → 둘 다 통과. 서브에이전트 참고: `ApiManagerBase` 의 `Application.Quit(QuitReason.ExitCode)` 는 에디터 테스트로 확인할 수 없음 → 빌드 실행으로 확인
+- 남은 것: 확인 빌드는 Mono이고 IL2CPP는 시험하지 않음. 시작 직후 감시가 앱을 잡기 전에 0이 아닌 코드로 끝내는 경우와 감시 실행 실패 경로는 빌드로 재현하지 않음(`IsWatching` 이 false라 `TryRequestRestart` 가 거절하는 것은 에디터 테스트로만 확인). PID 재사용으로 다른 powershell을 감시로 보는 기존 제한은 이제 `IsWatching` 에도 영향(낮음, 기록만). 확인 빌드가 검증 프로젝트와 같은 `persistentDataPath` 를 써서 그곳 `AutoRestart.log` 에 확인 기록이 남음.
+
 ### [2026-11-04 15:46] Claude → Antigravity · WebGL 코드 삭제 (chore/remove-webgl-branches)
 - 요청: 더 이상 다루지 않는 WebGL을 코드에서도 삭제. 사용자가 Android를 가끔 빌드하므로 Android 영향 확인(사용자 결정, Android도 쓰는 URL 경로 처리는 유지).
 - 변경: `ArduinoManager` WebGL 스텁, `GameCloser` WebGL 분기, 파일 로깅 조건의 `!UNITY_WEBGL` 제거. 주석과 `JsonLoader` 로그의 WebGL 언급 정리. README 플랫폼을 `Windows (주 타깃) / Android` 로, `UNITASK_DOTWEEN_SUPPORT` 는 플랫폼별 값이라는 안내 추가. 26.11.4-3(WebGL 빌드 지원 중단은 Breaking).

@@ -227,13 +227,15 @@ namespace HuliacDev.Network
         /// <summary>
         /// 보류시켰던 종료를 플랫폼 환경(에디터 및 빌드)에 맞춰 재개함.
         /// 에디터의 플레이 모드 종료는 Application.Quit()으로 재개되지 않으므로 분기함.
+        /// Unity는 처음 Application.Quit(코드)에 넘긴 종료 코드를 알려주지 않으므로 QuitReason.ExitCode로 끝냄.
+        /// 인수 없이 끝내면 종료 코드가 0이 되어, 자동 재시작 감시가 일부러 끈 것으로 보고 다시 켜지 않기 때문.
         /// </summary>
         private void QuitApplication()
         {
 #if UNITY_EDITOR
             EditorApplication.isPlaying = false;
 #else
-            Application.Quit();
+            Application.Quit(QuitReason.ExitCode);
 #endif
         }
 

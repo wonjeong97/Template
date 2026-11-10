@@ -1,6 +1,19 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.11.10-1] - 2026-11-10
+
+### Added
+- **자동 재시작 감시 상태와 재시작 이유를 읽는 공개 API, 재시작 요청 API 추가(`Runtime/Core/AutoRestartWatchdog.cs`, `Runtime/Core/AutoRestartPolicy.cs`):** 이번 실행이 감시가 다시 켠 것인지 알려면 프로젝트가 internal인 환경 변수 이름(`HULIACDEV_AUTORESTART_REASON`)을 복사해 읽어야 해서, 템플릿이 이름을 바꾸면 컴파일 오류 없이 재시작 반복 방지 같은 판단이 틀어졌음. 또 앱은 감시가 떠서 자기를 잡았는지 알 수 없어, 설정만 보고 0이 아닌 코드로 끝내면 감시 실행이 실패했거나 아직 앱 핸들을 열기 전(시작 직후 몇 초)일 때 앱이 꺼진 채 남았음. 정적 API `WasRestarted`·`RestartReason`(다시 켠 이유, 아니면 null), `IsWatching`(감시가 지금 앱을 지켜보는지. 감시 프로세스가 끝났으면 false), `WaitUntilWatchingAsync(token)`(감시를 띄울지와 지켜보기 시작했는지가 정해질 때까지 기다림), `TryRequestRestart(reason)`(지켜보고 있으면 종료 코드 `RestartRequestedExitCode`(75)로 끝내 다시 켜지게 하고 true, 아니면 끄지 않고 false)를 추가함. 감시 스크립트는 앱 핸들을 연 뒤 앱이 만들어 둔 이벤트(`Local\HuliacDev.AutoRestart.Ready.<앱 PID>`, 명령줄 인수 `-ReadyEventName`)에 신호를 주고, 앱은 그 신호를 받아야 지켜보는 것으로 봄. 종료 코드 75는 `AutoRestart.log`와 다시 켠 앱의 `RestartReason`에 "restart requested by the app (exit code 75)"로 남음. 다시 켜진 앱의 시작 경고 문구를 "ended abnormally"에서 "ended"로 바꿈(요청한 재시작도 같은 문구로 남기 때문). README "자동 재시작"에 "프로젝트 코드에서 쓰기"를 적음. `AutoRestartPolicyTests`에 테스트 4건 추가(이벤트 이름과 스크립트의 신호, 재시작 요청 코드와 스크립트 분기 일치, 빈 재시작 이유는 null, 지켜보지 않으면 요청해도 끄지 않고 종료 사유·코드를 바꾸지 않음)하고 명령줄 인수 테스트에 `ReadyEventName`을 더함.
+  - **Breaking:** 감시 스크립트 명령줄에 `-ReadyEventName`이 추가되고 `AutoRestartPolicy.BuildWatchdogArguments`(internal)의 매개변수가 바뀜. 감시 스크립트는 앱이 시작할 때마다 새로 쓰므로 소비 프로젝트가 고칠 것은 없음. 환경 변수 이름을 복사해 읽던 프로젝트는 `AutoRestartWatchdog.WasRestarted`·`RestartReason`으로 바꿀 것.
+
+### Changed
+- **`VideoManager.PrepareAndPlayAsync`가 재생을 시작했는지 돌려줌(`Runtime/UI/VideoManager.cs`):** 반환형이 `UniTask`라 호출부가 재생이 시작됐는지 알려면 `VideoPlayer.isPrepared`·`isPlaying`을 다시 확인해야 했고, 준비 중 오류와 준비 완료가 같은 프레임에 오면 재생하지 않았는데도 `isPrepared`가 true라 성공으로 볼 수 있었음. `UniTask<bool>`로 바꿔 재생을 시작했으면 true, 인자가 잘못됐거나 준비 중 오류·시간 초과(30초)·취소로 재생하지 않았으면 false를 돌려줌(실패 사유는 지금처럼 로그에 남음). 준비 완료와 취소가 같은 프레임에 오면 재생하지 않음. `VideoManagerTests`에 테스트 2건 추가(잘못된 인자, 없는 영상 파일). 오류와 준비 완료가 같은 프레임에 오는 경우는 오류를 먼저 보는 순서로 막으며, 재현이 어려워 테스트로는 확인하지 않음.
+  - **Breaking:** 이 메서드를 메서드 그룹으로 `Func<…, UniTask>` 대리자에 넘기던 코드는 컴파일되지 않으므로 람다로 감싸거나 `Func<…, UniTask<bool>>`로 바꿀 것. `await`·`.Forget()`·`UniTask` 변수에 담는 코드(암시적 변환)는 그대로 동작함.
+
+### Fixed
+- **`ApiManagerBase`가 종료 로그를 보낸 뒤 종료 코드를 0으로 바꾸던 문제 수정(`Runtime/Network/ApiManagerBase.cs`, `Runtime/Utils/QuitReason.cs`):** 종료 로그를 보내려고 `wantsToQuit`으로 종료를 미뤘다가 인수 없는 `Application.Quit()`으로 다시 끝내, `autoRestart`를 켠 빌드에서 0이 아닌 코드로 끝내도 감시가 일부러 끈 것으로 보고 다시 켜지 않았음. 그래서 앱이 스스로 다시 켜져야 할 때는 프로세스를 직접 끝내야 해서 종료 로그도 보내지 못했음. Unity는 처음 `Application.Quit(코드)`에 넘긴 값을 알려주지 않으므로 `QuitReason`에 종료 코드(`ExitCode`, 기본 0)와 `Set(reason, exitCode)`를 추가하고, `ApiManagerBase`가 `Application.Quit(QuitReason.ExitCode)`로 다시 끝내게 함. 사유만 적는 `Set(reason)`(숨은 종료 버튼·예약 종료)은 종료 코드를 0으로 되돌림. 위의 `TryRequestRestart`가 이 경로를 씀. `ApiManagerBase`를 쓰는 프로젝트에서 `Application.Quit(코드)`만 부르면 이전처럼 0으로 끝나므로, 0이 아닌 코드로 끝내려면 먼저 `QuitReason.Set(사유, 코드)`를 부르거나 재시작이 목적이면 `TryRequestRestart`를 쓸 것. `QuitReasonTests`에 테스트 2건 추가.
+
 ## [26.11.4-3] - 2026-11-04
 
 ### Removed
