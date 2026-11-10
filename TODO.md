@@ -12,10 +12,10 @@
 
 ## 완료
 
-- [x] 감시가 다시 켠 실행인지·이유를 알려 주는 공개 API(`AutoRestartWatchdog.WasRestarted`·`RestartReason`) 추가. 환경 변수 이름을 복사해 읽지 않아도 됨 — 완료: 2026-11-10
-- [x] 감시가 앱을 지켜보는지 알려 주는 `IsWatching`·`WaitUntilWatchingAsync` 추가(감시가 앱 핸들을 연 뒤 이벤트로 신호), 지켜볼 때만 끝내는 재시작 요청 `TryRequestRestart` 추가 — 완료: 2026-11-10
-- [x] `ApiManagerBase` 가 종료 로그를 보낸 뒤 인수 없는 `Application.Quit()` 으로 끝내 종료 코드가 0으로 바뀌던 것. `QuitReason.ExitCode` 로 끝내도록 고침 — 완료: 2026-11-10
-- [x] `VideoManager.PrepareAndPlayAsync` 가 재생을 시작했는지 `UniTask<bool>` 로 돌려주도록 바꿈 — 완료: 2026-11-10
+- [x] 감시가 다시 켠 실행인지·이유를 알려 주는 공개 API(`AutoRestartWatchdog.WasRestarted`·`RestartReason`) 추가. 환경 변수 이름을 복사해 읽지 않아도 됨 — 완료: 2026-11-10 (#73)
+- [x] 감시가 앱을 지켜보는지 알려 주는 `IsWatching`·`WaitUntilWatchingAsync` 추가(감시가 앱 핸들을 연 뒤 이벤트로 신호), 지켜볼 때만 끝내는 재시작 요청 `TryRequestRestart` 추가 — 완료: 2026-11-10 (#73)
+- [x] `ApiManagerBase` 가 종료 로그를 보낸 뒤 인수 없는 `Application.Quit()` 으로 끝내 종료 코드가 0으로 바뀌던 것. `QuitReason.ExitCode` 로 끝내도록 고침 — 완료: 2026-11-10 (#73)
+- [x] `VideoManager.PrepareAndPlayAsync` 가 재생을 시작했는지 `UniTask<bool>` 로 돌려주도록 바꿈 — 완료: 2026-11-10 (#73)
 - [x] 더 이상 빌드하지 않는 WebGL 코드 삭제(`ArduinoManager` 스텁, `GameCloser` 분기, 파일 로깅 조건, 주석). Android도 쓰는 URL 경로 처리는 유지 — 완료: 2026-11-04 (#72)
 - [x] README를 코드와 대조해 정리: Api Compatibility Level 안내를 `.NET Framework`로, 빠져 있던 DOTween 설치 단계와 예약 종료·`apiUrl` 설명 추가, 없는 `Runtime/Logging` 폴더와 `AppSettings` 타입, 프로젝트 스코프 예시, 키를 생략했을 때의 동작 등 수정 — 완료: 2026-11-04
 - [x] 어느 코드도 읽지 않아 `Settings.json` 에 적어도 효과가 없던 `Settings.warningTime`·`fadeTime` 제거 — 완료: 2026-11-04 (#71)
