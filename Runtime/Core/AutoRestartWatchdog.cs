@@ -342,6 +342,7 @@ while ($true) {
         /// 감시를 띄울지와 띄운 감시가 지켜보기 시작했는지가 정해질 때까지 기다린 뒤 IsWatching을 돌려줌.
         /// 이미 정해졌으면 바로 끝남. AutoRestartWatchdog를 등록하지 않았으면(ConfigureAutoRestart를 빈 본문으로 override)
         /// 결과가 정해지지 않아 끝나지 않으므로, 시간 제한이나 파괴와 연결된 토큰을 넘길 것(취소되면 OperationCanceledException).
+        /// 취소되면 그 취소가 일어난 스레드에서 이어지므로, 시간 제한은 CancelAfter(스레드 풀 타이머) 대신 CancelAfterSlim(PlayerLoop)으로 검.
         /// </summary>
         public static async UniTask<bool> WaitUntilWatchingAsync(CancellationToken cancellationToken)
         {

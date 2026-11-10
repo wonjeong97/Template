@@ -4,6 +4,14 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-10 20:00] Claude → Antigravity · README 감시 대기 예시의 시간 제한 (docs/watchdog-timeout-example)
+- 요청: TODO 할 일 1건 처리. README `WaitUntilWatchingAsync` 예시가 `CancelAfter`로 시간 제한을 걸어, 시간이 다 되면 취소 뒤 코드가 스레드 풀에서 이어짐.
+- 변경: 예시를 `CancelAfterSlim(TimeSpan, DelayType.Realtime)`(PlayerLoop에서 취소)으로 바꾸고 이유를 예시 주석·API 표·메서드 summary에 적음. 문서·주석만 바뀌어 버전·CHANGELOG는 그대로.
+- Claude 확인: UniTask 2.5.11 소스에서 `CancelAfterSlim` 시그니처(`TimeSpan, DelayType, PlayerLoopTiming`, 반환 `IDisposable`)를 확인.
+- agy (gemini-4-argon-high): 설명의 사실 여부·예시 컴파일·문구 → 통과
+- 서브에이전트: 리뷰 서브에이전트(`unity-reviewer`)가 이 세션에서 더 이상 제공되지 않아 agy 단독.
+- 남은 것: 없음.
+
 ### [2026-11-10 19:00] Claude → Antigravity + 서브에이전트 · 랜 장치용 UDP·TCP 클라이언트 추가 (feat/lan-device-clients)
 - 요청: 요즘 아두이노를 랜선으로 연결하므로, 랜 아두이노를 쓴 두 현장 프로젝트의 통신 코드를 비교해 템플릿 클래스로 추가(둘 다).
 - 변경: `UdpCommandClient`(명령 → 같은 문자열 응답 확인, 재전송, 순서대로 하나씩, Dispose 때 남은 명령 전송)와 `TcpLineClient`(접속 유지, 1초→30초 재접속, keepalive, 줄 단위 수신, 메인 스레드 발행, 끊긴 동안 Send false), 줄 나누기 `LineBuffer`(internal). 장치 로직은 빼고 통신만 일반화. 26.11.10-4. 테스트 24건(UDP 10, TCP 9, LineBuffer 5, 루프백 가짜 장치).

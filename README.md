@@ -529,13 +529,15 @@ _tcp.Send("S2\n");   // 줄 끝 문자는 붙이지 않으므로 장치가 줄 �
 |-----|------|
 | `WasRestarted` / `RestartReason` | 이번 실행이 감시가 다시 켠 실행인지와 그 이유(`"exit code -1073741819 (0xC0000005)"`, `"not responding for 60s"`, `"restart requested by the app (exit code 75)"`). 다시 켠 실행이 아니면 false / null |
 | `IsWatching` | 감시가 지금 이 앱을 지켜보는지. 감시를 띄운 직후 감시가 앱을 잡을 때까지(보통 몇 초), 꺼져 있거나 에디터이거나 감시 실행에 실패했거나 감시가 끝났으면 false |
-| `WaitUntilWatchingAsync(token)` | 감시를 띄울지와 띄운 감시가 지켜보기 시작했는지가 정해질 때까지 기다린 뒤 `IsWatching`을 돌려줌. `ConfigureAutoRestart`를 빈 본문으로 override하면 끝나지 않으므로 시간 제한 토큰을 넘김. 토큰이 취소되면 `OperationCanceledException` |
+| `WaitUntilWatchingAsync(token)` | 감시를 띄울지와 띄운 감시가 지켜보기 시작했는지가 정해질 때까지 기다린 뒤 `IsWatching`을 돌려줌. `ConfigureAutoRestart`를 빈 본문으로 override하면 끝나지 않으므로 시간 제한 토큰을 넘김. 토큰이 취소되면 `OperationCanceledException`이고, 그 뒤 코드는 취소가 일어난 스레드에서 이어지므로 시간 제한은 `CancelAfterSlim`(PlayerLoop에서 취소)으로 검 |
 | `TryRequestRestart(reason)` | 감시가 지켜보고 있으면 종료 코드 75(`RestartRequestedExitCode`)로 끝내 `restartDelaySeconds`초 뒤 다시 켜지게 하고 true. 지켜보고 있지 않거나 다른 종료(숨은 종료 버튼·예약 종료·Alt+F4)가 이미 진행 중이면 끄지 않고 false. 종료 로그에는 `end (by {reason})`로 남음 |
 
 ```csharp
 // 예: 모니터가 다시 연결되면 앱을 다시 켜서 해상도를 새로 잡음. 앱 시작 직후에도 부를 수 있으면 먼저 감시 결과를 기다림.
+// 시간 제한은 CancelAfterSlim으로 걸어 메인 스레드(PlayerLoop)에서 취소되게 함. CancelAfter는 스레드 풀 타이머에서 취소하므로
+// 시간이 다 되면 아래 코드가 메인 스레드 밖에서 이어지고, 그 뒤에 화면을 바꾸는 등 Unity API를 부르면 오류가 남.
 using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
-timeout.CancelAfter(TimeSpan.FromSeconds(30));
+using IDisposable timeoutTimer = timeout.CancelAfterSlim(TimeSpan.FromSeconds(30), DelayType.Realtime);
 (bool isCanceled, bool isWatching) = await AutoRestartWatchdog.WaitUntilWatchingAsync(timeout.Token).SuppressCancellationThrow();
 
 // 다시 켜진 뒤 같은 이유로 계속 재시작하지 않도록, 감시가 다시 켠 실행이면 한 번 더 요청하지 않음.
