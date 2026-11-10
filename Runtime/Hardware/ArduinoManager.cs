@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO.Ports;
 using System.Threading;
 using Cysharp.Text;
@@ -40,6 +41,15 @@ namespace HuliacDev.Hardware
         /// <summary>연결된 뒤 읽기 스레드가 한 줄을 기다리는 시간(ms). 연결 해제 대기(ReadThreadJoinTimeoutMs)보다 짧아야 함.</summary>
         private const int ReadLoopTimeoutMs = 500;
 
+        /// <summary>핸드셰이크를 기다리며 바이트 하나를 기다리는 시간(ms). 받은 바이트가 없을 때 취소를 이 간격으로 알아챔.</summary>
+        private const int HandshakeReadTimeoutMs = 100;
+
+        /// <summary>핸드셰이크로 확인할 한 줄의 최대 길이(바이트). 줄바꿈 없이 계속 보내는 장치에서도 이 길이마다 한 줄로 봄.</summary>
+        private const int MaxHandshakeLineLength = 256;
+
+        /// <summary>동시 스캔에서 포트 열기가 늦게 끝나는 드라이버를 핸드셰이크 대기보다 더 기다려 주는 시간(ms).</summary>
+        private const int PortOpenGraceMs = 2000;
+
         /// <summary>연결을 끊을 때 읽기 스레드가 끝나기를 기다리는 최대 시간(ms).</summary>
         private const int ReadThreadJoinTimeoutMs = 600;
 
@@ -60,6 +70,7 @@ namespace HuliacDev.Hardware
         // 첫 연결(ConnectAsync)의 포트 스캔을 한 번에 하나만 돌게 함. 새 호출이 앞선 호출을 멈추라고 한 뒤에도
         // 스레드 풀에서 돌던 앞선 스캔은 끝까지 진행되므로, 그 스캔이 포트를 닫고 끝날 때까지 기다렸다가 스캔함.
         // 기다리지 않으면 두 스캔이 같은 COM 포트를 동시에 열려다 한쪽이 접근 거부로 실패함.
+        // 열기가 끝나지 않아 앞선 스캔이 남겨 둔 포트는 다음 스캔이 건너뜀(PortScan).
         private readonly SemaphoreSlim _connectGate = new SemaphoreSlim(1, 1);
 
         private SerialPort _serialPort;
@@ -102,8 +113,9 @@ namespace HuliacDev.Hardware
         public bool AutoReconnect { get; set; } = true;
 
         /// <summary>
-        /// 포트마다 핸드셰이크를 기다리는 시간(ms). 이 시간 안에 받은 줄 중 하나라도 핸드셰이크를 포함하면 연결함.
-        /// 장치가 아닌 포트도 이 시간만큼 기다리므로, 포트가 많은 PC에서 스캔이 느리면 장치의 부팅 시간에 맞춰 줄임(최소 0.5초).
+        /// 포트마다 핸드셰이크를 기다리는 시간(ms). 이 시간 안에 받은 줄 중 하나라도 핸드셰이크를 포함하면 연결함(최소 0.5초).
+        /// 모든 포트를 동시에 확인하므로 스캔 한 번은 포트 수와 상관없이 보통 이 시간 안에 끝나고(열기가 막히는 포트가 있으면 최대 2초 더),
+        /// 맞는 포트를 찾으면 그때 바로 끝남.
         /// </summary>
         public int HandshakeTimeoutMs { get; set; } = DefaultHandshakeTimeoutMs;
 
@@ -296,8 +308,8 @@ namespace HuliacDev.Hardware
 
         /// <summary>
         /// 백그라운드 스레드에서 포트를 스캔해 핸드셰이크가 맞는 포트를 찾고, 메인 스레드 복귀 후 연결을 할당함.
-        /// 스캔하는 사이 취소(파괴, 수동 해제로 인한 재연결 중단)되면 찾은 포트를 닫고 연결하지 않으며,
-        /// 이때는 재시도를 멈추도록 성공으로 돌려줌. 포트를 찾지 못한 채 취소되면 OperationCanceledException을 던짐.
+        /// 스캔하는 사이 취소(파괴, 수동 해제로 인한 재연결 중단)되면 찾은 포트가 있어도 닫고 연결하지 않으며,
+        /// OperationCanceledException을 던져 재시도를 멈춤(파괴면 호출자에게 전달되고, 수동 해제면 중단 로그로 끝남).
         /// </summary>
         private async UniTask<(bool isEstablished, string failures)> TryEstablishConnectionAsync(int baudRate, string expectedHandshake,
             CancellationToken cancellationToken)
@@ -306,17 +318,16 @@ namespace HuliacDev.Hardware
             int handshakeTimeoutMs = Math.Max(MinHandshakeTimeoutMs, HandshakeTimeoutMs);
             (SerialPort validPort, string failures) = await UniTask.RunOnThreadPool(() => TryHandshake(baudRate, expectedHandshake, handshakeTimeoutMs, cancellationToken));
 
-            if (validPort == null)
-            {
-                // 취소돼 스캔을 멈춘 경우는 실패가 아니라 취소로 전달함(마지막 재시도여도 실패 경고 대신 중단으로 처리되게 함).
-                cancellationToken.ThrowIfCancellationRequested();
-                return (false, failures);
-            }
-
+            // 취소된 스캔은 실패가 아니라 취소로 전달함(마지막 재시도여도 실패 경고 대신 중단으로 처리되게 함).
             if (cancellationToken.IsCancellationRequested)
             {
-                ClosePortQuietly(validPort);
-                return (true, string.Empty);
+                if (validPort != null) ClosePortQuietly(validPort);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (validPort == null)
+            {
+                return (false, failures);
             }
 
             EstablishConnection(validPort, validPort.PortName);
@@ -324,114 +335,345 @@ namespace HuliacDev.Hardware
         }
 
         /// <summary>
-        /// 사용 가능한 모든 시리얼 포트를 순회하며 핸드셰이크 응답을 검증함.
-        /// 검증에 성공한 SerialPort 객체를, 실패하면 null과 포트별 실패 이유를 돌려줌. 수동 해제·파괴로 취소되면 남은 포트를
-        /// 열지 않고 멈춰, 해제한 뒤에도 포트를 점유하거나 보드를 리셋하지 않게 함.
+        /// 사용 가능한 모든 시리얼 포트를 동시에 열어 핸드셰이크 응답을 확인함. 포트마다 보드 부팅을 기다려야 해서 차례로 확인하면
+        /// 응답 없는 포트 수만큼 스캔이 늦어지므로, 포트마다 확인 스레드를 하나씩 띄움.
+        /// 맞는 포트를 찾으면 그 SerialPort를, 실패하면 null과 포트별 실패 이유를 돌려줌. 하나가 맞으면 나머지 포트를 닫은 뒤 돌아오고,
+        /// 두 포트가 함께 맞으면 먼저 응답한 포트를 씀. 모든 포트를 한 번씩 열므로 다른 코드가 아직 열지 않은 다른 보드도 리셋되며,
+        /// 이미 열린 포트는 접근 거부로 건너뜀. 수동 해제·파괴로 취소되면 모든 포트를 닫고 멈춰, 해제한 뒤에도 포트를 점유하지 않게 함.
         /// </summary>
         private static (SerialPort validPort, string failures) TryHandshake(int baudRate, string expectedHandshake, int handshakeTimeoutMs,
             CancellationToken cancellationToken)
         {
+            if (cancellationToken.IsCancellationRequested) return (null, "canceled");
+
             string[] ports = SerialPort.GetPortNames();
             if (ports.Length == 0) return (null, "no serial ports");
 
-            // 실패 이유는 연결에 모두 실패했을 때 한 번 남기는 용도라 할당을 아끼지 않음.
-            string failures = string.Empty;
-            foreach (string port in ports)
-            {
-                if (cancellationToken.IsCancellationRequested) return (null, "canceled");
-
-                SerialPort validPort = TryConnectPort(port, baudRate, expectedHandshake, handshakeTimeoutMs, cancellationToken, out string failureReason);
-                if (validPort != null)
-                {
-                    return (validPort, string.Empty);
-                }
-
-                failures = failures.Length == 0
-                    ? ZString.Concat(port, ": ", failureReason)
-                    : ZString.Concat(failures, "; ", port, ": ", failureReason);
-            }
-
-            return (null, failures);
+            PortScan scan = new PortScan(ports, baudRate, expectedHandshake, handshakeTimeoutMs, cancellationToken);
+            return scan.Run();
         }
 
         /// <summary>
-        /// 지정된 단일 포트에 연결을 시도하고 기대 응답 문자열을 대기함. 포트를 열면 보드가 리셋되므로 handshakeTimeoutMs 동안
-        /// 들어오는 줄을 차례로 확인함(리셋 직후의 깨진 첫 줄이나 다른 출력이 먼저 와도 놓치지 않게 함).
-        /// 백그라운드에서 실행되므로 내부 상태를 변경하지 않고 포트 객체만 반환하며, 실패하면 이유를 failureReason에 담음.
+        /// 동시 스캔 한 번의 상태. 포트마다 띄운 확인 스레드가 결과를 여기 모으고, 스캔을 기다리는 스레드는 맞는 포트가 나오거나
+        /// 모든 포트 확인이 끝나거나 대기 한도가 지나면 결과를 가져감. 그 뒤에 끝난 확인 스레드가 찾은 포트는 받을 곳이 없으므로 닫음.
         /// </summary>
-        private static SerialPort TryConnectPort(string port, int baudRate, string expectedHandshake, int handshakeTimeoutMs,
-            CancellationToken cancellationToken, out string failureReason)
+        private sealed class PortScan
         {
-            SerialPort testPort = null;
-            bool ownershipTransferred = false;
-            failureReason = string.Empty;
+            // 확인 스레드가 아직 잡고 있는 포트. 스캔이 끝난 뒤에도 열기가 끝나지 않은 스레드가 남을 수 있어,
+            // 다음 스캔이 같은 포트에 스레드를 또 띄우지 않도록 스캔 사이에 공유함.
+            private static readonly HashSet<string> ProbingPorts = new HashSet<string>();
 
-            try
+            private readonly object _sync = new object();
+            private readonly string[] _ports;
+            private readonly string[] _failureReasons;
+            private readonly string _expectedHandshake;
+
+            // 다른 포트에서 찾았거나 스캔을 끝낸 뒤 남은 확인 스레드를 멈춤. 늦게 끝나는 스레드가 Cancel 뒤에도 토큰을 읽으므로
+            // Dispose하지 않음(대기 핸들·타이머를 만들지 않아 해제할 자원이 없음).
+            private readonly CancellationTokenSource _stopCts = new CancellationTokenSource();
+            private readonly CancellationToken _cancellationToken;
+            private SerialPort _foundPort;
+
+            private readonly int _baudRate;
+            private readonly int _handshakeTimeoutMs;
+            private int _remainingCount;
+
+            // Open()이 아직 돌아오지 않은 확인 스레드 수. 이 스레드들은 포트를 잡고 있지 않으므로 스캔을 끝낼 때 기다리지 않음.
+            // 스캔이 끝난 뒤 열기가 끝나면 멈추라는 신호를 보고 곧 닫으며, 그 짧은 동안 다음 스캔은 그 포트를 건너뜀(다음 재시도에서 확인).
+            private int _openingCount;
+
+            private bool _isFinished;
+
+            public PortScan(string[] ports, int baudRate, string expectedHandshake, int handshakeTimeoutMs, CancellationToken cancellationToken)
             {
-                testPort = new SerialPort(port, baudRate);
+                _ports = ports;
+                _failureReasons = new string[ports.Length];
+                _expectedHandshake = expectedHandshake;
+                _cancellationToken = cancellationToken;
+                _baudRate = baudRate;
+                _handshakeTimeoutMs = handshakeTimeoutMs;
+                _remainingCount = ports.Length;
+            }
 
-                testPort.DtrEnable = true;
-                testPort.WriteTimeout = HandshakeWriteTimeoutMs;
-                testPort.Open();
+            /// <summary>
+            /// 포트마다 확인 스레드를 띄우고, 맞는 포트가 나오거나 모든 확인이 끝날 때까지 기다림. 맞는 포트를 찾았거나 취소되면
+            /// 나머지 스레드를 멈추고, 포트를 연 스레드가 포트를 닫을 때까지(최대 HandshakeReadTimeoutMs 남짓) 기다린 뒤 돌아옴
+            /// (바로 이어지는 다음 스캔이 아직 닫히지 않은 포트를 열다 접근 거부로 실패하지 않게 함). Open()이 끝나지 않은 스레드는
+            /// 포트를 잡고 있지 않으므로 기다리지 않으며, 열기가 끝나면 스스로 닫고 그동안 다음 스캔은 그 포트를 건너뜀.
+            /// 대기는 handshakeTimeoutMs에 PortOpenGraceMs를 더한 시간을 넘지 않음.
+            /// </summary>
+            public (SerialPort validPort, string failures) Run()
+            {
+                for (int i = 0; i < _ports.Length; i++)
+                {
+                    StartProbe(i);
+                }
 
-                string lastReceived = null;
+                int waitLimitMs = _handshakeTimeoutMs + PortOpenGraceMs;
                 System.Diagnostics.Stopwatch elapsed = System.Diagnostics.Stopwatch.StartNew();
 
-                while (true)
+                lock (_sync)
                 {
-                    int remainingMs = handshakeTimeoutMs - (int)elapsed.ElapsedMilliseconds;
-                    if (remainingMs <= 0 || cancellationToken.IsCancellationRequested) break;
+                    while (_foundPort == null && _remainingCount > 0)
+                    {
+                        // 취소됐으면 포트를 연 스레드만 끝나기를 기다림(열기가 막힌 포트 때문에 해제가 늦어지지 않게).
+                        if (_cancellationToken.IsCancellationRequested && _remainingCount <= _openingCount) break;
+                        if (!WaitForProbe(elapsed, waitLimitMs)) break;
+                    }
+                }
 
-                    // 줄을 받지 못하는 동안 취소를 ReadLoopTimeoutMs마다 확인하도록 기다림을 나눔(줄을 받는 사이마다 확인함).
-                    // 줄 중간에서 시간이 다 되면 그 줄의 앞부분은 버려지지만, 예전과 같은 0.5초 간격이라 새로 생기는 손실은 없음.
-                    testPort.ReadTimeout = Math.Min(remainingMs, ReadLoopTimeoutMs);
-                    string received;
+                // 맞는 포트를 찾았거나 취소·한도로 끝내면 남은 확인 스레드를 멈추고, 포트를 연 스레드가 닫고 끝날 때까지 기다림.
+                _stopCts.Cancel();
+
+                SerialPort foundPort;
+                string failures = string.Empty;
+                lock (_sync)
+                {
+                    while (_remainingCount > _openingCount)
+                    {
+                        if (!WaitForProbe(elapsed, waitLimitMs)) break;
+                    }
+
+                    _isFinished = true;
+                    foundPort = _foundPort;
+                    if (foundPort == null) failures = BuildFailures();
+                }
+
+                return (foundPort, failures);
+            }
+
+            /// <summary>
+            /// 포트 하나의 확인 스레드를 띄움. 앞선 스캔의 확인 스레드가 아직 그 포트를 잡고 있으면(열기가 끝나지 않는 드라이버)
+            /// 띄우지 않음. 띄우면 재시도마다 멈춘 스레드가 쌓이고, 열어도 접근 거부로 실패함.
+            /// </summary>
+            private void StartProbe(int index)
+            {
+                string port = _ports[index];
+                bool isAlreadyProbing;
+                lock (ProbingPorts)
+                {
+                    isAlreadyProbing = !ProbingPorts.Add(port);
+                }
+
+                if (isAlreadyProbing)
+                {
+                    FinishProbe(index, "previous check still running");
+                    return;
+                }
+
+                try
+                {
+                    Thread probeThread = new Thread(() => ProbePort(index))
+                    {
+                        IsBackground = true,
+                        Name = "ArduinoManager.PortProbe"
+                    };
+                    probeThread.Start();
+                }
+                catch (Exception e)
+                {
+                    // 스레드를 만들지 못하면 그 포트를 확인 중 목록에서 빼 다음 스캔이 다시 확인하게 함.
+                    lock (ProbingPorts)
+                    {
+                        ProbingPorts.Remove(port);
+                    }
+
+                    FinishProbe(index, e.Message);
+                }
+            }
+
+            /// <summary>
+            /// 확인 스레드의 소식을 대기 한도 안에서 기다림. 취소를 알아채도록 HandshakeReadTimeoutMs보다 길게 기다리지 않음.
+            /// 한도가 지났으면 false. 호출자가 _sync를 잡은 상태에서 부름.
+            /// </summary>
+            private bool WaitForProbe(System.Diagnostics.Stopwatch elapsed, int waitLimitMs)
+            {
+                int remainingMs = waitLimitMs - (int)elapsed.ElapsedMilliseconds;
+                if (remainingMs <= 0) return false;
+
+                Monitor.Wait(_sync, Math.Min(remainingMs, HandshakeReadTimeoutMs));
+                return true;
+            }
+
+            private void ProbePort(int index)
+            {
+                SerialPort port = TryConnectPort(_ports[index], out string failureReason);
+
+                if (port != null)
+                {
+                    bool isTaken = false;
+                    lock (_sync)
+                    {
+                        if (_foundPort == null && !_isFinished)
+                        {
+                            _foundPort = port;
+                            isTaken = true;
+                        }
+                    }
+
+                    // 다른 포트가 먼저 맞았거나 스캔이 이미 끝났으면 받을 곳이 없으므로 닫음.
+                    if (!isTaken) ClosePortQuietly(port);
+                }
+
+                lock (ProbingPorts)
+                {
+                    ProbingPorts.Remove(_ports[index]);
+                }
+
+                // 포트를 닫은 뒤에 끝났다고 알려, Run이 돌아올 때는 맞은 포트 말고 열린 포트가 남지 않게 함.
+                FinishProbe(index, failureReason);
+            }
+
+            private void FinishProbe(int index, string failureReason)
+            {
+                lock (_sync)
+                {
+                    _failureReasons[index] = failureReason;
+                    _remainingCount--;
+                    Monitor.PulseAll(_sync);
+                }
+            }
+
+            private void AddOpeningCount(int delta)
+            {
+                lock (_sync)
+                {
+                    _openingCount += delta;
+                    Monitor.PulseAll(_sync);
+                }
+            }
+
+            /// <summary>
+            /// 포트 하나를 열고 핸드셰이크 대기 시간 동안 들어오는 줄을 차례로 확인함(포트를 열면 보드가 리셋되므로 리셋 직후의
+            /// 깨진 첫 줄이나 다른 출력이 먼저 와도 놓치지 않게 함). 한 바이트씩 읽어 직접 줄로 나누므로 줄이 들어오는 도중에
+            /// 취소를 확인해도 앞부분을 잃지 않고(Mono의 ReadLine은 시간 초과 때 읽던 줄을 버림), 핸드셰이크 줄 뒤에 온 바이트는
+            /// 읽지 않고 남겨 연결 뒤 읽기 스레드가 받게 함. 시간 제한이 짧아 받은 바이트가 없을 때도 취소를 곧 알아챔.
+            /// 확인 스레드에서 실행되므로 매니저 상태를 바꾸지 않고 포트 객체만 반환하며, 실패하면 이유를 failureReason에 담음.
+            /// </summary>
+            private SerialPort TryConnectPort(string port, out string failureReason)
+            {
+                CancellationToken stopToken = _stopCts.Token;
+                SerialPort testPort = null;
+                bool ownershipTransferred = false;
+                failureReason = string.Empty;
+
+                try
+                {
+                    // 스레드가 늦게 시작해 이미 멈추라고 했으면 포트를 열지 않음(열면 보드가 리셋되고 다음 스캔과 포트를 다툼).
+                    if (_cancellationToken.IsCancellationRequested || stopToken.IsCancellationRequested)
+                    {
+                        failureReason = "canceled";
+                        return null;
+                    }
+
+                    // 열기에 걸린 시간도 대기 시간에 넣어, 스캔 전체의 대기 한도와 같은 기준으로 끝나게 함.
+                    System.Diagnostics.Stopwatch elapsed = System.Diagnostics.Stopwatch.StartNew();
+                    testPort = new SerialPort(port, _baudRate);
+
+                    testPort.DtrEnable = true;
+                    testPort.ReadTimeout = HandshakeReadTimeoutMs;
+                    testPort.WriteTimeout = HandshakeWriteTimeoutMs;
+
+                    AddOpeningCount(1);
                     try
                     {
-                        received = testPort.ReadLine().Trim();
+                        testPort.Open();
                     }
-                    catch (TimeoutException)
+                    finally
                     {
-                        continue;
+                        AddOpeningCount(-1);
                     }
 
-                    if (received.Contains(expectedHandshake))
+                    byte[] lineBuffer = new byte[MaxHandshakeLineLength];
+                    int lineLength = 0;
+                    string lastReceived = null;
+
+                    while (elapsed.ElapsedMilliseconds < _handshakeTimeoutMs
+                           && !_cancellationToken.IsCancellationRequested && !stopToken.IsCancellationRequested)
                     {
-                        // 성공 시 포트를 닫지 않고 그대로 반환하여 메인 스레드에 소유권을 넘김. 읽기 스레드가 해제 요청을
-                        // 연결 해제 대기(ReadThreadJoinTimeoutMs)보다 먼저 알아채도록 읽기 대기를 짧게 되돌림.
-                        testPort.ReadTimeout = ReadLoopTimeoutMs;
-                        ownershipTransferred = true;
-                        return testPort;
+                        // 시간 초과는 바이트를 읽지 않은 경우라 잃는 데이터가 없음.
+                        int value;
+                        try
+                        {
+                            value = testPort.ReadByte();
+                        }
+                        catch (TimeoutException)
+                        {
+                            continue;
+                        }
+
+                        if (value < 0) break;
+
+                        // 줄바꿈 없이 계속 보내는 장치도 버퍼가 차면 한 줄로 보고 확인함.
+                        bool isLineEnd = value == '\n';
+                        if (!isLineEnd) lineBuffer[lineLength++] = (byte)value;
+                        if (!isLineEnd && lineLength < lineBuffer.Length) continue;
+
+                        string received = testPort.Encoding.GetString(lineBuffer, 0, lineLength).Trim();
+                        lineLength = 0;
+
+                        if (received.Contains(_expectedHandshake))
+                        {
+                            // 성공 시 포트를 닫지 않고 그대로 반환하여 메인 스레드에 소유권을 넘김. 읽기 스레드가 해제 요청을
+                            // 연결 해제 대기(ReadThreadJoinTimeoutMs)보다 먼저 알아채도록 읽기 대기를 ReadLoopTimeoutMs로 둠.
+                            testPort.ReadTimeout = ReadLoopTimeoutMs;
+                            ownershipTransferred = true;
+                            return testPort;
+                        }
+
+                        // 빈 줄은 진단에 쓸 내용이 없으므로 실패 이유로 남길 마지막 줄을 덮어쓰지 않음.
+                        if (received.Length > 0) lastReceived = received;
                     }
 
-                    // 빈 줄은 진단에 쓸 내용이 없으므로 실패 이유로 남길 마지막 줄을 덮어쓰지 않음.
-                    if (received.Length > 0) lastReceived = received;
+                    // 줄바꿈 없이 끝난 마지막 내용도 진단에 남김.
+                    if (lineLength > 0)
+                    {
+                        string partial = testPort.Encoding.GetString(lineBuffer, 0, lineLength).Trim();
+                        if (partial.Length > 0) lastReceived = partial;
+                    }
+
+                    // 아두이노가 아닌 장치이거나 핸드셰이크를 보내지 않는 장치면 아무 줄도 받지 못함.
+                    failureReason = _cancellationToken.IsCancellationRequested || stopToken.IsCancellationRequested
+                        ? "canceled"
+                        : lastReceived == null
+                        ? ZString.Concat("no handshake in ", _handshakeTimeoutMs, "ms")
+                        : ZString.Concat("unexpected handshake '", lastReceived, "'");
                 }
-
-                // 아두이노가 아닌 장치이거나 핸드셰이크를 보내지 않는 장치면 아무 줄도 받지 못함.
-                failureReason = cancellationToken.IsCancellationRequested
-                    ? "canceled"
-                    : lastReceived == null
-                    ? ZString.Concat("no handshake in ", handshakeTimeoutMs, "ms")
-                    : ZString.Concat("unexpected handshake '", lastReceived, "'");
-            }
-            catch (Exception e)
-            {
-                // 다른 프로그램이 포트를 점유하는 등 열지 못한 경우. 다음 포트 연결 테스트를 이어감.
-                failureReason = e.Message;
-            }
-            finally
-            {
-                // 아두이노가 아닌 장치는 Open()은 성공하고 ReadLine()에서 타임아웃이 발생함.
-                // 이때 포트를 닫지 않으면 OS 점유가 유지되어, 다음 재시도에서 같은 포트를 열 수 없게 되고
-                // 정작 그 포트에 장치가 있어도 영영 찾지 못함. 따라서 모든 실패 경로에서 반드시 해제함.
-                if (!ownershipTransferred && testPort != null)
+                catch (Exception e)
                 {
-                    ClosePortQuietly(testPort);
+                    // 다른 프로그램이 포트를 점유하는 등 열지 못한 경우. 다른 포트 확인에는 영향이 없음.
+                    failureReason = e.Message;
                 }
+                finally
+                {
+                    // 아두이노가 아닌 장치는 Open()은 성공하고 핸드셰이크가 오지 않음.
+                    // 이때 포트를 닫지 않으면 OS 점유가 유지되어, 다음 재시도에서 같은 포트를 열 수 없게 되고
+                    // 정작 그 포트에 장치가 있어도 영영 찾지 못함. 따라서 모든 실패 경로에서 반드시 해제함.
+                    if (!ownershipTransferred && testPort != null)
+                    {
+                        ClosePortQuietly(testPort);
+                    }
+                }
+
+                return null;
             }
 
-            return null;
+            /// <summary>
+            /// 포트별 실패 이유를 한 줄로 묶음. 연결에 모두 실패했을 때 한 번 남기는 용도라 할당을 아끼지 않음.
+            /// </summary>
+            private string BuildFailures()
+            {
+                string failures = string.Empty;
+                for (int i = 0; i < _ports.Length; i++)
+                {
+                    string reason = _failureReasons[i] ?? "port open did not finish in time";
+                    failures = failures.Length == 0
+                        ? ZString.Concat(_ports[i], ": ", reason)
+                        : ZString.Concat(failures, "; ", _ports[i], ": ", reason);
+                }
+
+                return failures;
+            }
         }
 
         /// <summary>
