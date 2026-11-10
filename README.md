@@ -253,7 +253,7 @@ Tests/
 | | `ApiRetryUtil` | 고정 간격 재시도 및 소켓/DNS 네트워크 예외 격리를 지원하는 WebRequest 안정적 재시도, 응답 본문 반환(`GetTextWithRetryAsync`), 인터넷이 없으면 전송 생략 |
 | | `PacketUtility` | 바이너리 패킷과 구조체 변환(`FromBytes<T>`, `ToBytes<T>`, `GetPacketSize<T>`) |
 | **Logging** | `LogRetentionService` | 일별 로그 파일 회전(`AddZLoggerRollingFile`) 및 30일 보관 주기 만료 파일 자동 정리 |
-| **Hardware** | `ArduinoManager` | 시리얼 통신, 읽기 스레드 예외 격리 및 메인 스레드 마샬링 기반 자동 재연결(`AutoReconnect`, 연결된 뒤 끊겼을 때만 동작하며 `AutoReconnectIntervalMs`(기본 3초)에서 두 배씩 늘려 `AutoReconnectMaxIntervalMs`(기본 30초)에서 멈춤). 연결 변화는 이벤트(`OnConnected`·`OnDisconnected`)라 현재 상태는 `IsConnected`로 읽음 |
+| **Hardware** | `ArduinoManager` | 시리얼 통신, 읽기 스레드 예외 격리 및 메인 스레드 마샬링 기반 자동 재연결(`AutoReconnect`, 연결된 뒤 끊겼을 때만 동작하며 `AutoReconnectIntervalMs`(기본 3초)에서 두 배씩 늘려 `AutoReconnectMaxIntervalMs`(기본 30초)에서 멈춤). 연결 변화는 이벤트(`OnConnected`·`OnDisconnected`)라 현재 상태는 `IsConnected`로 읽음. 포트를 열면 Uno·Nano 계열은 리셋돼 첫 줄까지 약 1.7초가 걸리므로 핸드셰이크를 `HandshakeTimeoutMs`(기본 3초) 동안 기다림. 모든 포트를 동시에 확인해 포트 수와 상관없이 약 1.7초에 연결됨 |
 | **Data & Utils**| `AppSettingsProvider` | `Settings.json` 단일 로드/캐싱 및 런타임 핫 리로드(`ReloadAsync`) 지원, 읽기 실패 시 비활동 타이머를 켠 대체 설정 사용 |
 | | `JsonLoader` | `StreamingAssets` 및 `PersistentData` 지원, `.json` 확장자 자동 보정 직렬화, 읽기 성공 여부 반환(`TryLoadAsync`), 임시 파일을 거친 저장과 저장 성공 여부 반환 |
 | | `ConsecutiveClickCounter` | "N초 안에 M번 누르기" 연속 클릭 판정 (`GameCloser`가 사용, 운영자용 숨은 버튼에 재사용) |

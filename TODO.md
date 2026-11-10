@@ -8,10 +8,13 @@
 
 ## 할 일
 
-- [ ] `Reporter.Update` 가 화면을 닫아 둔 동안에도 매 프레임 FPS 문자열을 만들어 프레임당 약 36바이트를 할당함: 보일 때만 만들기 — 발견일: 2026-11-05
 
 ## 완료
 
+- [x] `ArduinoManager` 스캔이 응답 없는 포트마다 핸드셰이크 대기(3초)만큼 늦어지던 것. 모든 포트를 동시에 확인하고, 핸드셰이크 줄을 받은 바이트로 직접 모아 경계에서 잃지 않게 함 — 완료: 2026-11-10 (#75)
+- [x] `ArduinoManager` 가 포트를 열 때 리셋되는 보드(Uno·Nano 계열)에 연결하지 못하던 것(핸드셰이크 0.5초 대기 < 부팅 약 1.7초). 실제 장치로 확인 — 완료: 2026-11-10 (#75)
+- [x] `VideoManager` 가 프로젝트가 연결한 RenderTexture까지 파괴하던 것 — 완료: 2026-11-10 (#75)
+- [x] `Reporter.Update` 가 화면을 닫아 둔 동안에도 매 프레임 FPS 문자열을 만들던 것 — 완료: 2026-11-10 (#75)
 - [x] 코딩 스킬 기준 패키지 점검 결과 정리: SoundManager 페이드 취소 NRE, 외부 API 로그가 실제 호출을 늦춤, ArduinoManager 재연결 간격·수동 해제 뒤 재연결, UIManager 버튼 효과음 캐시·Graphic 충돌·raycastTarget, 조용한 실패 로그, ProfilerMarker, 필드 순서·summary·테스트 코드 규칙. JsonLoaderTests 간헐 실패(File.Replace 잠금)는 교체 재시도로 고침 — 완료: 2026-11-10 (#74)
 - [x] 감시가 다시 켠 실행인지·이유를 알려 주는 공개 API(`AutoRestartWatchdog.WasRestarted`·`RestartReason`) 추가. 환경 변수 이름을 복사해 읽지 않아도 됨 — 완료: 2026-11-10 (#73)
 - [x] 감시가 앱을 지켜보는지 알려 주는 `IsWatching`·`WaitUntilWatchingAsync` 추가(감시가 앱 핸들을 연 뒤 이벤트로 신호), 지켜볼 때만 끝내는 재시작 요청 `TryRequestRestart` 추가 — 완료: 2026-11-10 (#73)

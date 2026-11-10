@@ -128,6 +128,58 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
+        /// VideoPlayer에 프로젝트가 연결해 둔 RenderTexture(Inspector의 에셋 등)는 해제·파괴하지 않고 연결만 바꿔야 함.
+        /// 파괴하면 같은 에셋을 쓰는 다른 화면까지 깨짐. 플레이 모드의 Destroy는 프레임 끝에 일어나므로 한 프레임 넘긴 뒤 확인하고,
+        /// Release는 바로 반영되므로 IsCreated로도 확인함.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 프로젝트가_연결한_RenderTexture는_파괴하지_않고_연결만_바꾼다()
+        {
+            GameObject go = new GameObject("ProjectTexture");
+            _spawned.Add(go);
+            RawImage raw = go.AddComponent<RawImage>();
+            VideoPlayer vp = go.AddComponent<VideoPlayer>();
+            RenderTexture projectTexture = new RenderTexture(16, 16, 0);
+            projectTexture.Create();
+            vp.targetTexture = projectTexture;
+
+            RenderTexture created = _videoManager.WireRawImageAndRenderTexture(vp, raw, new Vector2Int(32, 32));
+
+            Assert.IsTrue(projectTexture.IsCreated(), "프로젝트가 연결한 RenderTexture를 해제함");
+            Assert.AreSame(created, vp.targetTexture, "새로 만든 텍스처로 연결되어야 함");
+            Assert.AreEqual(1, GetTrackedCount(), "매니저가 만든 텍스처만 추적해야 함");
+
+            yield return null;
+
+            Assert.IsTrue(projectTexture, "프로젝트가 연결한 RenderTexture를 파괴함");
+
+            vp.targetTexture = null;
+            UnityEngine.Object.DestroyImmediate(projectTexture);
+        }
+
+        /// <summary>
+        /// 다른 VideoPlayer용으로 만들어 그쪽이 아직 쓰는 텍스처를 이 VideoPlayer에 옮겨 단 뒤 다시 연결해도, 원래 주인이 쓰는
+        /// 텍스처는 해제하지 않아야 함.
+        /// </summary>
+        [Test]
+        public void 다른_VideoPlayer가_쓰는_텍스처는_해제하지_않는다()
+        {
+            VideoPlayer owner = CreateWiredVideo("Owner");
+            RenderTexture shared = owner.targetTexture;
+
+            GameObject go = new GameObject("Borrower");
+            _spawned.Add(go);
+            RawImage raw = go.AddComponent<RawImage>();
+            VideoPlayer borrower = go.AddComponent<VideoPlayer>();
+            borrower.targetTexture = shared;
+
+            _videoManager.WireRawImageAndRenderTexture(borrower, raw, new Vector2Int(32, 32));
+
+            Assert.IsTrue(shared.IsCreated(), "원래 주인이 쓰는 텍스처를 해제함");
+            Assert.AreSame(shared, owner.targetTexture);
+        }
+
+        /// <summary>
         /// 크기가 0 이하로 들어와도 유효한 RenderTexture를 만들어야 함.
         /// (JSON 설정 오류로 size가 비어 오는 경우 대비)
         /// </summary>
