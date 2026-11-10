@@ -217,6 +217,8 @@ Runtime/
 │              ApiManagerBase       — 서버 상태 로깅 베이스
 │              ApiRetryUtil         — 네트워크 예외 격리 재시도
 │              PacketUtility        — 바이너리 패킷과 구조체 변환
+│              UdpCommandClient     — 랜 장치에 UDP 명령 전송(응답 확인·재전송)
+│              TcpLineClient        — 랜 장치와 TCP 줄 단위 통신(재접속·keepalive)
 ├─ Prefabs/    SystemCanvas         — 숨은 종료 버튼이 들어 있는 시스템 캔버스
 ├─ UI/         UIManager · SoundManager · VideoManager · FadeManager
 ├─ Utils/      SingletonGuard<T> · JsonLoader · GameCloser · ConsecutiveClickCounter · SystemCanvas
@@ -252,6 +254,8 @@ Tests/
 | | `ApiManagerBase` | 시작/종료/비활동/외부 API 호출 이력 사내 서버 전송 추상 베이스 클래스 |
 | | `ApiRetryUtil` | 고정 간격 재시도 및 소켓/DNS 네트워크 예외 격리를 지원하는 WebRequest 안정적 재시도, 응답 본문 반환(`GetTextWithRetryAsync`), 인터넷이 없으면 전송 생략 |
 | | `PacketUtility` | 바이너리 패킷과 구조체 변환(`FromBytes<T>`, `ToBytes<T>`, `GetPacketSize<T>`) |
+| | `UdpCommandClient` | 랜으로 연결한 장치에 UDP로 명령을 보내고, 장치가 같은 문자열을 돌려주는지로 확인. 응답이 없으면 정한 횟수까지 다시 보내고 명령은 순서대로 하나씩 보냄 |
+| | `TcpLineClient` | 랜으로 연결한 장치(TCP 서버)에 접속을 유지하며 줄 단위로 받고 문자열을 보냄. 끊기면 간격을 늘려 가며 다시 접속, keepalive로 랜선 빠짐 감지, 이벤트는 메인 스레드에서 발행 |
 | **Logging** | `LogRetentionService` | 일별 로그 파일 회전(`AddZLoggerRollingFile`) 및 30일 보관 주기 만료 파일 자동 정리 |
 | **Hardware** | `ArduinoManager` | 시리얼 통신, 읽기 스레드 예외 격리 및 메인 스레드 마샬링 기반 자동 재연결(`AutoReconnect`, 연결된 뒤 끊겼을 때만 동작하며 `AutoReconnectIntervalMs`(기본 3초)에서 두 배씩 늘려 `AutoReconnectMaxIntervalMs`(기본 30초)에서 멈춤). 연결 변화는 이벤트(`OnConnected`·`OnDisconnected`)라 현재 상태는 `IsConnected`로 읽음. 포트를 열면 Uno·Nano 계열은 리셋돼 첫 줄까지 약 1.7초가 걸리므로 핸드셰이크를 `HandshakeTimeoutMs`(기본 3초) 동안 기다림. 모든 포트를 동시에 확인해 포트 수와 상관없이 약 1.7초에 연결됨 |
 | **Data & Utils**| `AppSettingsProvider` | `Settings.json` 단일 로드/캐싱 및 런타임 핫 리로드(`ReloadAsync`) 지원, 읽기 실패 시 비활동 타이머를 켠 대체 설정 사용 |
@@ -435,6 +439,35 @@ if (result.isSuccess)
 - HTTP 4xx를 포함한 모든 실패를 재시도합니다. '없는 사용자'를 404로 알리는 API라면 `maxAttemptCount`를 줄여 응답을 오래 기다리지 않게 하세요.
 - 시도 한 번이 `attemptTimeoutSeconds`(기본 10초, `ApiRetryUtil.DefaultAttemptTimeoutSeconds`)를 넘기면 그 시도를 실패로 보고 재시도합니다. 연결만 받고 응답하지 않는 서버에서도 무기한 기다리지 않으며, 0 이하를 넘기면 시간 제한을 두지 않습니다.
 - 성공 로그는 기본적으로 Information으로 남습니다. 사용자 확인처럼 자주 부르는 API는 `successLogLevel: LogLevel.Debug`(또는 `LogLevel.None`)로 낮추세요. 실패·재시도 로그는 그대로 남습니다.
+
+### 랜 장치 연결 (UdpCommandClient · TcpLineClient)
+
+랜선으로 연결한 아두이노 같은 장치와 주고받는 클라이언트입니다. USB 시리얼 장치는 `ArduinoManager`를 씁니다. 장치가 명령을 받기만 하고 받았다는 표시로 같은 문자열을 돌려주면 `UdpCommandClient`, 장치가 TCP 서버로 접속을 받아 상태를 줄 단위로 보내면 `TcpLineClient`를 씁니다. 둘 다 MonoBehaviour가 아닌 일반 클래스라 LifetimeScope에 등록해 주입받고, 컨테이너가 정리될 때 `Dispose`됩니다.
+
+```csharp
+builder.Register<UdpCommandClient>(Lifetime.Singleton);
+builder.Register<TcpLineClient>(Lifetime.Singleton);
+```
+
+주소·포트처럼 현장에서 바꾸는 값은 `Settings.json`이 아니라 프로젝트의 목적별 JSON(예: `StreamingAssets/DeviceSettings.json`)에 두고 읽어서 넘깁니다.
+
+```csharp
+// UDP: 장치가 받은 명령을 보낸 쪽 IP·포트로 그대로 돌려줘야 함(이 클라이언트의 포트는 실행마다 바뀜)
+_udp.SetTarget(settings.host, settings.port);   // IP 주소만
+bool isAcknowledged = await _udp.SendAsync("1_enter");   // 결과가 필요 없으면 .Forget()
+
+// TCP: 앱 시작 때 한 번 Connect하면 끊겨도 알아서 다시 접속함
+_tcp.OnDataReceived.Subscribe(line => HandleLine(line)).AddTo(ref _disposables);
+_tcp.OnConnected.Subscribe(_ => ShowDeviceReady()).AddTo(ref _disposables);
+_tcp.Connect(settings.host, settings.port);
+_tcp.Send("S2\n");   // 줄 끝 문자는 붙이지 않으므로 장치가 줄 단위로 받으면 직접 붙임
+```
+
+- 명령은 ASCII로 보내고 받습니다(한글 등은 '?'로 바뀜).
+- `UdpCommandClient`는 메인 스레드에서만 부릅니다. 받기가 처음 보낸 호출의 스레드 문맥으로 이어지므로, 그래야 `OnDataReceived`도 메인 스레드에서 옵니다. 응답은 앞뒤 공백을 빼고 비교하므로 줄 끝 문자가 붙어 돌아와도 되지만, 같은 명령을 연달아 보내면 앞 명령의 늦은 응답을 뒤 명령의 응답으로 볼 수 있습니다.
+- `UdpCommandClient`는 응답이 없으면 `ReplyTimeoutMs`(기본 3초)마다 `MaxSendAttempts`(기본 3번)까지 보내므로, 장치가 같은 명령을 두 번 받아도 문제없게 만들거나(같은 상태로 두는 명령 등) 대기 시간을 장치의 처리 시간보다 넉넉히 잡습니다. 앱이 끝날 때 장치를 원래 상태로 돌릴 명령은 `Dispose` 전에 `SendAsync`로 넣어 두면 응답을 기다리지 않고 한 번 보냅니다.
+- `TcpLineClient`는 첫 접속이 실패해도 같은 간격 규칙으로 계속 다시 접속하므로 `Connect`를 한 번만 부릅니다(다시 부르면 간격이 처음으로 돌아감). 랜선이 빠진 것은 약 12초 안에 알아챕니다.
+- `TcpLineClient`는 끊긴 동안의 `Send`를 쌓아 두지 않고 false를 돌려줍니다. 다시 접속한 뒤 예전 명령으로 장치가 움직이지 않게 하려는 것이므로, 접속 뒤에 필요한 명령은 `OnConnected`에서 다시 보냅니다.
 
 ### 창 포커스 복구 (WindowFocusRestorer, Windows 전용)
 
