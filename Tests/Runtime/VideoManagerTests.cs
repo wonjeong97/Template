@@ -1,7 +1,12 @@
+using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using UnityEngine.UI;
 using UnityEngine.Video;
 using HuliacDev.UI;
@@ -162,6 +167,86 @@ namespace HuliacDev.Tests
             VideoPlayer vp = CreateWiredVideo("NoDepth");
 
             Assert.AreEqual(0, vp.targetTexture.depth, "깊이 버퍼가 붙으면 영상 레이어마다 VRAM이 낭비됨");
+        }
+
+        /// <summary>
+        /// VideoPlayer가 없거나 URL이 비어 있으면 재생하지 않았으므로 false를 돌려줘야 함.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 인자가_잘못되면_재생하지_않고_false를_돌려준다() => UniTask.ToCoroutine(async () =>
+        {
+            GameObject go = new GameObject("EmptyUrl");
+            _spawned.Add(go);
+            VideoPlayer vp = go.AddComponent<VideoPlayer>();
+
+            bool nullPlayer = await _videoManager.PrepareAndPlayAsync(null, "file:///video.mp4", null, 1f, CancellationToken.None).AwaitWithRealtimeTimeout();
+            bool emptyUrl = await _videoManager.PrepareAndPlayAsync(vp, string.Empty, null, 1f, CancellationToken.None).AwaitWithRealtimeTimeout();
+
+            Assert.IsFalse(nullPlayer);
+            Assert.IsFalse(emptyUrl);
+            Assert.IsFalse(vp.isPlaying);
+        });
+
+        /// <summary>
+        /// 준비 중 오류(파일 없음)로 재생하지 않았으면 false를 돌려줘야 함. 호출부가 isPrepared를 다시 확인하지 않아도
+        /// 재생 여부를 알 수 있게 하기 위함. VideoPlayer가 남기는 오류 로그는 이 테스트의 대상이 아니므로 실패로 보지 않음.
+        /// 오류 이벤트가 오지 않는 환경에서 제한 시간에 걸려도 대기 루프가 남지 않도록 끝날 때 취소함.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 영상_파일이_없으면_재생하지_않고_false를_돌려준다() => UniTask.ToCoroutine(async () =>
+        {
+            GameObject go = new GameObject("MissingFile");
+            _spawned.Add(go);
+            VideoPlayer vp = go.AddComponent<VideoPlayer>();
+
+            LogAssert.ignoreFailingMessages = true;
+            using CancellationTokenSource cts = new CancellationTokenSource();
+            try
+            {
+                bool played = await _videoManager.PrepareAndPlayAsync(vp, MissingVideoUrl(), null, 1f, cts.Token).AwaitWithRealtimeTimeout(15f);
+
+                Assert.IsFalse(played, "준비에 실패했는데 재생을 시작한 것으로 돌려줌");
+                Assert.IsFalse(vp.isPlaying);
+            }
+            finally
+            {
+                cts.Cancel();
+                LogAssert.ignoreFailingMessages = false;
+            }
+        });
+
+        /// <summary>
+        /// 준비 중에 VideoPlayer 오브젝트만 파괴되면 예외 없이 false를 돌려줘야 함. 대기 루프가 파괴된 오브젝트의 isPrepared를 읽으면
+        /// 예외가 나서, Forget으로 부른 호출부에는 처리되지 않은 오류가 남고 기다리던 호출부는 false 대신 예외를 받음.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 준비_중에_VideoPlayer가_파괴되면_예외_없이_false를_돌려준다() => UniTask.ToCoroutine(async () =>
+        {
+            GameObject go = new GameObject("DestroyedDuringPrepare");
+            _spawned.Add(go);
+            VideoPlayer vp = go.AddComponent<VideoPlayer>();
+
+            LogAssert.ignoreFailingMessages = true;
+            try
+            {
+                // 첫 대기(다음 프레임) 전에 파괴해, 대기 루프가 파괴된 VideoPlayer를 보게 함.
+                UniTask<bool> task = _videoManager.PrepareAndPlayAsync(vp, MissingVideoUrl(), null, 1f, CancellationToken.None);
+                _spawned.Remove(go);
+                UnityEngine.Object.DestroyImmediate(go);
+
+                bool played = await task.AwaitWithRealtimeTimeout(5f);
+
+                Assert.IsFalse(played);
+            }
+            finally
+            {
+                LogAssert.ignoreFailingMessages = false;
+            }
+        });
+
+        private static string MissingVideoUrl()
+        {
+            return new System.Uri(Path.Combine(Application.temporaryCachePath, "VideoManagerTests_missing.mp4")).AbsoluteUri;
         }
 
         private VideoPlayer CreateWiredVideo(string name)

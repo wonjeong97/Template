@@ -286,6 +286,7 @@ namespace HuliacDev.Utils
         /// <summary>
         /// 플랫폼 환경(에디터 및 빌드)에 맞춰 안전하게 종료 명령을 호출함.
         /// 파생 클래스는 종료 방식(예: 종료 전 확인 화면)을 바꾸기 위해 재정의할 수 있음.
+        /// 확인 화면에서 종료를 취소하면 QuitReason.Clear()를 불러 기록해 둔 종료 사유와 진행 중 표시를 되돌릴 것.
         /// </summary>
         protected virtual void QuitApplication()
         {

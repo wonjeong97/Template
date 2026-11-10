@@ -247,7 +247,7 @@ Tests/
 | **UI & Media** | `UIManager` | uGUI/TextMeshPro 비동기 폰트 프리로드/일괄 적용, 텍스처 VRAM 압축(`compress`) 제어 |
 | | `FadeManager` | 화면 페이드 인/아웃(DOTween/UniTask), 커스텀 색상(`Color? color`) 및 `SortingOrder` 제어 |
 | | `SoundManager` | BGM/SFX 비동기 재생, 미리 불러오기(`PreloadAsync`), 마스터/BGM/SFX 개별 볼륨 및 음소거(`Mute`), DOTween 페이드 충돌 방어 |
-| | `VideoManager` | 비디오 비동기 프리로드/재생, 고아 RenderTexture 메모리 최적 해제 ($O(N+M)$) |
+| | `VideoManager` | 비디오 비동기 프리로드/재생(`PrepareAndPlayAsync`는 재생을 시작했는지 bool로 돌려줌), 고아 RenderTexture 메모리 최적 해제 ($O(N+M)$) |
 | **Network** | `NetworkStatusService` | R3 기반 실시간 네트워크 도달성/끊김/복구 모니터링, Windows의 인터넷 판정 반영 (오프라인 키오스크 초기 알림 억제) |
 | | `ApiManagerBase` | 시작/종료/비활동/외부 API 호출 이력 사내 서버 전송 추상 베이스 클래스 |
 | | `ApiRetryUtil` | 고정 간격 재시도 및 소켓/DNS 네트워크 예외 격리를 지원하는 WebRequest 안정적 재시도, 응답 본문 반환(`GetTextWithRetryAsync`), 인터넷이 없으면 전송 생략 |
@@ -470,11 +470,11 @@ if (result.isSuccess)
 
 `RootLifetimeScope`가 `AutoRestartWatchdog`를 자동으로 만들므로 씬 배치나 등록 코드, 현장 PC의 설치·작업 스케줄러 등록은 필요 없습니다. 앱이 시작할 때 감시 스크립트(`AutoRestartWatchdog.ps1`, `persistentDataPath`에 매번 새로 씀)를 창 없는 PowerShell로 띄우고, 감시 스크립트가 앱 프로세스를 지켜봅니다.
 
-- **종료 코드로 구분합니다.** 숨은 종료 버튼(`GameCloser`), 예약 종료(`ShutdownScheduler`), Alt+F4·창 닫기는 모두 `Application.Quit` 경로로 끝나 종료 코드가 0이므로 다시 켜지지 않고 감시도 함께 끝납니다. 크래시(예: `0xC0000005`)와 `taskkill /F`처럼 프로세스를 바로 끝낸 경우(1)는 0이 아니므로 `restartDelaySeconds`초 뒤 같은 실행 파일과 인수로 다시 켭니다. 프로젝트 코드에서 `Application.Quit(코드)`로 0이 아닌 코드를 넘기면 다시 켜집니다.
+- **종료 코드로 구분합니다.** 숨은 종료 버튼(`GameCloser`), 예약 종료(`ShutdownScheduler`), Alt+F4·창 닫기는 모두 `Application.Quit` 경로로 끝나 종료 코드가 0이므로 다시 켜지지 않고 감시도 함께 끝납니다. 크래시(예: `0xC0000005`)와 `taskkill /F`처럼 프로세스를 바로 끝낸 경우(1)는 0이 아니므로 `restartDelaySeconds`초 뒤 같은 실행 파일과 인수로 다시 켭니다. 앱이 스스로 다시 켜져야 할 때는 아래 "프로젝트 코드에서 쓰기"의 `TryRequestRestart`를 씁니다. 씬에 `ApiManagerBase`를 둔 프로젝트에서 `Application.Quit(코드)`만 부르면 `ApiManagerBase`가 종료 로그를 보낸 뒤 종료 코드 0으로 끝내 다시 켜지지 않습니다. 직접 0이 아닌 코드로 끝내려면 `QuitReason.Set(사유, 코드)`를 먼저 부릅니다.
 - **응답 없음:** 창이 Windows에 '응답 없음'으로 판정된 상태(메시지를 5초 넘게 처리하지 못함)가 `hangRestartSeconds`초 이어지면 강제로 끄고 다시 켭니다. 큰 씬·영상 로딩으로 잠깐 막혀도 걸리지 않도록 기본 60초이며, 0이면 이 감지를 끕니다.
 - **켜자마자 계속 끝나면** 앱이 60초 안에 끝나는 일이 이어질 때 두 번째부터 재시작 간격을 두 배씩 늘립니다(5초 → 10초 → 20초 …, 최대 10분). 크래시마다 Unity가 덤프를 남기므로 설정 오류 등으로 시작하자마자 죽는 상태에서 디스크가 차지 않게 하기 위함입니다. 60초 넘게 실행되면 간격이 원래대로 돌아옵니다.
 - Windows가 종료·로그오프 중이면 다시 켜지 않습니다.
-- 다시 켠 앱도 같은 감시 스크립트가 계속 지켜봅니다. 다시 켜진 앱은 시작 로그에 "Restarted by the watchdog ... (exit code -1073741819 (0xC0000005))"처럼 이유를 경고로 남기고, 감시를 또 띄우지 않습니다.
+- 다시 켠 앱도 같은 감시 스크립트가 계속 지켜봅니다. 다시 켜진 앱은 시작 로그에 "Restarted by the watchdog ... (exit code -1073741819 (0xC0000005))"처럼 이유를 경고로 남기고(코드에서는 `RestartReason`), 감시를 또 띄우지 않습니다.
 - 감시 스크립트가 시작·재시작·종료한 시각과 이유는 앱 로그 폴더(`persistentDataPath/Logs`)의 `AutoRestart.log`에 남습니다.
 - 값은 앱을 시작할 때 감시 스크립트에 넘기므로, 바꾸면 앱을 정상 종료(Alt+F4 등)한 뒤 다시 켜야 반영됩니다. 크래시로 다시 켜진 동안에는 처음 띄운 감시의 값이 그대로 쓰입니다.
 - 점검 등으로 앱을 끄려면 Alt+F4나 숨은 종료 버튼을 씁니다.
@@ -486,6 +486,30 @@ if (result.isSuccess)
 - PC 재부팅 뒤 앱을 켜는 일은 하지 않습니다. 기존처럼 시작 프로그램 등으로 켭니다.
 - 감시 스크립트만 작업 관리자에서 끄면 그 앱 실행 동안에는 감시가 없습니다. 다음에 앱이 시작될 때 다시 띄웁니다.
 - Windows 스탠드얼론 빌드에서만 동작하며, 에디터에서는 띄우지 않습니다. 기능을 아예 빼려면 `ConfigureAutoRestart`를 빈 본문으로 override합니다.
+
+**프로젝트 코드에서 쓰기:** `AutoRestartWatchdog`의 정적 API로 상태를 읽고 재시작을 요청합니다. 환경 변수 이름을 복사해 읽지 않습니다(템플릿이 이름을 바꾸면 컴파일 오류 없이 어긋납니다).
+
+| API | 설명 |
+|-----|------|
+| `WasRestarted` / `RestartReason` | 이번 실행이 감시가 다시 켠 실행인지와 그 이유(`"exit code -1073741819 (0xC0000005)"`, `"not responding for 60s"`, `"restart requested by the app (exit code 75)"`). 다시 켠 실행이 아니면 false / null |
+| `IsWatching` | 감시가 지금 이 앱을 지켜보는지. 감시를 띄운 직후 감시가 앱을 잡을 때까지(보통 몇 초), 꺼져 있거나 에디터이거나 감시 실행에 실패했거나 감시가 끝났으면 false |
+| `WaitUntilWatchingAsync(token)` | 감시를 띄울지와 띄운 감시가 지켜보기 시작했는지가 정해질 때까지 기다린 뒤 `IsWatching`을 돌려줌. `ConfigureAutoRestart`를 빈 본문으로 override하면 끝나지 않으므로 시간 제한 토큰을 넘김. 토큰이 취소되면 `OperationCanceledException` |
+| `TryRequestRestart(reason)` | 감시가 지켜보고 있으면 종료 코드 75(`RestartRequestedExitCode`)로 끝내 `restartDelaySeconds`초 뒤 다시 켜지게 하고 true. 지켜보고 있지 않거나 다른 종료(숨은 종료 버튼·예약 종료·Alt+F4)가 이미 진행 중이면 끄지 않고 false. 종료 로그에는 `end (by {reason})`로 남음 |
+
+```csharp
+// 예: 모니터가 다시 연결되면 앱을 다시 켜서 해상도를 새로 잡음. 앱 시작 직후에도 부를 수 있으면 먼저 감시 결과를 기다림.
+using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(destroyCancellationToken);
+timeout.CancelAfter(TimeSpan.FromSeconds(30));
+(bool isCanceled, bool isWatching) = await AutoRestartWatchdog.WaitUntilWatchingAsync(timeout.Token).SuppressCancellationThrow();
+
+// 다시 켜진 뒤 같은 이유로 계속 재시작하지 않도록, 감시가 다시 켠 실행이면 한 번 더 요청하지 않음.
+if (!isCanceled && isWatching && !AutoRestartWatchdog.WasRestarted)
+{
+    AutoRestartWatchdog.TryRequestRestart("Monitor Reconnect");
+}
+```
+
+앱이 60초 안에 다시 요청하는 일이 이어지면 크래시와 같이 재시작 간격을 두 배씩 늘립니다. 프로젝트가 직접 `Application.wantsToQuit`에서 false를 돌려 종료를 취소(확인 창 등)한다면 취소할 때 `QuitReason.Clear()`를 부릅니다. 부르지 않으면 취소된 재시작 요청의 종료 코드 75가 남아, 이후 Alt+F4로 끌 때 감시가 다시 켭니다.
 
 ### 예약 종료 (ShutdownScheduler)
 

@@ -15,6 +15,10 @@ namespace HuliacDev.UI
 {
     public class VideoManager : MonoBehaviour
     {
+        // WaitUntilPreparedAsync가 돌려주는 실패 사유 중 이미 정보 로그를 남겨 오류로 다시 남기지 않을 것.
+        private const string CanceledMessage = "Canceled";
+        private const string DestroyedMessage = "Destroyed";
+
         private bool _isOriginal;
 
         private readonly List<RenderTexture> _activeRenderTextures = new List<RenderTexture>();
@@ -103,20 +107,23 @@ namespace HuliacDev.UI
         }
 
         /// <summary>
-        /// 비디오 스트림을 비동기로 준비하고 완료 시 재생을 시작함.
+        /// 비디오 스트림을 비동기로 준비하고 완료 시 재생을 시작함. 재생을 시작했으면 true, 인자가 잘못됐거나
+        /// 준비 중 오류·시간 초과·취소로 재생하지 않았거나 준비 중에 VideoPlayer가 파괴됐으면 false를 돌려줌(실패 사유는 로그에 남음).
+        /// 준비 중 오류와 준비 완료가 같은 프레임에 오면 재생하지 않았는데도 VideoPlayer.isPrepared가 true일 수 있으므로,
+        /// 재생 여부는 그 값이 아니라 이 반환값으로 판단할 것.
         /// </summary>
-        public async UniTask PrepareAndPlayAsync(VideoPlayer vp, string url, AudioSource audioSource, float volume, CancellationToken cancellationToken)
+        public async UniTask<bool> PrepareAndPlayAsync(VideoPlayer vp, string url, AudioSource audioSource, float volume, CancellationToken cancellationToken)
         {
             if (!vp)
             {
                 if (_logger != null) _logger.ZLogError($"[VideoManager] VideoPlayer cannot be null.");
-                return;
+                return false;
             }
-    
+
             if (string.IsNullOrEmpty(url))
             {
                 if (_logger != null) _logger.ZLogError($"[VideoManager] Video URL cannot be null or empty.");
-                return;
+                return false;
             }
     
             // 1. 비디오 및 오디오 설정 분리
@@ -127,16 +134,20 @@ namespace HuliacDev.UI
 
             if (!isSuccess)
             {
-                // 취소된 경우는 이미 내부에서 로깅했으므로 무시
-                if (errorMessage != "Canceled" && _logger != null)
+                // 취소·파괴는 이미 내부에서 로깅했으므로 무시
+                if (errorMessage != CanceledMessage && errorMessage != DestroyedMessage && _logger != null)
                 {
                     _logger.ZLogError($"[VideoManager] Video preparation failed: {url}. Error: {errorMessage}");
                 }
-                return;
+                return false;
             }
+
+            // 준비 완료와 취소가 같은 프레임에 오면 대기 루프가 취소를 보지 못하므로, 재생 전에 한 번 더 확인함.
+            if (cancellationToken.IsCancellationRequested || !vp) return false;
 
             // 3. 성공 시 재생
             vp.Play();
+            return true;
         }
 
         /// <summary>
@@ -178,7 +189,8 @@ namespace HuliacDev.UI
     
             try
             {
-                while (!vp.isPrepared && elapsedTime < timeoutSeconds && !hasError)
+                // 준비 중에 VideoPlayer가 파괴되면 isPrepared가 예외를 던지므로 살아 있는지 먼저 확인함.
+                while (vp && !vp.isPrepared && elapsedTime < timeoutSeconds && !hasError)
                 {
                     // Time.timeScale이 0이면 deltaTime도 0이라 타임아웃이 영원히 성립하지 않음.
                     // 준비 실패 시에도 빠져나오지 못하고 무한 대기하므로 unscaledDeltaTime을 사용함.
@@ -189,11 +201,17 @@ namespace HuliacDev.UI
             catch (OperationCanceledException)
             {
                 if (_logger != null) _logger.ZLogInformation($"[VideoManager] Video preparation canceled.");
-                return (false, "Canceled");
+                return (false, CanceledMessage);
             }
             finally
             {
                 if (vp) vp.errorReceived -= errorHandler;
+            }
+
+            if (!vp)
+            {
+                if (_logger != null) _logger.ZLogInformation($"[VideoManager] VideoPlayer was destroyed during preparation.");
+                return (false, DestroyedMessage);
             }
     
             if (hasError) return (false, errorMessage);

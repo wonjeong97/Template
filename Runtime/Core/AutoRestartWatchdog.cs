@@ -5,9 +5,11 @@ using Microsoft.Extensions.Logging;
 using UnityEngine;
 using VContainer.Unity;
 using HuliacDev.Data;
+using HuliacDev.Utils;
 using ZLogger;
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 #endif
 
@@ -31,6 +33,11 @@ namespace HuliacDev.Core
     /// 현장 PC에 설치·작업 스케줄러 등록 없이 동작하도록 스크립트를 이 클래스에 문자열로 두고, 시작할 때마다 persistentDataPath에 씀
     /// (패키지 버전과 스크립트가 항상 맞음). Settings.json의 autoRestart.enabled가 true일 때만 띄우며, 에디터와 다른 플랫폼에서는 띄우지 않음.
     /// </para>
+    /// <para>
+    /// 프로젝트 코드는 정적 API로 상태를 읽음: 이번 실행이 감시가 다시 켠 실행인지(WasRestarted, RestartReason),
+    /// 감시가 지금 앱을 지켜보는지(IsWatching, WaitUntilWatchingAsync). 앱이 스스로 다시 켜져야 할 때는 TryRequestRestart를 부름.
+    /// 환경 변수 이름을 복사해 읽거나 Application.Quit(코드)를 직접 부르지 말 것(이름이 바뀌거나 ApiManagerBase가 종료 코드를 0으로 바꿀 수 있음).
+    /// </para>
     /// </summary>
     public sealed class AutoRestartWatchdog : IStartable, IDisposable
     {
@@ -41,6 +48,12 @@ namespace HuliacDev.Core
         internal const string RestartReasonVariable = "HULIACDEV_AUTORESTART_REASON";
 
         /// <summary>
+        /// 앱이 감시에 다시 켜 달라고 요청하며 끝낼 때 쓰는 종료 코드(TryRequestRestart). 감시 스크립트가 이 값을 보고 AutoRestart.log와
+        /// 다시 켠 앱의 RestartReason에 "restart requested by the app"으로 남김. WatchdogScript와 맞춰야 함.
+        /// </summary>
+        public const int RestartRequestedExitCode = 75;
+
+        /// <summary>
         /// 감시 스크립트 본문. 인수 이름은 AutoRestartPolicy.BuildWatchdogArguments와 맞춰야 함.
         /// 앱의 종료 코드를 읽으려면 앱이 살아 있을 때 프로세스 핸들을 열어 둬야 하므로, 시작하자마자 핸들을 엶.
         /// 다시 실행할 때는 ShellExecute(보안 경고 창이 뜰 수 있음)가 아니라 CreateProcess로 같은 실행 파일과 인수를 씀.
@@ -49,6 +62,7 @@ namespace HuliacDev.Core
 param(
     [Parameter(Mandatory = $true)][int]$AppPid,
     [Parameter(Mandatory = $true)][string]$LogPath,
+    [string]$ReadyEventName = '',
     [int]$HangRestartSeconds = 60,
     [int]$RestartDelaySeconds = 5,
     [int]$MaxRestartDelaySeconds = 600,
@@ -120,6 +134,25 @@ if ($commandLine) {
 # 이 감시가 다시 실행한 앱이 감시를 또 띄우지 않도록 PID를 넘김(자식 프로세스는 환경 변수를 물려받음).
 $env:HULIACDEV_AUTORESTART_WATCHDOG_PID = [string]$PID
 
+# 다시 실행된 앱이 위 PID가 정말 이 감시인지(감시가 끝난 뒤 다른 프로세스가 PID를 재사용한 게 아닌지) 확인하도록,
+# 감시가 사는 동안 이름 있는 이벤트를 열어 둠. 감시가 끝나면 Windows가 닫아 이름이 사라짐.
+try {
+    $aliveEvent = New-Object System.Threading.EventWaitHandle($false, [System.Threading.EventResetMode]::ManualReset, ""Local\HuliacDev.AutoRestart.Alive.$PID"")
+} catch {
+    Write-WatchdogLog ""Could not create the alive event; restarted apps will start another watchdog: $_""
+}
+
+# 앱이 만들어 둔 이벤트에 신호를 줘, 이제 앱이 0이 아닌 코드로 끝나도 다시 켤 수 있음을 알림(앱 핸들을 연 뒤라 종료 코드를 읽을 수 있음).
+if ($ReadyEventName) {
+    try {
+        $readyEvent = [System.Threading.EventWaitHandle]::OpenExisting($ReadyEventName)
+        $null = $readyEvent.Set()
+        $readyEvent.Dispose()
+    } catch {
+        Write-WatchdogLog ""Could not tell the app that watching started: $_""
+    }
+}
+
 if ($HangRestartSeconds -gt 0) { $hangText = ""${HangRestartSeconds}s"" } else { $hangText = 'off' }
 Write-WatchdogLog (""Watching {0} (pid {1}). Hang restart: {2}."" -f $exePath, $AppPid, $hangText)
 
@@ -185,6 +218,8 @@ while ($true) {
 
     if ($killedForHang) {
         $reason = ""not responding for ${HangRestartSeconds}s""
+    } elseif ($exitCode -eq 75) {
+        $reason = 'restart requested by the app (exit code 75)'
     } else {
         $reason = 'exit code {0} (0x{0:X8})' -f $exitCode
     }
@@ -231,7 +266,20 @@ while ($true) {
         private const string ScriptFileName = "AutoRestartWatchdog.ps1";
         private const string LogFileName = "AutoRestart.log";
 
+        /// <summary>감시가 다시 실행한 앱이면 그 이유, 아니면 null. 프로세스 환경 변수라 실행 중에 바뀌지 않으므로 한 번만 읽음.</summary>
+        private static readonly string StartupRestartReason = NormalizeRestartReason(Environment.GetEnvironmentVariable(RestartReasonVariable));
+
+        /// <summary>감시를 띄우지 않기로 했거나, 띄운 감시가 지켜보기 시작했거나 실패해 결과가 정해지면 완료됨(WaitUntilWatchingAsync가 기다림).</summary>
+        private static readonly UniTaskCompletionSource WatchDecided = new UniTaskCompletionSource();
+
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        /// <summary>감시가 지켜보기 시작했는지 확인하는 간격(밀리초). 감시가 뜨는 데 몇 초 걸리므로 매 프레임 확인하지 않음.</summary>
+        private const int ReadyPollIntervalMilliseconds = 200;
+
+        // 이 앱을 지켜보기 시작한 것이 확인된 감시 프로세스. 앱이 끝날 때까지 두고 IsWatching에서 살아 있는지 확인함
+        // (작업 관리자로 감시만 끈 경우를 걸러내기 위함).
+        private static System.Diagnostics.Process _watchdogProcess;
+
         // 한 프로세스에서 감시를 두 번 띄우면 두 감시가 각자 앱을 다시 실행해 앱이 두 개 뜨므로 막음
         // (RootLifetimeScope를 상속한 스코프가 둘 이상 만들어지는 구성 대비).
         private static bool _hasLaunched;
@@ -244,6 +292,83 @@ while ($true) {
 
         private CancellationTokenSource _cts;
 
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+        // 스코프가 파기된 뒤에는 로거도 함께 정리되므로, 앱 수명 동안 이어지는 감시 시작 대기에서 로그를 남기지 않기 위함.
+        private bool _isDisposed;
+#endif
+
+        /// <summary>
+        /// 이번 실행이 감시 스크립트가 다시 켠 실행이면 true. 다시 켜진 뒤 같은 원인으로 재시작이 반복되지 않게 하는 판단 등에 씀.
+        /// 사람이 직접 켰거나 감시가 처음 띄워진 실행이면 false.
+        /// </summary>
+        public static bool WasRestarted => StartupRestartReason != null;
+
+        /// <summary>
+        /// 감시 스크립트가 이번 실행을 다시 켠 이유. 다시 켠 실행이 아니면 null.
+        /// "exit code -1073741819 (0xC0000005)", "not responding for 60s", "restart requested by the app (exit code 75)" 같은
+        /// 로그·표시용 문장임.
+        /// </summary>
+        public static string RestartReason => StartupRestartReason;
+
+        /// <summary>
+        /// 감시 스크립트가 지금 이 앱을 지켜보고 있으면 true. 이때 앱이 0이 아닌 코드로 끝나면 다시 켜짐.
+        /// 감시를 띄운 직후에는 감시가 앱 핸들을 열 때까지(보통 몇 초) false이며, autoRestart가 꺼져 있거나 에디터·다른 플랫폼이거나
+        /// 감시 실행에 실패했거나 감시가 끝났으면 false. 앱 시작 직후에 판단해야 하면 WaitUntilWatchingAsync를 기다릴 것.
+        /// 부를 때마다 감시 프로세스 상태를 OS에 물으므로 매 프레임이 아니라 판단이 필요할 때만 부를 것.
+        /// </summary>
+        public static bool IsWatching
+        {
+            get
+            {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+                if (_watchdogProcess == null) return false;
+
+                try
+                {
+                    return !_watchdogProcess.HasExited;
+                }
+                catch (Exception)
+                {
+                    // 프로세스 정보를 읽을 수 없으면 지켜본다고 장담할 수 없음
+                    return false;
+                }
+#else
+                return false;
+#endif
+            }
+        }
+
+        /// <summary>
+        /// 감시를 띄울지와 띄운 감시가 지켜보기 시작했는지가 정해질 때까지 기다린 뒤 IsWatching을 돌려줌.
+        /// 이미 정해졌으면 바로 끝남. AutoRestartWatchdog를 등록하지 않았으면(ConfigureAutoRestart를 빈 본문으로 override)
+        /// 결과가 정해지지 않아 끝나지 않으므로, 시간 제한이나 파괴와 연결된 토큰을 넘길 것(취소되면 OperationCanceledException).
+        /// </summary>
+        public static async UniTask<bool> WaitUntilWatchingAsync(CancellationToken cancellationToken)
+        {
+            await WatchDecided.Task.AttachExternalCancellation(cancellationToken);
+            return IsWatching;
+        }
+
+        /// <summary>
+        /// 감시가 이 앱을 지켜보고 있으면 RestartRequestedExitCode로 앱을 끝내고 true를 돌려줌. 감시가 restartDelaySeconds초 뒤
+        /// 앱을 다시 켜며, 다시 켠 앱의 RestartReason은 "restart requested by the app (exit code 75)"임.
+        /// 지켜보고 있지 않으면 끝내지 않고 false를 돌려줌(끝내면 다시 켜 줄 감시가 없어 앱이 꺼진 채 남기 때문).
+        /// 다른 종료(숨은 종료 버튼, 예약 종료, Alt+F4)나 앞서 받아들인 재시작 요청이 이미 진행 중이어도(QuitReason.IsQuitRequested)
+        /// false를 돌려줌. 이때 false는 "감시가 없다"는 뜻이 아니므로 호출부가 따로 Application.Quit을 부르지 말 것. 반대로 요청 뒤 숨은 종료 버튼·예약 종료가 들어오면 그쪽이 종료 코드를 0으로 되돌려 그 종료가 이김.
+        /// <para>
+        /// reason은 ApiManagerBase 종료 로그에 "end (by {reason})"로 남음. 끝내는 경로는 Application.Quit과 같아
+        /// ApiManagerBase가 종료 로그를 보낸 뒤 이 종료 코드로 끝냄. 앱이 60초 안에 다시 요청하면 감시가 간격을 두 배씩 늘림.
+        /// </para>
+        /// </summary>
+        public static bool TryRequestRestart(string reason)
+        {
+            if (!CanAcceptRestartRequest(IsWatching, QuitReason.IsQuitRequested)) return false;
+
+            QuitReason.Set(reason, RestartRequestedExitCode);
+            Application.Quit(RestartRequestedExitCode);
+            return true;
+        }
+
         /// <summary>
         /// 감시 로그를 쓸 폴더(앱 파일 로그와 같은 폴더)와 설정 제공자·로거를 받아 구성함.
         /// </summary>
@@ -254,6 +379,22 @@ while ($true) {
 #endif
             _settingsProvider = settingsProvider;
             _logger = logger;
+        }
+
+        /// <summary>
+        /// 재시작 요청을 받아들일지 정함. 감시가 지켜보고 있고 다른 종료가 진행 중이 아닐 때만 받아들임.
+        /// </summary>
+        internal static bool CanAcceptRestartRequest(bool isWatching, bool isQuitRequested)
+        {
+            return isWatching && !isQuitRequested;
+        }
+
+        /// <summary>
+        /// 환경 변수 값이 비어 있으면 다시 켠 실행이 아닌 것으로 보고 null로 바꿈.
+        /// </summary>
+        internal static string NormalizeRestartReason(string value)
+        {
+            return string.IsNullOrEmpty(value) ? null : value;
         }
 
         /// <summary>
@@ -275,15 +416,15 @@ while ($true) {
         /// </summary>
         private void LogRestartReason()
         {
-            string reason = Environment.GetEnvironmentVariable(RestartReasonVariable);
-            if (string.IsNullOrEmpty(reason) || _logger == null) return;
+            if (!WasRestarted || _logger == null) return;
 
-            _logger.ZLogWarning($"[AutoRestartWatchdog] Restarted by the watchdog after the previous run ended abnormally ({reason}).");
+            _logger.ZLogWarning($"[AutoRestartWatchdog] Restarted by the watchdog after the previous run ended ({RestartReason}).");
         }
 
         /// <summary>
         /// Settings.json의 autoRestart를 읽어, 켜져 있으면 Windows 스탠드얼론 빌드에서만 감시 스크립트를 띄움.
         /// Settings.json을 읽지 못하면 AppSettingsProvider의 대체 설정에 autoRestart가 없으므로 띄우지 않음.
+        /// 감시를 띄우지 않기로 했거나 결과가 정해지면 WatchDecided를 완료해 WaitUntilWatchingAsync를 깨움.
         /// </summary>
         private async UniTaskVoid StartWatchdogAsync(string persistentDataPath, CancellationToken cancellationToken)
         {
@@ -294,20 +435,30 @@ while ($true) {
             }
             catch (OperationCanceledException)
             {
-                // 컨테이너 파기나 앱 종료로 정상 취소됨
+                // 컨테이너 파기나 앱 종료로 정상 취소됨. 기다리는 쪽이 남지 않도록 결과를 정함
+                // (다른 스코프가 이어서 감시를 띄워도 IsWatching은 감시 프로세스로 판단하므로 맞게 바뀜).
+                WatchDecided.TrySetResult();
                 return;
             }
 
             AutoRestartSetting setting = settings?.autoRestart;
-            if (setting == null || !setting.enabled) return;
+            if (setting == null || !setting.enabled)
+            {
+                WatchDecided.TrySetResult();
+                return;
+            }
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            // 먼저 만들어진 스코프가 결과를 정하므로 여기서는 완료하지 않음.
             if (_hasLaunched) return;
 
-            if (TryGetRunningWatchdog(out int runningWatchdogId))
+            if (TryGetRunningWatchdog(out System.Diagnostics.Process runningWatchdog))
             {
+                // 감시는 앱을 다시 실행하자마자 앱 핸들을 열어 두므로 이미 지켜보는 중임.
                 _hasLaunched = true;
-                if (_logger != null) _logger.ZLogInformation($"[AutoRestartWatchdog] Already watched by the watchdog that restarted this app (pid {runningWatchdogId}).");
+                _watchdogProcess = runningWatchdog;
+                WatchDecided.TrySetResult();
+                if (_logger != null) _logger.ZLogInformation($"[AutoRestartWatchdog] Already watched by the watchdog that restarted this app (pid {runningWatchdog.Id}).");
                 return;
             }
 
@@ -323,69 +474,154 @@ while ($true) {
                 appProcessId = current.Id;
             }
 
-            string arguments = AutoRestartPolicy.BuildWatchdogArguments(scriptPath, appProcessId, logPath, hangRestartSeconds, restartDelaySeconds);
+            string readyEventName = AutoRestartPolicy.BuildReadyEventName(appProcessId);
+            string arguments = AutoRestartPolicy.BuildWatchdogArguments(scriptPath, appProcessId, logPath, readyEventName, hangRestartSeconds, restartDelaySeconds);
 
             // 실행 결과를 기다리는 사이 다른 스코프가 또 띄우지 않도록 먼저 표시함.
             _hasLaunched = true;
 
+            System.Diagnostics.Process watchdog;
+            IntPtr readyEvent;
             try
             {
-                // 실행은 짧고 감시는 앱과 별개 프로세스라 취소 토큰을 넘기지 않음. 넘기면 실행 직전에 취소될 때
+                // 실행은 짧고 감시는 앱과 별개 프로세스라 취소 토큰을 넘기지 않음(그사이 스코프가 파기되면 아래 로그는 남기지 않음). 넘기면 실행 직전에 취소될 때
                 // 감시는 뜨지 않았는데 _hasLaunched만 남아, 이후 만들어지는 스코프도 감시를 띄우지 않게 됨.
-                int watchdogId = await UniTask.RunOnThreadPool(() => LaunchWatchdog(scriptPath, logPath, arguments));
-
-                if (_logger != null)
-                {
-                    _logger.ZLogInformation($"[AutoRestartWatchdog] Watchdog started (pid {watchdogId}). Restarts the app when it ends with a non-zero exit code or stays not responding for {hangRestartSeconds}s (0 = off), after {restartDelaySeconds}s. Log: {logPath}");
-                }
+                (watchdog, readyEvent) = await UniTask.RunOnThreadPool(() => LaunchWatchdog(scriptPath, logPath, readyEventName, arguments));
             }
             catch (Exception e)
             {
                 _hasLaunched = false;
-                if (_logger != null) _logger.ZLogError($"[AutoRestartWatchdog] Failed to start the watchdog; the app will not be restarted automatically: {e.Message}");
+                WatchDecided.TrySetResult();
+                if (_logger != null && !_isDisposed) _logger.ZLogError($"[AutoRestartWatchdog] Failed to start the watchdog; the app will not be restarted automatically: {e.Message}");
+                return;
             }
+
+            if (_logger != null && !_isDisposed)
+            {
+                _logger.ZLogInformation($"[AutoRestartWatchdog] Watchdog started (pid {watchdog.Id}). Restarts the app when it ends with a non-zero exit code or stays not responding for {hangRestartSeconds}s (0 = off), after {restartDelaySeconds}s. Log: {logPath}");
+            }
+
+            if (readyEvent == IntPtr.Zero)
+            {
+                // 감시는 떠서 재시작은 되지만, 지켜보기 시작했는지 알 수 없어 IsWatching을 켜지 않음.
+                watchdog.Dispose();
+                WatchDecided.TrySetResult();
+                if (_logger != null && !_isDisposed) _logger.ZLogWarning($"[AutoRestartWatchdog] Could not create the event the watchdog signals when it starts watching; IsWatching stays false.");
+                return;
+            }
+
+            // 스코프가 먼저 파기돼도 IsWatching이 맞게 켜지도록 대기는 스코프가 아니라 앱 종료에만 묶음.
+            await WaitForWatchStartAsync(watchdog, readyEvent, Application.exitCancellationToken);
 #else
+            WatchDecided.TrySetResult();
             if (_logger != null) _logger.ZLogInformation($"[AutoRestartWatchdog] autoRestart is enabled, but the watchdog only runs in Windows standalone builds. Skipped on this platform.");
 #endif
         }
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
         /// <summary>
-        /// 이 앱을 다시 실행한 감시 스크립트가 아직 살아 있는지 확인함. 감시가 죽은 뒤 PID가 다른 프로세스에 재사용된 경우를
-        /// 걸러내도록 프로세스 이름도 확인하며, 확인할 수 없으면 살아 있지 않은 것으로 봄(그러면 새 감시를 띄움).
+        /// 감시가 앱 핸들을 열고 이벤트에 신호를 줄 때까지 기다려 IsWatching을 켬. 감시가 그 전에 끝나면(PowerShell 실행 실패,
+        /// 앱 핸들을 열지 못함) 켜지 않음. 감시가 뜨는 데(Add-Type 컴파일 포함) 몇 초 걸리므로 매 프레임이 아니라 간격을 두고 확인함.
+        /// 앱 종료 토큰으로만 취소하며, 스코프가 파기된 뒤에는 로그를 남기지 않음.
         /// </summary>
-        private static bool TryGetRunningWatchdog(out int watchdogId)
+        private async UniTask WaitForWatchStartAsync(System.Diagnostics.Process watchdog, IntPtr readyEvent, CancellationToken cancellationToken)
         {
-            watchdogId = 0;
-
-            if (!int.TryParse(Environment.GetEnvironmentVariable(WatchdogPidVariable), out int id)) return false;
+            bool isWatching = false;
 
             try
             {
-                using (System.Diagnostics.Process process = System.Diagnostics.Process.GetProcessById(id))
+                while (true)
                 {
-                    if (process.HasExited || !string.Equals(process.ProcessName, "powershell", StringComparison.OrdinalIgnoreCase)) return false;
+                    if (watchdog.HasExited)
+                    {
+                        if (_logger != null && !_isDisposed) _logger.ZLogError($"[AutoRestartWatchdog] The watchdog exited (exit code {watchdog.ExitCode}) before it started watching; the app will not be restarted automatically. See AutoRestart.log.");
+                        return;
+                    }
+
+                    if (NativeMethods.WaitForSingleObject(readyEvent, 0) == NativeMethods.WaitObject0)
+                    {
+                        isWatching = true;
+                        _watchdogProcess = watchdog;
+                        if (_logger != null && !_isDisposed) _logger.ZLogInformation($"[AutoRestartWatchdog] The watchdog is now watching this app.");
+                        return;
+                    }
+
+                    await UniTask.Delay(ReadyPollIntervalMilliseconds, DelayType.Realtime, PlayerLoopTiming.Update, cancellationToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 앱 종료로 정상 취소됨. 감시는 별개 프로세스라 그대로 앱을 지켜봄.
+            }
+            finally
+            {
+                NativeMethods.CloseHandle(readyEvent);
+                if (!isWatching) watchdog.Dispose();
+                WatchDecided.TrySetResult();
+            }
+        }
+
+        /// <summary>
+        /// 이 앱을 다시 실행한 감시 스크립트가 아직 살아 있으면 그 프로세스를 돌려줌. 감시가 사는 동안 열어 두는 이름 있는 이벤트로
+        /// 확인하므로, 감시가 끝난 뒤 PID가 다른 프로세스에 재사용돼도 감시로 잘못 보지 않음(시작 시각 비교와 달리 시계 변경에도 영향 없음).
+        /// 확인할 수 없으면 살아 있지 않은 것으로 봄(그러면 새 감시를 띄움). 돌려준 프로세스는 핸들을 열어 두어,
+        /// 이후 감시가 끝나고 PID가 재사용돼도 IsWatching이 다른 프로세스를 보지 않음.
+        /// </summary>
+        private static bool TryGetRunningWatchdog(out System.Diagnostics.Process watchdog)
+        {
+            watchdog = null;
+
+            if (!int.TryParse(Environment.GetEnvironmentVariable(WatchdogPidVariable), out int id)) return false;
+
+            System.Diagnostics.Process process = null;
+            try
+            {
+                process = System.Diagnostics.Process.GetProcessById(id);
+                // 핸들을 먼저 열어 두면 이 객체가 살아 있는 동안 PID가 다른 프로세스에 재사용되지 않으므로,
+                // 이어서 확인하는 생존 이벤트가 이 핸들의 프로세스 것임이 보장됨.
+                _ = process.Handle;
+                if (process.HasExited || !IsAliveEventPresent(AutoRestartPolicy.BuildAliveEventName(id)))
+                {
+                    process.Dispose();
+                    return false;
                 }
             }
             catch (Exception)
             {
                 // 이미 끝난 프로세스(ArgumentException)이거나 정보를 읽을 수 없음
+                process?.Dispose();
                 return false;
             }
 
-            watchdogId = id;
+            watchdog = process;
             return true;
         }
 
         /// <summary>
-        /// 감시 스크립트를 쓰고 숨은 PowerShell로 실행한 뒤 그 PID를 돌려줌. 파일 쓰기와 프로세스 생성이 메인 스레드를 막지 않도록
-        /// 스레드 풀에서 호출함. Windows PowerShell 5.1은 BOM 없는 UTF-8 스크립트를 시스템 코드 페이지로 읽으므로 BOM을 붙임.
+        /// 감시가 사는 동안 열어 두는 이벤트가 있는지 확인함. 열 수 있으면 그 이름의 감시가 살아 있다는 뜻이며, 확인만 하고 바로 닫음.
         /// </summary>
-        private static int LaunchWatchdog(string scriptPath, string logPath, string arguments)
+        private static bool IsAliveEventPresent(string aliveEventName)
+        {
+            IntPtr handle = NativeMethods.OpenEvent(NativeMethods.Synchronize, false, aliveEventName);
+            if (handle == IntPtr.Zero) return false;
+
+            NativeMethods.CloseHandle(handle);
+            return true;
+        }
+
+        /// <summary>
+        /// 감시 스크립트를 쓰고, 감시가 지켜보기 시작할 때 신호를 줄 이벤트를 만든 뒤 숨은 PowerShell로 실행함.
+        /// 파일 쓰기와 프로세스 생성이 메인 스레드를 막지 않도록 스레드 풀에서 호출함. Windows PowerShell 5.1은 BOM 없는 UTF-8
+        /// 스크립트를 시스템 코드 페이지로 읽으므로 BOM을 붙임. 이벤트를 만들지 못하면 IntPtr.Zero를 돌려주며 감시는 그대로 띄움.
+        /// </summary>
+        private static (System.Diagnostics.Process watchdog, IntPtr readyEvent) LaunchWatchdog(string scriptPath, string logPath, string readyEventName, string arguments)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(scriptPath));
             Directory.CreateDirectory(Path.GetDirectoryName(logPath));
             File.WriteAllText(scriptPath, WatchdogScript, new UTF8Encoding(true));
+
+            // 감시는 이미 있는 이벤트만 열 수 있으므로 감시보다 먼저 만듦(수동 리셋, 처음엔 신호 없음).
+            IntPtr readyEvent = NativeMethods.CreateEvent(IntPtr.Zero, true, false, readyEventName);
 
             System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo
             {
@@ -395,18 +631,49 @@ while ($true) {
                 CreateNoWindow = true
             };
 
-            using (System.Diagnostics.Process process = System.Diagnostics.Process.Start(startInfo))
+            try
             {
-                return process.Id;
+                return (System.Diagnostics.Process.Start(startInfo), readyEvent);
             }
+            catch (Exception)
+            {
+                if (readyEvent != IntPtr.Zero) NativeMethods.CloseHandle(readyEvent);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// 감시가 지켜보기 시작했다는 신호와 감시가 살아 있다는 표시를 확인하는 이벤트용 kernel32 함수. .NET의 이름 있는 EventWaitHandle은 IL2CPP에서
+        /// 프로세스 사이에 공유되는지 보장되지 않으므로 Win32 API를 직접 부름.
+        /// </summary>
+        private static class NativeMethods
+        {
+            public const uint WaitObject0 = 0;
+            public const uint Synchronize = 0x00100000;
+
+            [DllImport("kernel32.dll", EntryPoint = "CreateEventW", CharSet = CharSet.Unicode)]
+            public static extern IntPtr CreateEvent(IntPtr eventAttributes, bool manualReset, bool initialState, string name);
+
+            [DllImport("kernel32.dll", EntryPoint = "OpenEventW", CharSet = CharSet.Unicode)]
+            public static extern IntPtr OpenEvent(uint desiredAccess, bool inheritHandle, string name);
+
+            [DllImport("kernel32.dll")]
+            public static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+
+            [DllImport("kernel32.dll")]
+            public static extern bool CloseHandle(IntPtr handle);
         }
 #endif
 
         /// <summary>
-        /// 설정 로드를 취소함. 이미 띄운 감시 스크립트는 앱과 별개 프로세스라 그대로 앱을 지켜봄.
+        /// 설정 로드를 취소함. 감시 시작 대기는 앱이 끝날 때까지 이어가되 로그는 남기지 않음.
+        /// 이미 띄운 감시 스크립트는 앱과 별개 프로세스라 그대로 앱을 지켜봄.
         /// </summary>
         public void Dispose()
         {
+#if UNITY_STANDALONE_WIN && !UNITY_EDITOR
+            _isDisposed = true;
+#endif
             if (_cts == null) return;
 
             _cts.Cancel();

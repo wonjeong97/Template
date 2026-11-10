@@ -52,15 +52,33 @@ namespace HuliacDev.Core
         }
 
         /// <summary>
-        /// 감시 스크립트를 숨은 PowerShell로 실행할 명령줄 인수를 만듦. 인수 이름은 AutoRestartWatchdog.WatchdogScript의 param과 맞춰야 함.
-        /// Windows 경로에는 큰따옴표가 들어갈 수 없으므로 경로는 큰따옴표로만 감쌈.
+        /// 감시가 앱을 지켜보기 시작했을 때 신호를 줄 이벤트의 이름을 만듦. 앱마다 다르도록 앱 PID를 붙이고,
+        /// 같은 로그온 세션 안에서만 보이도록 Local\ 이름 공간을 씀.
         /// </summary>
-        public static string BuildWatchdogArguments(string scriptPath, int appProcessId, string logPath,
+        public static string BuildReadyEventName(int appProcessId)
+        {
+            return ZString.Concat(@"Local\HuliacDev.AutoRestart.Ready.", appProcessId);
+        }
+
+        /// <summary>
+        /// 감시가 사는 동안 열어 두는 이벤트의 이름을 만듦. 다시 실행된 앱이 환경 변수로 받은 감시 PID가 정말 그 감시인지 확인하는 데 씀.
+        /// 감시 스크립트가 같은 이름("Local\HuliacDev.AutoRestart.Alive.$PID")으로 만듦.
+        /// </summary>
+        public static string BuildAliveEventName(int watchdogProcessId)
+        {
+            return ZString.Concat(@"Local\HuliacDev.AutoRestart.Alive.", watchdogProcessId);
+        }
+
+        /// <summary>
+        /// 감시 스크립트를 숨은 PowerShell로 실행할 명령줄 인수를 만듦. 인수 이름은 AutoRestartWatchdog.WatchdogScript의 param과 맞춰야 함.
+        /// Windows 경로와 이벤트 이름에는 큰따옴표가 들어가지 않으므로 큰따옴표로만 감쌈.
+        /// </summary>
+        public static string BuildWatchdogArguments(string scriptPath, int appProcessId, string logPath, string readyEventName,
             int hangRestartSeconds, int restartDelaySeconds)
         {
             return ZString.Format(
-                "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{0}\" -AppPid {1} -LogPath \"{2}\" -HangRestartSeconds {3} -RestartDelaySeconds {4} -MaxRestartDelaySeconds {5} -QuickExitSeconds {6}",
-                scriptPath, appProcessId, logPath, hangRestartSeconds, restartDelaySeconds, MaxRestartDelaySeconds, QuickExitSeconds);
+                "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{0}\" -AppPid {1} -LogPath \"{2}\" -ReadyEventName \"{3}\" -HangRestartSeconds {4} -RestartDelaySeconds {5} -MaxRestartDelaySeconds {6} -QuickExitSeconds {7}",
+                scriptPath, appProcessId, logPath, readyEventName, hangRestartSeconds, restartDelaySeconds, MaxRestartDelaySeconds, QuickExitSeconds);
         }
     }
 }

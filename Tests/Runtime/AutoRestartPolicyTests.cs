@@ -2,6 +2,7 @@ using NUnit.Framework;
 using UnityEngine;
 using HuliacDev.Core;
 using HuliacDev.Data;
+using HuliacDev.Utils;
 
 namespace HuliacDev.Tests
 {
@@ -60,18 +61,20 @@ namespace HuliacDev.Tests
         [Test]
         public void 명령줄_인수_이름과_값이_스크립트_param과_맞는다()
         {
-            string arguments = AutoRestartPolicy.BuildWatchdogArguments(@"C:\Data\AutoRestartWatchdog.ps1", 1234, @"C:\Data\Logs\AutoRestart.log", 77, 3);
+            string arguments = AutoRestartPolicy.BuildWatchdogArguments(@"C:\Data\AutoRestartWatchdog.ps1", 1234, @"C:\Data\Logs\AutoRestart.log",
+                @"Local\HuliacDev.AutoRestart.Ready.1234", 77, 3);
 
             StringAssert.Contains("-File \"C:\\Data\\AutoRestartWatchdog.ps1\"", arguments);
             StringAssert.Contains("-AppPid 1234 ", arguments);
             StringAssert.Contains("-LogPath \"C:\\Data\\Logs\\AutoRestart.log\"", arguments);
+            StringAssert.Contains("-ReadyEventName \"Local\\HuliacDev.AutoRestart.Ready.1234\"", arguments);
             StringAssert.Contains("-HangRestartSeconds 77 ", arguments);
             StringAssert.Contains("-RestartDelaySeconds 3 ", arguments);
             StringAssert.Contains("-MaxRestartDelaySeconds " + AutoRestartPolicy.MaxRestartDelaySeconds + " ", arguments);
             StringAssert.EndsWith("-QuickExitSeconds " + AutoRestartPolicy.QuickExitSeconds, arguments);
 
             // 본문에서 쓰는 이름이 아니라 param 선언("[int]$AppPid" 등)과 맞는지 봄.
-            string[] parameters = { "AppPid", "LogPath", "HangRestartSeconds", "RestartDelaySeconds", "MaxRestartDelaySeconds", "QuickExitSeconds" };
+            string[] parameters = { "AppPid", "LogPath", "ReadyEventName", "HangRestartSeconds", "RestartDelaySeconds", "MaxRestartDelaySeconds", "QuickExitSeconds" };
             foreach (string parameter in parameters)
             {
                 StringAssert.Contains("]$" + parameter, AutoRestartWatchdog.WatchdogScript, "스크립트에 param 선언이 없음: " + parameter);
@@ -88,6 +91,95 @@ namespace HuliacDev.Tests
         {
             StringAssert.Contains("$env:" + AutoRestartWatchdog.WatchdogPidVariable + " =", AutoRestartWatchdog.WatchdogScript);
             StringAssert.Contains("$env:" + AutoRestartWatchdog.RestartReasonVariable + " =", AutoRestartWatchdog.WatchdogScript);
+        }
+
+        /// <summary>
+        /// 감시가 신호를 줄 이벤트 이름은 앱마다 달라야 하고(같은 PC의 다른 앱 감시와 섞이지 않게), 스크립트가 그 인수로 이벤트를 열어야 함.
+        /// 스크립트가 열지 않으면 감시가 지켜보는데도 IsWatching이 켜지지 않아 TryRequestRestart가 늘 false를 돌려줌.
+        /// </summary>
+        [Test]
+        public void 대기_이벤트_이름은_앱마다_다르고_스크립트가_그_이름으로_신호를_준다()
+        {
+            Assert.AreEqual(@"Local\HuliacDev.AutoRestart.Ready.1234", AutoRestartPolicy.BuildReadyEventName(1234));
+            Assert.AreNotEqual(AutoRestartPolicy.BuildReadyEventName(1234), AutoRestartPolicy.BuildReadyEventName(5678));
+
+            StringAssert.Contains("[System.Threading.EventWaitHandle]::OpenExisting($ReadyEventName)", AutoRestartWatchdog.WatchdogScript);
+            StringAssert.Contains("$readyEvent.Set()", AutoRestartWatchdog.WatchdogScript);
+
+            // 앱 핸들을 열기 전에 신호를 주면 앱이 바로 0이 아닌 코드로 끝날 때 감시가 핸들을 열지 못해 다시 켜지 않음.
+            // 핸들 여는 줄이 없으면 IndexOf가 -1이라 순서 검사가 늘 통과하므로 있는지부터 확인함.
+            StringAssert.Contains("$null = $app.Handle", AutoRestartWatchdog.WatchdogScript);
+            Assert.Less(AutoRestartWatchdog.WatchdogScript.IndexOf("$null = $app.Handle", System.StringComparison.Ordinal),
+                AutoRestartWatchdog.WatchdogScript.IndexOf("$readyEvent.Set()", System.StringComparison.Ordinal),
+                "앱 핸들을 연 뒤에 신호를 줘야 함");
+        }
+
+        /// <summary>
+        /// 재시작 요청 종료 코드가 스크립트의 분기 값과 같아야 함. 다르면 요청한 재시작도 다시 켜지기는 하지만
+        /// 다시 켠 앱의 RestartReason과 AutoRestart.log에 일반 종료 코드로 남아 크래시와 구분되지 않음.
+        /// </summary>
+        [Test]
+        public void 재시작_요청_종료_코드가_스크립트와_맞는다()
+        {
+            int code = AutoRestartWatchdog.RestartRequestedExitCode;
+
+            Assert.AreNotEqual(0, code, "0이면 감시가 일부러 끈 것으로 보고 다시 켜지 않음");
+            StringAssert.Contains("$exitCode -eq " + code + ")", AutoRestartWatchdog.WatchdogScript);
+            StringAssert.Contains("restart requested by the app (exit code " + code + ")", AutoRestartWatchdog.WatchdogScript);
+        }
+
+        /// <summary>
+        /// 환경 변수가 없거나 비어 있으면 다시 켠 실행이 아니므로 null이어야 함. 빈 문자열을 그대로 두면 WasRestarted가 true가 됨.
+        /// </summary>
+        [Test]
+        public void 재시작_이유는_비어_있으면_null이다()
+        {
+            Assert.IsNull(AutoRestartWatchdog.NormalizeRestartReason(null));
+            Assert.IsNull(AutoRestartWatchdog.NormalizeRestartReason(string.Empty));
+            Assert.AreEqual("exit code 1 (0x00000001)", AutoRestartWatchdog.NormalizeRestartReason("exit code 1 (0x00000001)"));
+        }
+
+        /// <summary>
+        /// 감시가 사는 동안 여는 이벤트 이름이 앱이 확인하는 이름과 같아야 함. 다르면 다시 켜진 앱이 살아 있는 감시를 못 찾아
+        /// 감시를 또 띄우고, 다음 비정상 종료 때 두 감시가 각자 앱을 다시 켜 앱이 두 개 뜸.
+        /// </summary>
+        [Test]
+        public void 감시_생존_이벤트_이름이_스크립트와_맞는다()
+        {
+            Assert.AreEqual(@"Local\HuliacDev.AutoRestart.Alive.4321", AutoRestartPolicy.BuildAliveEventName(4321));
+
+            string prefix = AutoRestartPolicy.BuildAliveEventName(0).TrimEnd('0');
+            StringAssert.Contains("\"" + prefix + "$PID\"", AutoRestartWatchdog.WatchdogScript, "스크립트가 같은 이름으로 이벤트를 만들지 않음");
+        }
+
+        /// <summary>
+        /// 다른 종료(예약 종료·숨은 종료 버튼·Alt+F4)가 진행 중이면 재시작 요청을 받아들이지 않아야 함.
+        /// 받아들이면 종료 로그를 보내는 사이 종료 코드가 75로 바뀌어, 일부러 끈 앱을 감시가 다시 켬.
+        /// </summary>
+        [Test]
+        public void 다른_종료가_진행_중이면_재시작_요청을_받지_않는다()
+        {
+            Assert.IsTrue(AutoRestartWatchdog.CanAcceptRestartRequest(isWatching: true, isQuitRequested: false));
+            Assert.IsFalse(AutoRestartWatchdog.CanAcceptRestartRequest(isWatching: true, isQuitRequested: true), "진행 중인 종료를 재시작으로 바꿈");
+            Assert.IsFalse(AutoRestartWatchdog.CanAcceptRestartRequest(isWatching: false, isQuitRequested: false), "다시 켜 줄 감시가 없는데 끔");
+        }
+
+        /// <summary>
+        /// 감시가 지켜보지 않는 환경(에디터)에서 재시작을 요청하면 끝내지 않고 false를 돌려줘야 하며, 종료 사유·코드도 바꾸지 않아야 함.
+        /// 바꾸면 이후 사용자가 Alt+F4로 끌 때 0이 아닌 코드로 끝나거나 종료 로그 사유가 틀어짐.
+        /// </summary>
+        [Test]
+        public void 지켜보지_않으면_재시작을_요청해도_끝내지_않고_종료_사유를_바꾸지_않는다()
+        {
+            Assert.IsFalse(AutoRestartWatchdog.IsWatching, "에디터에서는 감시를 띄우지 않음");
+            Assert.IsFalse(AutoRestartWatchdog.WasRestarted, "에디터는 감시가 다시 켠 실행이 아님");
+
+            string reasonBefore = QuitReason.Current;
+            int exitCodeBefore = QuitReason.ExitCode;
+
+            Assert.IsFalse(AutoRestartWatchdog.TryRequestRestart("Test"));
+            Assert.AreEqual(reasonBefore, QuitReason.Current);
+            Assert.AreEqual(exitCodeBefore, QuitReason.ExitCode);
         }
     }
 }

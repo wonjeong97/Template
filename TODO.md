@@ -8,14 +8,15 @@
 
 ## 할 일
 
-- [ ] `AutoRestartWatchdog` 가 다시 실행한 앱에 재시작 이유를 넘기는 환경 변수 이름(`RestartReasonVariable`)이 internal이라, 이번 실행이 감시가 다시 켠 것인지 알아야 하는 프로젝트는 문자열을 복사해 씀. 템플릿이 이름을 바꾸면 컴파일 오류 없이 어긋나 재시작 반복 방지 같은 판단이 조용히 틀어짐. "감시가 다시 켠 실행인지"와 이유를 알려 주는 공개 API 두기 — 발견일: 2026-11-10
+- [ ] `JsonLoaderTests` 의 SaveAsync 성공 테스트가 가끔 `File.Replace` 에서 "바꿀 파일을 열 수 없습니다"로 실패함(같은 실행에서 다시 돌리면 통과). 테스트 임시 파일을 `Assets/StreamingAssets` 에 써서 Unity 에셋 감시나 백신이 잠깐 파일을 여는 것으로 추정. 임시 폴더(`temporaryCachePath`)에 쓰거나 교체를 짧게 재시도하기 — 발견일: 2026-11-10
 - [ ] `Reporter.Update` 가 화면을 닫아 둔 동안에도 매 프레임 FPS 문자열을 만들어 프레임당 약 36바이트를 할당함: 보일 때만 만들기 — 발견일: 2026-11-05
-- [ ] 앱이 `AutoRestartWatchdog` 가 떠 있는지 알 방법이 없어, 설정만 보고 일부러 0이 아닌 코드로 끝내면 감시 실행이 실패했거나 아직 앱을 잡기 전일 때 앱이 꺼진 채 남음. 재현: 앱 시작 직후(감시 PowerShell이 앱 핸들을 열기 전) 0이 아닌 코드로 끝냄. 감시 상태를 알려 주는 API를 두기 — 발견일: 2026-11-04
-- [ ] `ApiManagerBase` 가 `wantsToQuit` 으로 종료를 보류했다가 인수 없는 `Application.Quit()` 으로 다시 끝내, `Application.Quit(코드)` 의 종료 코드가 0으로 바뀜. 재현: `autoRestart` 를 켠 빌드에서 `Application.Quit(1)` 을 부르면 감시 스크립트가 일부러 끈 것으로 보고 다시 켜지 않음. 앱이 스스로 다시 켜져야 할 때(모니터 재연결 등) 프로세스를 직접 끝내야 해서 종료 로그도 못 보냄. 보류 전 종료 코드를 유지하거나 재시작 요청 API를 두기 — 발견일: 2026-11-04
-- [ ] `VideoManager.PrepareAndPlayAsync`가 준비 성공·실패를 돌려주지 않아, 호출부가 재생이 시작됐는지 알려면 `VideoPlayer.isPrepared`·`isPlaying`을 다시 확인해야 함. 준비 중 오류와 준비 완료가 같은 프레임에 오면 Play하지 않았는데도 `isPrepared`가 true라 호출부가 성공으로 볼 수 있음. 성공 여부(또는 실패 사유)를 돌려주도록 바꾸기 — 발견일: 2026-10-29
 
 ## 완료
 
+- [x] 감시가 다시 켠 실행인지·이유를 알려 주는 공개 API(`AutoRestartWatchdog.WasRestarted`·`RestartReason`) 추가. 환경 변수 이름을 복사해 읽지 않아도 됨 — 완료: 2026-11-10 (#73)
+- [x] 감시가 앱을 지켜보는지 알려 주는 `IsWatching`·`WaitUntilWatchingAsync` 추가(감시가 앱 핸들을 연 뒤 이벤트로 신호), 지켜볼 때만 끝내는 재시작 요청 `TryRequestRestart` 추가 — 완료: 2026-11-10 (#73)
+- [x] `ApiManagerBase` 가 종료 로그를 보낸 뒤 인수 없는 `Application.Quit()` 으로 끝내 종료 코드가 0으로 바뀌던 것. `QuitReason.ExitCode` 로 끝내도록 고침 — 완료: 2026-11-10 (#73)
+- [x] `VideoManager.PrepareAndPlayAsync` 가 재생을 시작했는지 `UniTask<bool>` 로 돌려주도록 바꿈 — 완료: 2026-11-10 (#73)
 - [x] 더 이상 빌드하지 않는 WebGL 코드 삭제(`ArduinoManager` 스텁, `GameCloser` 분기, 파일 로깅 조건, 주석). Android도 쓰는 URL 경로 처리는 유지 — 완료: 2026-11-04 (#72)
 - [x] README를 코드와 대조해 정리: Api Compatibility Level 안내를 `.NET Framework`로, 빠져 있던 DOTween 설치 단계와 예약 종료·`apiUrl` 설명 추가, 없는 `Runtime/Logging` 폴더와 `AppSettings` 타입, 프로젝트 스코프 예시, 키를 생략했을 때의 동작 등 수정 — 완료: 2026-11-04
 - [x] 어느 코드도 읽지 않아 `Settings.json` 에 적어도 효과가 없던 `Settings.warningTime`·`fadeTime` 제거 — 완료: 2026-11-04 (#71)
