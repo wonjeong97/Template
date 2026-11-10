@@ -74,6 +74,9 @@ namespace HuliacDev.Network
         // 접속 루프의 세대 번호. Connect·Disconnect마다 바뀌어, 멈춘 이전 루프가 늦게 끝나며 IsConnected를 덮어쓰지 않게 함.
         private int _loopGeneration;
 
+        // 접속될 때마다 1씩 늘어나는 번호. _isConnected를 true로 바꾸기 전에 올려, IsConnected가 true로 보이면 이 번호도 새 값으로 보이게 함.
+        private volatile int _connectionId;
+
         private volatile bool _isConnected;
 
         // 끊긴 동안 Send를 버렸다고 이미 알렸는지. 주기적으로 보내는 앱에서 장치가 꺼진 동안 경고가 쌓이지 않게 끊긴 기간마다 한 번만 남김.
@@ -100,6 +103,14 @@ namespace HuliacDev.Network
 
         /// <summary>지금 접속돼 있는지. 백그라운드에서 바로 바뀌므로 OnConnected·OnDisconnected보다 한 프레임 먼저 바뀔 수 있음.</summary>
         public bool IsConnected => _isConnected;
+
+        /// <summary>
+        /// 접속될 때마다 1씩 늘어나는 번호(아직 접속한 적이 없으면 0). 백그라운드에서 바로 바뀜.
+        /// 이벤트가 다음 프레임에 오기 전에 IsConnected와 함께 읽어, 그사이 끊겼다가 다시 접속했는지 알 수 있음
+        /// (메인 스레드가 오래 멈춘 사이 재접속까지 끝나면 IsConnected만으로는 바뀐 접속을 알 수 없음).
+        /// 끊김을 놓치지 않으려면 IsConnected를 먼저 읽고 이 번호를 읽음.
+        /// </summary>
+        public int ConnectionId => _connectionId;
 
         /// <summary>접속을 기다리는 시간(ms, 최소 0.5초). Connect를 부를 때의 값을 씀.</summary>
         public int ConnectTimeoutMs { get; set; } = DefaultConnectTimeoutMs;
@@ -419,6 +430,7 @@ namespace HuliacDev.Network
             {
                 if (options.Generation != _loopGeneration) return false;
 
+                _connectionId++;
                 _isConnected = true;
                 _connectedSubject.OnNext(Unit.Default);
                 return true;
