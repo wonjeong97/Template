@@ -17,7 +17,13 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
   - 감시 C#(WatchDecided 완료 경로·핸들 수명·P/Invoke·TryRequestRestart 흐름) → 둘 다 지적: 설정을 읽다 취소되면 WatchDecided가 완료되지 않음(낮음) → 고침. 서브에이전트만 지적: 신호 대기 중 스코프가 파기되면 `IsWatching` 이 그 실행 동안 false로 남음, 다른 종료가 보류 중일 때 `TryRequestRestart` 가 QuitReason을 덮어씀, `IsWatching` 이 호출마다 OS에 물음(모두 낮음) → summary에 적음(동작 유지)
   - 감시 스크립트·명령줄·테스트 → 둘 다 통과. 서브에이전트만 지적: 신호 위치(핸들을 연 뒤)를 테스트가 지키지 않음(낮음) → 순서 단언 추가
   - 종료 코드(QuitReason·ApiManagerBase) → 둘 다 통과. 서브에이전트 참고: `ApiManagerBase` 의 `Application.Quit(QuitReason.ExitCode)` 는 에디터 테스트로 확인할 수 없음 → 빌드 실행으로 확인
-- 남은 것: 확인 빌드는 Mono이고 IL2CPP는 시험하지 않음. 시작 직후 감시가 앱을 잡기 전에 0이 아닌 코드로 끝내는 경우와 감시 실행 실패 경로는 빌드로 재현하지 않음(`IsWatching` 이 false라 `TryRequestRestart` 가 거절하는 것은 에디터 테스트로만 확인). PID 재사용으로 다른 powershell을 감시로 보는 기존 제한은 이제 `IsWatching` 에도 영향(낮음, 기록만). 확인 빌드가 검증 프로젝트와 같은 `persistentDataPath` 를 써서 그곳 `AutoRestart.log` 에 확인 기록이 남음.
+- PR 리뷰(Claude `/code-review` high, 6건) → 사용자 지시로 전부 고침: 진행 중인 종료를 재시작 요청이 덮어씀(`QuitReason.IsQuitRequested` 와 거절), 준비 중 VideoPlayer 파괴 시 예외(false 반환), 취소된 종료의 코드 75 잔류(`QuitReason.Clear()` 와 안내), 스코프 파기 뒤 `IsWatching` 이 false로 남음(대기를 앱 종료 토큰에 묶음), PID 재사용(감시 생존 이벤트 `Local\HuliacDev.AutoRestart.Alive.<PID>` 로 확인), 영상 테스트 정리(끝날 때 취소).
+- 수정분 검증:
+  - 교차 검증(agy gemini-4-argon-high + 서브에이전트, 종료·감시 묶음) → 둘 다 통과. 서브에이전트만 지적: 시작 시각 비교가 시계 역행에 약함(중간) → 생존 이벤트 방식으로 바꿈. 둘 다 지적: 파기 뒤 로그 3곳(낮음) → 고침. 서브에이전트 낮음 2건(GameCloser 확인 창 취소 안내, 자기 요청 진행 중에도 false) → 주석에 적음
+  - 서브에이전트(영상 묶음) → 통과. 파괴 테스트가 파괴 경로를 지나는지 불확실 → 루프 확인을 빼는 변이로 그 테스트가 실패함을 확인
+  - agy(생존 이벤트 재검증) → 통과. 이벤트 확인과 핸들 열기 사이 PID 재사용 틈(낮음) → 핸들을 먼저 열도록 순서를 바꿈
+- 수정분 Claude 확인: PlayMode 167/167, 생존 이벤트 테스트 추가 뒤 168건 중 `JsonLoaderTests` SaveAsync 1건이 `File.Replace` 파일 잠금으로 실패했다가 다시 두 번 17/17(이번 변경과 무관한 일시 실패로 보고 TODO에 적음). 빌드 실행으로 재시작 요청 → 75 → 재시작 → 생존 이벤트로 기존 감시 찾기 → 정상 종료를 다시 확인.
+- 남은 것: 확인 빌드는 Mono이고 IL2CPP는 시험하지 않음. 시작 직후 감시가 앱을 잡기 전에 0이 아닌 코드로 끝내는 경우와 감시 실행 실패 경로는 빌드로 재현하지 않음(`IsWatching` 이 false라 `TryRequestRestart` 가 거절하는 것은 에디터 테스트로만 확인). 이전 버전 감시가 떠 있는 채로 새 빌드로 바꾸면 감시가 하나 더 뜸(CHANGELOG에 적음). `ApiManagerBase` 의 `MarkQuitRequested` 호출과 `TryRequestRestart` 의 연결은 에디터 테스트로 잡을 수 없음(코드 리뷰로 확인). 확인 빌드가 검증 프로젝트와 같은 `persistentDataPath` 를 써서 그곳 `AutoRestart.log` 에 확인 기록이 남음.
 
 ### [2026-11-04 15:46] Claude → Antigravity · WebGL 코드 삭제 (chore/remove-webgl-branches)
 - 요청: 더 이상 다루지 않는 WebGL을 코드에서도 삭제. 사용자가 Android를 가끔 빌드하므로 Android 영향 확인(사용자 결정, Android도 쓰는 URL 경로 처리는 유지).

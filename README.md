@@ -494,7 +494,7 @@ if (result.isSuccess)
 | `WasRestarted` / `RestartReason` | 이번 실행이 감시가 다시 켠 실행인지와 그 이유(`"exit code -1073741819 (0xC0000005)"`, `"not responding for 60s"`, `"restart requested by the app (exit code 75)"`). 다시 켠 실행이 아니면 false / null |
 | `IsWatching` | 감시가 지금 이 앱을 지켜보는지. 감시를 띄운 직후 감시가 앱을 잡을 때까지(보통 몇 초), 꺼져 있거나 에디터이거나 감시 실행에 실패했거나 감시가 끝났으면 false |
 | `WaitUntilWatchingAsync(token)` | 감시를 띄울지와 띄운 감시가 지켜보기 시작했는지가 정해질 때까지 기다린 뒤 `IsWatching`을 돌려줌. `ConfigureAutoRestart`를 빈 본문으로 override하면 끝나지 않으므로 시간 제한 토큰을 넘김. 토큰이 취소되면 `OperationCanceledException` |
-| `TryRequestRestart(reason)` | 감시가 지켜보고 있으면 종료 코드 75(`RestartRequestedExitCode`)로 끝내 `restartDelaySeconds`초 뒤 다시 켜지게 하고 true. 지켜보고 있지 않으면 끄지 않고 false. 종료 로그에는 `end (by {reason})`로 남음 |
+| `TryRequestRestart(reason)` | 감시가 지켜보고 있으면 종료 코드 75(`RestartRequestedExitCode`)로 끝내 `restartDelaySeconds`초 뒤 다시 켜지게 하고 true. 지켜보고 있지 않거나 다른 종료(숨은 종료 버튼·예약 종료·Alt+F4)가 이미 진행 중이면 끄지 않고 false. 종료 로그에는 `end (by {reason})`로 남음 |
 
 ```csharp
 // 예: 모니터가 다시 연결되면 앱을 다시 켜서 해상도를 새로 잡음. 앱 시작 직후에도 부를 수 있으면 먼저 감시 결과를 기다림.
@@ -509,7 +509,7 @@ if (!isCanceled && isWatching && !AutoRestartWatchdog.WasRestarted)
 }
 ```
 
-앱이 60초 안에 다시 요청하는 일이 이어지면 크래시와 같이 재시작 간격을 두 배씩 늘립니다.
+앱이 60초 안에 다시 요청하는 일이 이어지면 크래시와 같이 재시작 간격을 두 배씩 늘립니다. 프로젝트가 직접 `Application.wantsToQuit`에서 false를 돌려 종료를 취소(확인 창 등)한다면 취소할 때 `QuitReason.Clear()`를 부릅니다. 부르지 않으면 취소된 재시작 요청의 종료 코드 75가 남아, 이후 Alt+F4로 끌 때 감시가 다시 켭니다.
 
 ### 예약 종료 (ShutdownScheduler)
 

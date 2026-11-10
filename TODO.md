@@ -8,6 +8,7 @@
 
 ## 할 일
 
+- [ ] `JsonLoaderTests` 의 SaveAsync 성공 테스트가 가끔 `File.Replace` 에서 "바꿀 파일을 열 수 없습니다"로 실패함(같은 실행에서 다시 돌리면 통과). 테스트 임시 파일을 `Assets/StreamingAssets` 에 써서 Unity 에셋 감시나 백신이 잠깐 파일을 여는 것으로 추정. 임시 폴더(`temporaryCachePath`)에 쓰거나 교체를 짧게 재시도하기 — 발견일: 2026-11-10
 - [ ] `Reporter.Update` 가 화면을 닫아 둔 동안에도 매 프레임 FPS 문자열을 만들어 프레임당 약 36바이트를 할당함: 보일 때만 만들기 — 발견일: 2026-11-05
 
 ## 완료

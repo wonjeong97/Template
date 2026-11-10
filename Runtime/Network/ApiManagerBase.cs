@@ -192,6 +192,8 @@ namespace HuliacDev.Network
             if (!_isSendingExitLog)
             {
                 _isSendingExitLog = true;
+                // Alt+F4처럼 사유를 기록하지 않은 종료도 진행 중으로 표시해, 로그를 보내는 사이 재시작 요청이 이 종료를 덮어쓰지 않게 함.
+                QuitReason.MarkQuitRequested();
                 SendExitLogThenQuitAsync().Forget();
             }
 

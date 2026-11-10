@@ -61,6 +61,15 @@ namespace HuliacDev.Core
         }
 
         /// <summary>
+        /// 감시가 사는 동안 열어 두는 이벤트의 이름을 만듦. 다시 실행된 앱이 환경 변수로 받은 감시 PID가 정말 그 감시인지 확인하는 데 씀.
+        /// 감시 스크립트가 같은 이름("Local\HuliacDev.AutoRestart.Alive.$PID")으로 만듦.
+        /// </summary>
+        public static string BuildAliveEventName(int watchdogProcessId)
+        {
+            return ZString.Concat(@"Local\HuliacDev.AutoRestart.Alive.", watchdogProcessId);
+        }
+
+        /// <summary>
         /// 감시 스크립트를 숨은 PowerShell로 실행할 명령줄 인수를 만듦. 인수 이름은 AutoRestartWatchdog.WatchdogScript의 param과 맞춰야 함.
         /// Windows 경로와 이벤트 이름에는 큰따옴표가 들어가지 않으므로 큰따옴표로만 감쌈.
         /// </summary>

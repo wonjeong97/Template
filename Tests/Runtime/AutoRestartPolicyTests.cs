@@ -140,6 +140,31 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
+        /// 감시가 사는 동안 여는 이벤트 이름이 앱이 확인하는 이름과 같아야 함. 다르면 다시 켜진 앱이 살아 있는 감시를 못 찾아
+        /// 감시를 또 띄우고, 다음 비정상 종료 때 두 감시가 각자 앱을 다시 켜 앱이 두 개 뜸.
+        /// </summary>
+        [Test]
+        public void 감시_생존_이벤트_이름이_스크립트와_맞는다()
+        {
+            Assert.AreEqual(@"Local\HuliacDev.AutoRestart.Alive.4321", AutoRestartPolicy.BuildAliveEventName(4321));
+
+            string prefix = AutoRestartPolicy.BuildAliveEventName(0).TrimEnd('0');
+            StringAssert.Contains("\"" + prefix + "$PID\"", AutoRestartWatchdog.WatchdogScript, "스크립트가 같은 이름으로 이벤트를 만들지 않음");
+        }
+
+        /// <summary>
+        /// 다른 종료(예약 종료·숨은 종료 버튼·Alt+F4)가 진행 중이면 재시작 요청을 받아들이지 않아야 함.
+        /// 받아들이면 종료 로그를 보내는 사이 종료 코드가 75로 바뀌어, 일부러 끈 앱을 감시가 다시 켬.
+        /// </summary>
+        [Test]
+        public void 다른_종료가_진행_중이면_재시작_요청을_받지_않는다()
+        {
+            Assert.IsTrue(AutoRestartWatchdog.CanAcceptRestartRequest(isWatching: true, isQuitRequested: false));
+            Assert.IsFalse(AutoRestartWatchdog.CanAcceptRestartRequest(isWatching: true, isQuitRequested: true), "진행 중인 종료를 재시작으로 바꿈");
+            Assert.IsFalse(AutoRestartWatchdog.CanAcceptRestartRequest(isWatching: false, isQuitRequested: false), "다시 켜 줄 감시가 없는데 끔");
+        }
+
+        /// <summary>
         /// 감시가 지켜보지 않는 환경(에디터)에서 재시작을 요청하면 끝내지 않고 false를 돌려줘야 하며, 종료 사유·코드도 바꾸지 않아야 함.
         /// 바꾸면 이후 사용자가 Alt+F4로 끌 때 0이 아닌 코드로 끝나거나 종료 로그 사유가 틀어짐.
         /// </summary>
