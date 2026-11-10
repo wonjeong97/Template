@@ -4,6 +4,17 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-10 15:00] Claude → 서브에이전트 (agy 인증 만료) · 실제 아두이노 시험, VideoManager·Reporter (fix/video-reporter-device)
+- 요청: VideoManager(프로젝트 RenderTexture 파괴)와 Reporter(닫힌 동안 FPS 문자열 할당) 수정, 연결한 아두이노로 ArduinoManager 시험(스케치 업로드 허용).
+- 실제 장치: COM1 CH340 Uno 호환. 원래 스케치는 9600bps로 `Telephone_Booth` 반복 전송. 포트를 연 뒤 첫 줄까지 1655~1658ms(3회). ArduinoManager는 핸드셰이크를 0.5초만 기다려 한 번도 연결되지 않음(실측으로 확인한 기존 결함) → 대기 3초(`HandshakeTimeoutMs`)와 줄 반복 확인으로 고침. 시험용 스케치(`TPL_ECHO_TEST`를 부팅 때 한 번 보내고 받은 줄을 `ECHO:`로 돌려줌)를 `arduino-cli`로 올림(사용자 허락, 원래 스케치는 지워짐).
+- Claude 확인(빌드 플레이어 + 임시 확인 스크립트, 복사본 프로젝트에만 넣고 지움): 반복 전송 스케치·한 번 전송 스케치 모두 약 1.7초에 연결, 2초에 9줄 수신, `Send`→`ECHO:ping`, `RebootDeviceAsync` 뒤 `ECHO:pong`, 수동 해제 뒤 4초간 재연결 없음, `ConnectAsync` 연속 호출 연결, 연결 중 해제 시 스캔 중단, 틀린 핸드셰이크는 "unexpected handshake '…'". PlayMode 176/176. 변이: VideoManager 해제 조건을 되돌리면 새 테스트 2개 실패.
+- agy: 인증 만료("Authentication required")로 모든 요청 실패 → 서브에이전트 단독. 사용자가 보낸 인증 코드는 자격 증명이라 입력하지 않았고, 이미 끝난 실행의 일회용 코드라 쓸 수도 없음 → 사용자가 직접 `agy` 로그인 필요.
+- 서브에이전트:
+  - 핸드셰이크 → 통과. 빈 줄이 실패 이유를 덮어씀, 해제·파괴 뒤에도 남은 포트를 최대 3초씩 스캔(낮음) → 줄 사이·포트 사이 취소 확인과 0.5초 단위 대기로 고침
+  - VideoManager·Reporter·문서 → 새 테스트가 Destroy 지연 때문에 되돌려도 통과(중간) → Create/IsCreated와 프레임 대기로 고치고 변이로 확인. Reporter가 닫힌 동안 로그 샘플에 낡은 FPS를 기록(중간) → `AddSample`에서 만듦. 다른 VideoPlayer로 옮긴 텍스처 해제(낮음) → 주인이 같을 때만 해제
+  - 재검증 → 결함 없음. 마지막 재시도 중 취소되면 중단 대신 연결 실패 경고가 남음(낮음) → 취소된 스캔은 취소로 전달. 0.5초 분할 주석이 실제 동작과 다름(낮음) → 주석 고침
+- 남은 것: 케이블을 뽑았다 꽂는 자동 재연결은 사람 손이 필요해 시험하지 않음. IL2CPP 미시험. 아두이노에는 시험용 스케치가 올라가 있으므로 원래 장치로 쓰려면 원래 스케치를 다시 올릴 것.
+
 ### [2026-11-10 12:30] Claude → Antigravity + 서브에이전트 · 코딩 스킬 기준 패키지 점검과 정리 (fix/audit-defects)
 - 요청: 수정된 코딩 스킬(`unity-stack-scaffold`·`unity-network-protocol`)로 템플릿 전체를 점검하고 나온 것을 전부 수정. summary "한 문장" 규칙은 스킬 문구를 고치기로 함(사용자 결정).
 - 점검: grep(규칙 기계 확인) + 영역별 감사(agy: Core·App·Data·Utils, 서브에이전트: UI·네트워크·하드웨어·Editor·Tests). agy 첫 Core 요청은 저장소 밖 파일 읽기 권한 거부로 빈 결과 → 둘로 나눠 저장소 밖 금지를 적고 다시 맡김. 순수 C# 객체의 `?.`·`??` 지적은 스킬이 허용해 오탐으로 뺌.

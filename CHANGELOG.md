@@ -1,6 +1,16 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.11.10-3] - 2026-11-10
+
+### Added
+- **`ArduinoManager.HandshakeTimeoutMs` 추가(`Runtime/Hardware/ArduinoManager.cs`):** 포트마다 핸드셰이크를 기다리는 시간(기본 `DefaultHandshakeTimeoutMs` 3000ms, 최소 500ms). 장치가 아닌 포트도 이 시간만큼 기다리므로, 포트가 많은 PC에서 스캔이 느리면 장치의 부팅 시간에 맞춰 줄일 수 있음.
+
+### Fixed
+- **`ArduinoManager`가 포트를 열 때 리셋되는 보드(Uno·Nano 계열)에 연결하지 못하던 문제 수정(`Runtime/Hardware/ArduinoManager.cs`):** 포트를 열면 DTR 때문에 보드가 리셋되고 부트로더를 거쳐 스케치가 첫 줄을 보내기까지 약 1.7초가 걸리는데(CH340 Uno 호환 보드에서 포트를 연 뒤 첫 줄까지 1655~1658ms, 3회 측정), 핸드셰이크를 0.5초만 기다려 다시 시도해도 매번 리셋 → 0.5초 → 포기를 되풀이하며 연결되지 않았음. 기다리는 시간을 늘리고(`HandshakeTimeoutMs`), 그 안에 들어온 줄을 차례로 확인해 리셋 직후의 깨진 첫 줄이나 다른 출력이 먼저 와도 핸드셰이크를 놓치지 않게 함. 대기가 길어진 만큼 수동 해제·파괴로 취소되면 0.5초 안에 스캔을 멈추고 남은 포트를 열지 않음(해제한 뒤에도 포트를 점유하거나 보드를 리셋하지 않게). 연결된 뒤 읽기 대기는 예전처럼 0.5초라 연결 해제 대기(0.6초)보다 먼저 끝남. 실제 장치(CH340 Uno 호환)로 확인함: 핸드셰이크를 계속 보내는 스케치와 부팅 때 한 번만 보내는 스케치 모두 약 1.7초 만에 연결, 수신·송신(에코), `RebootDeviceAsync` 뒤 수신, 수동 해제 뒤 재연결 안 됨, `ConnectAsync` 연속 호출, 연결 중 해제, 틀린 핸드셰이크의 실패 이유 로그. 시리얼 장치가 필요해 자동 테스트는 추가하지 않음.
+- **`VideoManager`가 프로젝트가 연결한 RenderTexture까지 파괴하던 문제 수정(`Runtime/UI/VideoManager.cs`):** `WireRawImageAndRenderTexture`(`UIManager.SetVideo`가 부름)가 VideoPlayer에 이미 있던 `targetTexture`를 누가 만들었는지 보지 않고 `Release`·`Destroy`해, Inspector에서 RenderTexture 에셋을 연결해 둔 VideoPlayer에 쓰면 같은 에셋을 쓰는 다른 화면까지 깨졌음. 이 매니저가 그 VideoPlayer용으로 만든 텍스처만 해제하고, 프로젝트 텍스처나 다른 VideoPlayer가 아직 쓰는 텍스처는 연결만 새 텍스처로 바꿈(다른 VideoPlayer용 텍스처는 그쪽이 더 쓰지 않으면 `ReleaseOrphanedRenderTextures`가 회수함). `VideoManagerTests`에 테스트 2건 추가.
+- **Reporter 로그 뷰어가 닫힌 동안에도 매 프레임 FPS 문자열을 만들던 것 수정(`Runtime/ThirdParty/LogViewer/Reporter/Reporter.cs`):** 화면을 닫아 둔 동안에도 `Update`마다 `fps.ToString`으로 프레임당 약 36바이트를 할당했음. 화면이 보일 때만 만들고(여는 프레임에도 최신 값을 그리도록 표시 처리 뒤에 둠), 닫힌 동안에는 로그가 들어올 때 그때의 FPS를 만들어 로그마다 기록되는 FPS 값은 예전과 같음. 외부에서 들여온 코드의 화면 표시라 테스트는 추가하지 않음.
+
 ## [26.11.10-2] - 2026-11-10
 
 코딩 스킬(`unity-stack-scaffold`·`unity-network-protocol`) 기준으로 패키지 전체를 점검해 나온 결함과 규칙 위반을 고침. 동작이 바뀌지 않는 정리(필드 선언 순서, 빠진 summary 주석, 테스트 코드의 `GetComponent`·null 비교 방식)는 아래에 따로 적지 않음.

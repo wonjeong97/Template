@@ -82,12 +82,16 @@ namespace HuliacDev.UI
                 return null;
             }
             
-            if (vp.targetTexture)
+            // 이 매니저가 이 VideoPlayer용으로 만든 텍스처만 해제함. Inspector에서 연결한 RenderTexture 에셋처럼 프로젝트가 가진
+            // 텍스처나, 다른 VideoPlayer용으로 만들어 그쪽이 아직 쓰는 텍스처를 해제·파괴하면 그 화면까지 깨지므로 연결만 바꿈
+            // (다른 VideoPlayer용 텍스처는 그쪽이 더 쓰지 않으면 ReleaseOrphanedRenderTextures가 회수함).
+            RenderTexture previous = vp.targetTexture;
+            if (previous && _renderTextureOwners.TryGetValue(previous, out VideoPlayer previousOwner) && previousOwner == vp)
             {
-                _activeRenderTextures.Remove(vp.targetTexture);
-                _renderTextureOwners.Remove(vp.targetTexture);
-                vp.targetTexture.Release();
-                DestroyUtil.SafeDestroy(vp.targetTexture);
+                _activeRenderTextures.Remove(previous);
+                _renderTextureOwners.Remove(previous);
+                previous.Release();
+                DestroyUtil.SafeDestroy(previous);
             }
             
             int rtW = Mathf.Max(2, size.x);

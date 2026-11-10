@@ -357,6 +357,13 @@ namespace HuliacDev.Reporter
 
         private void AddSample()
         {
+            // [HuliacDev] 닫힌 동안에는 Update가 fpsText를 갱신하지 않으므로, 로그마다 그때의 FPS가 남도록 여기서 만듦.
+            // 로그가 들어올 때만 불려 매 프레임 할당이 아님.
+            if (!show)
+            {
+                fpsText = fps.ToString("0.000");
+            }
+
             Sample sample = new Sample
             {
                 fps = fps,
@@ -2110,7 +2117,6 @@ namespace HuliacDev.Reporter
 
         void Update()
         {
-            fpsText = fps.ToString("0.000");
             gcTotalMemory = (((float)GC.GetTotalMemory(false)) / 1024 / 1024);
             //addSample();
 
@@ -2133,6 +2139,13 @@ namespace HuliacDev.Reporter
             if (!show && showGameManagerControl)
             {
                 DoShow();
+            }
+
+            // [HuliacDev] FPS 문자열은 화면을 그릴 때만 쓰므로 보일 때만 만듦. 닫아 둔 동안에도 매 프레임 만들면
+            // 프레임당 약 36바이트씩 GC 할당이 쌓임. DoShow 뒤에 두어 여는 프레임에도 최신 값을 그림.
+            if (show)
+            {
+                fpsText = fps.ToString("0.000");
             }
 
 

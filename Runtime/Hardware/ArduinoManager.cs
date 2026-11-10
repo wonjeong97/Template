@@ -25,8 +25,20 @@ namespace HuliacDev.Hardware
         /// <summary>재시도 사이의 기본 대기 시간(ms).</summary>
         public const int DefaultRetryDelayMs = 1000;
 
-        /// <summary>핸드셰이크 응답과 쓰기를 기다리는 시간(ms).</summary>
-        private const int HandshakeTimeoutMs = 500;
+        /// <summary>
+        /// 포트를 연 뒤 핸드셰이크를 기다리는 기본 시간(ms). 포트를 열면 DTR 때문에 보드가 리셋되고, 부트로더를 거쳐 스케치가
+        /// 첫 줄을 보내기까지 Uno·Nano 계열에서 약 1.5~2초가 걸리므로 그보다 넉넉히 잡음.
+        /// </summary>
+        public const int DefaultHandshakeTimeoutMs = 3000;
+
+        /// <summary>핸드셰이크 대기 시간의 최소값(ms). 너무 짧으면 리셋 뒤 부팅을 기다리지 못해 연결되지 않음.</summary>
+        private const int MinHandshakeTimeoutMs = 500;
+
+        /// <summary>핸드셰이크 중 쓰기를 기다리는 시간(ms).</summary>
+        private const int HandshakeWriteTimeoutMs = 500;
+
+        /// <summary>연결된 뒤 읽기 스레드가 한 줄을 기다리는 시간(ms). 연결 해제 대기(ReadThreadJoinTimeoutMs)보다 짧아야 함.</summary>
+        private const int ReadLoopTimeoutMs = 500;
 
         /// <summary>연결을 끊을 때 읽기 스레드가 끝나기를 기다리는 최대 시간(ms).</summary>
         private const int ReadThreadJoinTimeoutMs = 600;
@@ -88,6 +100,12 @@ namespace HuliacDev.Hardware
 
         /// <summary>연결된 뒤 끊어졌을 때 자동으로 재연결을 시도할지 여부. 첫 연결(ConnectAsync)이 실패한 경우에는 동작하지 않음.</summary>
         public bool AutoReconnect { get; set; } = true;
+
+        /// <summary>
+        /// 포트마다 핸드셰이크를 기다리는 시간(ms). 이 시간 안에 받은 줄 중 하나라도 핸드셰이크를 포함하면 연결함.
+        /// 장치가 아닌 포트도 이 시간만큼 기다리므로, 포트가 많은 PC에서 스캔이 느리면 장치의 부팅 시간에 맞춰 줄임(최소 0.5초).
+        /// </summary>
+        public int HandshakeTimeoutMs { get; set; } = DefaultHandshakeTimeoutMs;
 
         /// <summary>자동 재연결의 첫 대기 시간(ms). 실패할 때마다 두 배로 늘어 AutoReconnectMaxIntervalMs에서 멈추고, 다시 끊기면 이 값부터 시작함.</summary>
         public int AutoReconnectIntervalMs { get; set; } = 3000;
@@ -284,10 +302,14 @@ namespace HuliacDev.Hardware
         private async UniTask<(bool isEstablished, string failures)> TryEstablishConnectionAsync(int baudRate, string expectedHandshake,
             CancellationToken cancellationToken)
         {
-            (SerialPort validPort, string failures) = await UniTask.RunOnThreadPool(() => TryHandshake(baudRate, expectedHandshake));
+            // 스레드 풀에서 속성을 읽지 않도록 메인 스레드에서 값을 정해 넘김.
+            int handshakeTimeoutMs = Math.Max(MinHandshakeTimeoutMs, HandshakeTimeoutMs);
+            (SerialPort validPort, string failures) = await UniTask.RunOnThreadPool(() => TryHandshake(baudRate, expectedHandshake, handshakeTimeoutMs, cancellationToken));
 
             if (validPort == null)
             {
+                // 취소돼 스캔을 멈춘 경우는 실패가 아니라 취소로 전달함(마지막 재시도여도 실패 경고 대신 중단으로 처리되게 함).
+                cancellationToken.ThrowIfCancellationRequested();
                 return (false, failures);
             }
 
@@ -303,9 +325,11 @@ namespace HuliacDev.Hardware
 
         /// <summary>
         /// 사용 가능한 모든 시리얼 포트를 순회하며 핸드셰이크 응답을 검증함.
-        /// 검증에 성공한 SerialPort 객체를, 실패하면 null과 포트별 실패 이유를 돌려줌.
+        /// 검증에 성공한 SerialPort 객체를, 실패하면 null과 포트별 실패 이유를 돌려줌. 수동 해제·파괴로 취소되면 남은 포트를
+        /// 열지 않고 멈춰, 해제한 뒤에도 포트를 점유하거나 보드를 리셋하지 않게 함.
         /// </summary>
-        private (SerialPort validPort, string failures) TryHandshake(int baudRate, string expectedHandshake)
+        private static (SerialPort validPort, string failures) TryHandshake(int baudRate, string expectedHandshake, int handshakeTimeoutMs,
+            CancellationToken cancellationToken)
         {
             string[] ports = SerialPort.GetPortNames();
             if (ports.Length == 0) return (null, "no serial ports");
@@ -314,7 +338,9 @@ namespace HuliacDev.Hardware
             string failures = string.Empty;
             foreach (string port in ports)
             {
-                SerialPort validPort = TryConnectPort(port, baudRate, expectedHandshake, out string failureReason);
+                if (cancellationToken.IsCancellationRequested) return (null, "canceled");
+
+                SerialPort validPort = TryConnectPort(port, baudRate, expectedHandshake, handshakeTimeoutMs, cancellationToken, out string failureReason);
                 if (validPort != null)
                 {
                     return (validPort, string.Empty);
@@ -329,10 +355,12 @@ namespace HuliacDev.Hardware
         }
 
         /// <summary>
-        /// 지정된 단일 포트에 연결을 시도하고 기대 응답 문자열을 대기함.
+        /// 지정된 단일 포트에 연결을 시도하고 기대 응답 문자열을 대기함. 포트를 열면 보드가 리셋되므로 handshakeTimeoutMs 동안
+        /// 들어오는 줄을 차례로 확인함(리셋 직후의 깨진 첫 줄이나 다른 출력이 먼저 와도 놓치지 않게 함).
         /// 백그라운드에서 실행되므로 내부 상태를 변경하지 않고 포트 객체만 반환하며, 실패하면 이유를 failureReason에 담음.
         /// </summary>
-        private SerialPort TryConnectPort(string port, int baudRate, string expectedHandshake, out string failureReason)
+        private static SerialPort TryConnectPort(string port, int baudRate, string expectedHandshake, int handshakeTimeoutMs,
+            CancellationToken cancellationToken, out string failureReason)
         {
             SerialPort testPort = null;
             bool ownershipTransferred = false;
@@ -343,25 +371,49 @@ namespace HuliacDev.Hardware
                 testPort = new SerialPort(port, baudRate);
 
                 testPort.DtrEnable = true;
-                testPort.ReadTimeout = HandshakeTimeoutMs;
-                testPort.WriteTimeout = HandshakeTimeoutMs;
+                testPort.WriteTimeout = HandshakeWriteTimeoutMs;
                 testPort.Open();
 
-                string received = testPort.ReadLine().Trim();
+                string lastReceived = null;
+                System.Diagnostics.Stopwatch elapsed = System.Diagnostics.Stopwatch.StartNew();
 
-                if (received.Contains(expectedHandshake))
+                while (true)
                 {
-                    // 성공 시 포트를 닫지 않고 그대로 반환하여 메인 스레드에 소유권을 넘김
-                    ownershipTransferred = true;
-                    return testPort;
+                    int remainingMs = handshakeTimeoutMs - (int)elapsed.ElapsedMilliseconds;
+                    if (remainingMs <= 0 || cancellationToken.IsCancellationRequested) break;
+
+                    // 줄을 받지 못하는 동안 취소를 ReadLoopTimeoutMs마다 확인하도록 기다림을 나눔(줄을 받는 사이마다 확인함).
+                    // 줄 중간에서 시간이 다 되면 그 줄의 앞부분은 버려지지만, 예전과 같은 0.5초 간격이라 새로 생기는 손실은 없음.
+                    testPort.ReadTimeout = Math.Min(remainingMs, ReadLoopTimeoutMs);
+                    string received;
+                    try
+                    {
+                        received = testPort.ReadLine().Trim();
+                    }
+                    catch (TimeoutException)
+                    {
+                        continue;
+                    }
+
+                    if (received.Contains(expectedHandshake))
+                    {
+                        // 성공 시 포트를 닫지 않고 그대로 반환하여 메인 스레드에 소유권을 넘김. 읽기 스레드가 해제 요청을
+                        // 연결 해제 대기(ReadThreadJoinTimeoutMs)보다 먼저 알아채도록 읽기 대기를 짧게 되돌림.
+                        testPort.ReadTimeout = ReadLoopTimeoutMs;
+                        ownershipTransferred = true;
+                        return testPort;
+                    }
+
+                    // 빈 줄은 진단에 쓸 내용이 없으므로 실패 이유로 남길 마지막 줄을 덮어쓰지 않음.
+                    if (received.Length > 0) lastReceived = received;
                 }
 
-                failureReason = ZString.Concat("unexpected handshake '", received, "'");
-            }
-            catch (TimeoutException)
-            {
-                // 아두이노가 아닌 장치이거나 핸드셰이크를 보내지 않는 장치
-                failureReason = "no handshake";
+                // 아두이노가 아닌 장치이거나 핸드셰이크를 보내지 않는 장치면 아무 줄도 받지 못함.
+                failureReason = cancellationToken.IsCancellationRequested
+                    ? "canceled"
+                    : lastReceived == null
+                    ? ZString.Concat("no handshake in ", handshakeTimeoutMs, "ms")
+                    : ZString.Concat("unexpected handshake '", lastReceived, "'");
             }
             catch (Exception e)
             {
