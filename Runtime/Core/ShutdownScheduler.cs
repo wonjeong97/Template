@@ -32,25 +32,37 @@ namespace HuliacDev.Core
     /// </summary>
     public class ShutdownScheduler : MonoBehaviour
     {
-        private bool _isOriginal;
-
         private const string ShutdownSettingsFileName = "ShutdownSettings.json";
 
         /// <summary>ShutdownSettings.json에 스케줄은 있지만 shutdownArguments가 비었거나 없을 때(직접 편집했거나 예전 형식의 파일) 쓰는 종료 인수 기본값.</summary>
         private const string DefaultShutdownArguments = "-s -f -t 45";
 
+        /// <summary>요일 스케줄의 로그용 출처 문자열. 확인 주기마다 요일 이름을 새로 만들지 않도록 DayOfWeek 값 순서로 미리 만들어 둠.</summary>
+        private static readonly string[] WeekdaySources =
+        {
+            "weekday Sunday", "weekday Monday", "weekday Tuesday", "weekday Wednesday",
+            "weekday Thursday", "weekday Friday", "weekday Saturday"
+        };
+
         [SerializeField, Tooltip("예정 시각 도달 여부를 확인하는 주기(초).")]
         private float checkIntervalSeconds = 15f;
 
         private IPublisher<BeforeShutdownEvent> _publisher;
-
         private ShutdownSetting _schedule;
-        private bool _isShuttingDown;
+        private ILogger<ShutdownScheduler> _logger;
+
+        // 특정 날짜 설정과 비교할 오늘 날짜 문자열과 그 로그용 출처 문자열. 확인 주기마다 새로 만들지 않고 날짜가 바뀔 때만 다시 만듦.
+        private string _todayText;
+        private string _todaySource;
 
         // 하루에 한 번만 종료가 발동하도록, 이미 처리한 날짜를 기록함.
         private DateTime _handledDate = DateTime.MinValue;
 
-        private ILogger<ShutdownScheduler> _logger;
+        // _todayText를 만든 날짜.
+        private DateTime _todayTextDate = DateTime.MinValue;
+
+        private bool _isOriginal;
+        private bool _isShuttingDown;
 
         /// <summary>
         /// VContainer 의존성 주입.
@@ -335,7 +347,8 @@ namespace HuliacDev.Core
 
             if (dateOverride != null)
             {
-                source = ZString.Concat("date ", dateOverride.date);
+                // FindDateOverride가 오늘 날짜 문자열과 같은 항목만 돌려주므로 미리 만든 출처 문자열을 씀.
+                source = _todaySource;
 
                 if (!dateOverride.enabled)
                 {
@@ -352,7 +365,7 @@ namespace HuliacDev.Core
                 return false;
             }
 
-            source = ZString.Concat("weekday ", now.DayOfWeek.ToString());
+            source = WeekdaySources[(int)now.DayOfWeek];
 
             return TryComposeMoment(now, daySchedule.time, source, out scheduledMoment);
         }
@@ -388,7 +401,14 @@ namespace HuliacDev.Core
                 return null;
             }
 
-            string today = now.ToString("yyyy-MM-dd");
+            if (_todayText == null || now.Date != _todayTextDate)
+            {
+                _todayTextDate = now.Date;
+                _todayText = now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+                _todaySource = ZString.Concat("date ", _todayText);
+            }
+
+            string today = _todayText;
 
             foreach (ShutdownDateOverride dateOverride in _schedule.dateOverrides)
             {

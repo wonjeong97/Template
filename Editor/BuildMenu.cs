@@ -37,6 +37,9 @@ namespace HuliacDev.Editor
         /// <summary>git이 멈췄을 때 Editor가 함께 멈추지 않도록 기다리는 최대 시간(밀리초).</summary>
         const int GitTimeoutMilliseconds = 10000;
 
+        /// <summary>
+        /// Build Settings의 씬과 Development 설정으로 Windows 64비트 빌드를 만들고, 설정에 따라 보관 폴더에 zip을 남기고 복사 폴더에 복사함.
+        /// </summary>
         [MenuItem("Build/Windows Build", false, 0)]
         static void BuildWindowsAndArchive()
         {
@@ -133,12 +136,18 @@ namespace HuliacDev.Editor
             }
         }
 
+        /// <summary>
+        /// 빌드 보관·복사 경로를 정하는 Preferences 화면을 엶.
+        /// </summary>
         [MenuItem("Build/Setting", false, 100)]
         static void OpenSettings()
         {
             BuildMenuPreferences.Open();
         }
 
+        /// <summary>
+        /// Build Settings에서 켜 둔 씬 경로만 모아 돌려줌.
+        /// </summary>
         static string[] GetEnabledScenes()
         {
             int count = 0;
@@ -370,6 +379,9 @@ namespace HuliacDev.Editor
             Debug.Log($"[BuildMenu] Copied: {target}");
         }
 
+        /// <summary>
+        /// 배포하지 않는 폴더(*_DoNotShip, IL2CPP *_ButDontShipItWithYourGame) 아래의 경로인지 확인함.
+        /// </summary>
         static bool IsDoNotShip(string relativePath)
         {
             int separator = relativePath.IndexOfAny(new[] { '\\', '/' });
@@ -411,6 +423,9 @@ namespace HuliacDev.Editor
             public readonly string Branch;
             public readonly string Changes;
 
+            /// <summary>
+            /// 읽은 git 상태 값으로 구조체를 만듦.
+            /// </summary>
             GitState(string commit, string branch, string changes)
             {
                 Commit = commit;

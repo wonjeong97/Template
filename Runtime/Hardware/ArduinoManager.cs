@@ -1,9 +1,11 @@
 using System;
 using System.IO.Ports;
 using System.Threading;
+using Cysharp.Text;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using R3;
+using Unity.Profiling;
 using UnityEngine;
 using VContainer;
 using HuliacDev.Utils;
@@ -11,29 +13,66 @@ using ZLogger;
 
 namespace HuliacDev.Hardware
 {
+    /// <summary>
+    /// 아두이노 등 시리얼 장치와 핸드셰이크로 포트를 찾아 연결하고, 전용 스레드로 줄 단위 수신을 받아 메인 스레드로 넘기는 매니저.
+    /// 연결된 뒤 끊기면 간격을 늘려 가며 자동으로 다시 연결함.
+    /// </summary>
     public class ArduinoManager : MonoBehaviour
     {
-        private bool _isOriginal;
-
         /// <summary>전체 포트 스캔을 반복할 기본 최대 횟수.</summary>
         public const int DefaultMaxRetries = 10;
 
         /// <summary>재시도 사이의 기본 대기 시간(ms).</summary>
         public const int DefaultRetryDelayMs = 1000;
 
-        private SerialPort _serialPort;
-        private Thread _readThread;
-        private volatile bool _isRunning;
+        /// <summary>핸드셰이크 응답과 쓰기를 기다리는 시간(ms).</summary>
+        private const int HandshakeTimeoutMs = 500;
+
+        /// <summary>연결을 끊을 때 읽기 스레드가 끝나기를 기다리는 최대 시간(ms).</summary>
+        private const int ReadThreadJoinTimeoutMs = 600;
+
+        /// <summary>자동 재연결 간격의 최소값(ms). 잘못된 설정으로 쉬지 않고 포트를 스캔하지 않게 함.</summary>
+        private const int MinReconnectDelayMs = 1000;
+
+        private static readonly ProfilerMarker DispatchMarker = new ProfilerMarker("ArduinoManager.DispatchMessage");
+        private static readonly ProfilerMarker JoinReadThreadMarker = new ProfilerMarker("ArduinoManager.JoinReadThread");
+
+        private readonly Subject<string> _messageSubject = new Subject<string>();
+        private readonly Subject<Unit> _connectedSubject = new Subject<Unit>();
+        private readonly Subject<Unit> _disconnectedSubject = new Subject<Unit>();
 
         // DisconnectInternal()은 메인 스레드(OnDestroy/OnApplicationQuit/Disconnect)와 읽기 스레드(읽기 오류) 양쪽에서
         // 호출될 수 있으므로 상태 전이를 직렬화함.
         private readonly object _connectionLock = new object();
 
-        private ILogger<ArduinoManager> _logger;
+        // 첫 연결(ConnectAsync)의 포트 스캔을 한 번에 하나만 돌게 함. 새 호출이 앞선 호출을 멈추라고 한 뒤에도
+        // 스레드 풀에서 돌던 앞선 스캔은 끝까지 진행되므로, 그 스캔이 포트를 닫고 끝날 때까지 기다렸다가 스캔함.
+        // 기다리지 않으면 두 스캔이 같은 COM 포트를 동시에 열려다 한쪽이 접근 거부로 실패함.
+        private readonly SemaphoreSlim _connectGate = new SemaphoreSlim(1, 1);
 
-        private readonly Subject<string> _messageSubject = new Subject<string>();
-        private readonly Subject<Unit> _connectedSubject = new Subject<Unit>();
-        private readonly Subject<Unit> _disconnectedSubject = new Subject<Unit>();
+        private SerialPort _serialPort;
+        private Thread _readThread;
+        private ILogger<ArduinoManager> _logger;
+        private string _lastExpectedHandshake;
+        private CancellationTokenSource _reconnectCts;
+
+        // 진행 중인 첫 연결(ConnectAsync)의 스캔을 수동 해제로 멈추기 위한 토큰 소스(파괴 토큰과 연결함).
+        private CancellationTokenSource _connectCts;
+
+        private int _lastBaudRate;
+
+        // ConnectAsync를 부를 때마다 늘리는 번호. 스캔 차례를 기다리는 사이 더 새 호출이 오면 앞선 호출은 스캔하지 않음.
+        private int _connectGeneration;
+
+        private bool _isOriginal;
+        private volatile bool _isRunning;
+        private bool _isReconnecting;
+
+        // 수동으로 끊은 뒤에는 읽기 오류로 들어온 자동 재연결 요청도 시작하지 않도록 표시함. 다음 ConnectAsync에서 풂.
+        private volatile bool _isManuallyDisconnected;
+
+        // OnDestroy가 파괴 토큰 취소보다 먼저 불려도 ConnectAsync가 파괴로 인한 취소를 수동 해제로 착각하지 않게 함.
+        private bool _isDestroyed;
 
         /// <summary>
         /// 외부에서 구독할 수 있는 아두이노 수신 데이터 스트림.
@@ -41,22 +80,23 @@ namespace HuliacDev.Hardware
         /// </summary>
         public Observable<string> OnDataReceived => _messageSubject.ObserveOnMainThread();
 
-        /// <summary>연결 성공 시 발행되는 스트림.</summary>
+        /// <summary>연결 성공 시 발행되는 스트림. 현재 상태가 아니라 이벤트이므로, 구독 시점의 상태는 IsConnected로 읽음.</summary>
         public Observable<Unit> OnConnected => _connectedSubject.ObserveOnMainThread();
 
         /// <summary>연결 끊김 발생 시 발행되는 스트림.</summary>
         public Observable<Unit> OnDisconnected => _disconnectedSubject.ObserveOnMainThread();
 
-        /// <summary>연결이 끊어졌을 때 자동으로 재연결을 시도할지 여부.</summary>
+        /// <summary>연결된 뒤 끊어졌을 때 자동으로 재연결을 시도할지 여부. 첫 연결(ConnectAsync)이 실패한 경우에는 동작하지 않음.</summary>
         public bool AutoReconnect { get; set; } = true;
 
-        /// <summary>자동 재연결 시도 주기(ms).</summary>
+        /// <summary>자동 재연결의 첫 대기 시간(ms). 실패할 때마다 두 배로 늘어 AutoReconnectMaxIntervalMs에서 멈추고, 다시 끊기면 이 값부터 시작함.</summary>
         public int AutoReconnectIntervalMs { get; set; } = 3000;
 
-        private int _lastBaudRate;
-        private string _lastExpectedHandshake;
-        private bool _isReconnecting;
-        private CancellationTokenSource _reconnectCts;
+        /// <summary>
+        /// 자동 재연결 대기 시간의 상한(ms). 장치가 오래 꺼져 있어도 이 간격보다 드물게 시도하지 않음.
+        /// AutoReconnectIntervalMs가 더 크면 그 값을 상한으로 쓰고, 1초보다 작게 두어도 1초로 봄(쉬지 않고 스캔하지 않게 함).
+        /// </summary>
+        public int AutoReconnectMaxIntervalMs { get; set; } = 30000;
 
         /// <summary>
         /// 시리얼 포트가 열려 있는지 여부.
@@ -73,8 +113,7 @@ namespace HuliacDev.Hardware
         }
 
         /// <summary>
-        /// VContainer 의존성 주입.
-        /// ZLogger 할당.
+        /// VContainer 의존성 주입으로 로거를 할당함.
         /// </summary>
         [Inject]
         public void Construct(ILogger<ArduinoManager> logger)
@@ -92,127 +131,220 @@ namespace HuliacDev.Hardware
                 return;
             }
         }
-        
+
         /// <summary>
         /// 아두이노 장치와 시리얼 통신 연결을 비동기로 시도함.
         /// expectedHandshake로 장치를 식별하며, 전체 포트 스캔을 maxRetries만큼 반복함.
         /// 부팅 직후 장치 인식이 늦는 환경에서는 maxRetries를 늘리고, 빠른 실패가 필요하면 줄임.
+        /// 모두 실패하면 마지막 스캔에서 포트별로 실패한 이유를 경고 로그에 남김.
+        /// 앞선 ConnectAsync는 멈추고, 앞선 스캔이나 진행 중인 자동 재연결 스캔이 끝난 뒤 스캔함. 기다리는 사이 더 새 ConnectAsync가 오거나
+        /// Disconnect가 불리면 스캔하지 않고 끝나므로, 끝난 뒤 연결됐는지는 IsConnected로 확인함.
         /// </summary>
         public async UniTask ConnectAsync(int baudRate, string expectedHandshake,
             int maxRetries = DefaultMaxRetries, int retryDelayMs = DefaultRetryDelayMs)
         {
+            if (string.IsNullOrEmpty(expectedHandshake))
+            {
+                if (_logger != null) _logger.ZLogError($"[ArduinoManager] expectedHandshake is empty. Cannot identify the device.");
+                return;
+            }
+
+            // 대기 중 파괴되면 파괴 토큰을 얻는 것 자체가 실패할 수 있으므로, 살아 있을 때 한 번 얻어 넘김.
+            CancellationToken destroyToken = this.GetCancellationTokenOnDestroy();
+
             _lastBaudRate = baudRate;
             _lastExpectedHandshake = expectedHandshake;
+            _isManuallyDisconnected = false;
 
             if (IsConnected) return;
 
             if (maxRetries < 1) maxRetries = 1;
             if (retryDelayMs < 0) retryDelayMs = 0;
 
-            // 재시도 루프 처리를 전담하는 별도 메서드 호출 (복잡도 분리)
-            bool isSuccess = await ExecuteConnectionRetriesAsync(baudRate, expectedHandshake, maxRetries, retryDelayMs);
+            // 앞서 진행 중인 첫 연결이 있으면 멈추게 하고, 그 스캔이 끝날 때까지 기다림(파괴되면 기다림을 멈추고 OCE를 전달함).
+            // 자동 재연결은 멈추지 않음(이 연결이 실패해도 장치가 돌아오면 다시 연결되게 함). 두 스캔은 같은 차례(_connectGate)를
+            // 거쳐 같은 포트를 동시에 열지 않음.
+            int generation = Interlocked.Increment(ref _connectGeneration);
+            StopConnect();
+            await _connectGate.WaitAsync(destroyToken);
 
-            if (!isSuccess && _logger != null)
+            try
             {
-                _logger.ZLogWarning($"[ArduinoManager] Failed to connect to Arduino after {maxRetries} attempts.");
+                await ConnectWithGateAsync(generation, baudRate, expectedHandshake, maxRetries, retryDelayMs, destroyToken);
+            }
+            finally
+            {
+                _connectGate.Release();
             }
         }
 
         /// <summary>
-        /// 지정된 횟수만큼 연결 검증 및 대기를 반복함.
+        /// 스캔 차례를 얻은 뒤 실제로 포트를 스캔해 연결함. 기다리는 사이 더 새 ConnectAsync가 왔거나 수동 해제됐거나
+        /// 이미 연결됐으면 스캔하지 않으며, 이번 연결은 수동 해제(Disconnect)나 새 ConnectAsync로도 멈출 수 있게 함.
         /// </summary>
-        private async UniTask<bool> ExecuteConnectionRetriesAsync(int baudRate, string expectedHandshake, int maxRetries, int delayMs)
+        private async UniTask ConnectWithGateAsync(int generation, int baudRate, string expectedHandshake, int maxRetries, int retryDelayMs,
+            CancellationToken destroyToken)
         {
+            // 차례를 얻은 직후 파괴됐으면 OnDestroy가 수동 해제 표시를 세워도 파괴 취소로 전달함(예전처럼 OCE).
+            if (_isDestroyed) throw new OperationCanceledException(destroyToken);
+            destroyToken.ThrowIfCancellationRequested();
+
+            if (generation != Volatile.Read(ref _connectGeneration))
+            {
+                if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Connection attempt skipped because a newer ConnectAsync was called.");
+                return;
+            }
+
+            if (_isManuallyDisconnected)
+            {
+                if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Connection attempt stopped before scanning because Disconnect was called.");
+                return;
+            }
+
+            if (IsConnected) return;
+
+            CancellationTokenSource connectCts = CancellationTokenSource.CreateLinkedTokenSource(destroyToken);
+            _connectCts = connectCts;
+
+            try
+            {
+                (bool isSuccess, string lastFailures) = await ExecuteConnectionRetriesAsync(baudRate, expectedHandshake, maxRetries, retryDelayMs, connectCts.Token);
+
+                if (!isSuccess && _logger != null)
+                {
+                    _logger.ZLogWarning($"[ArduinoManager] Failed to connect to Arduino after {maxRetries} attempts. Last scan: {lastFailures}");
+                }
+            }
+            catch (OperationCanceledException) when (!destroyToken.IsCancellationRequested && !_isDestroyed)
+            {
+                // 수동 해제나 새 ConnectAsync로 멈춘 경우. 파괴로 인한 취소만 예전처럼 호출자에게 전달함.
+                if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Connection attempt stopped.");
+            }
+            finally
+            {
+                Interlocked.CompareExchange(ref _connectCts, null, connectCts);
+                connectCts.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// 진행 중인 첫 연결(ConnectAsync)의 스캔과 대기를 멈춤. 해제는 ConnectAsync가 끝날 때 맡음.
+        /// </summary>
+        private void StopConnect()
+        {
+            CancellationTokenSource cts = Interlocked.Exchange(ref _connectCts, null);
+            if (cts == null) return;
+
+            try
+            {
+                cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // 다른 스레드에서 Disconnect를 부르는 사이 ConnectAsync가 끝나 이미 해제된 경우로, 멈출 연결이 없음.
+            }
+        }
+
+        /// <summary>
+        /// 지정된 횟수만큼 포트 스캔과 대기를 반복하고, 실패하면 마지막 스캔의 포트별 실패 이유를 돌려줌.
+        /// 시도마다 로그를 남기지 않고 결과만 남김(통신 로그는 상태가 바뀔 때만 남기는 규칙).
+        /// </summary>
+        private async UniTask<(bool isSuccess, string lastFailures)> ExecuteConnectionRetriesAsync(int baudRate, string expectedHandshake,
+            int maxRetries, int delayMs, CancellationToken cancellationToken)
+        {
+            string lastFailures = string.Empty;
+
             for (int i = 0; i < maxRetries; i++)
             {
-                if (await TryEstablishConnectionAsync(baudRate, expectedHandshake))
+                // 기다리는 사이 다른 경로로 이미 연결됐으면 더 스캔하지 않고 성공으로 끝냄(연결됐는데 실패 경고가 남지 않게 함).
+                if (IsConnected) return (true, string.Empty);
+
+                (bool isEstablished, string failures) = await TryEstablishConnectionAsync(baudRate, expectedHandshake, cancellationToken);
+                if (isEstablished)
                 {
-                    return true;
+                    return (true, string.Empty);
                 }
 
-                // 마지막 시도가 아닐 경우에만 대기 및 로그 출력
+                lastFailures = failures;
+
                 if (i < maxRetries - 1)
                 {
-                    LogRetryAttempt(i + 1, maxRetries, delayMs);
-                    await UniTask.Delay(delayMs, cancellationToken: this.GetCancellationTokenOnDestroy());
+                    await UniTask.Delay(delayMs, cancellationToken: cancellationToken);
                 }
             }
 
-            return false;
+            return (false, lastFailures);
         }
 
         /// <summary>
-        /// 널 체크 및 재시도 로그 출력을 전담함.
+        /// 백그라운드 스레드에서 포트를 스캔해 핸드셰이크가 맞는 포트를 찾고, 메인 스레드 복귀 후 연결을 할당함.
+        /// 스캔하는 사이 취소(파괴, 수동 해제로 인한 재연결 중단)되면 찾은 포트를 닫고 연결하지 않으며,
+        /// 이때는 재시도를 멈추도록 성공으로 돌려줌.
         /// </summary>
-        private void LogRetryAttempt(int currentAttempt, int maxRetries, int delayMs)
+        private async UniTask<(bool isEstablished, string failures)> TryEstablishConnectionAsync(int baudRate, string expectedHandshake,
+            CancellationToken cancellationToken)
         {
-            if (_logger != null)
-            {
-                _logger.ZLogInformation($"[ArduinoManager] Connection retry in {delayMs}ms... ({currentAttempt}/{maxRetries})");
-            }
-        }
+            (SerialPort validPort, string failures) = await UniTask.RunOnThreadPool(() => TryHandshake(baudRate, expectedHandshake));
 
-        /// <summary>
-        /// 백그라운드 스레드에서 단일 포트 검증을 수행하고, 
-        /// 메인 스레드 복귀 후 안전하게 연결을 할당함.
-        /// </summary>
-        private async UniTask<bool> TryEstablishConnectionAsync(int baudRate, string expectedHandshake)
-        {
-            SerialPort validPort = await UniTask.RunOnThreadPool(() => TryHandshake(baudRate, expectedHandshake));
-            
-            if (validPort == null) 
+            if (validPort == null)
             {
-                return false;
+                return (false, failures);
             }
 
-            // 메인 스레드 복귀 후 객체 파괴(취소) 여부 검사
-            if (this.GetCancellationTokenOnDestroy().IsCancellationRequested)
+            if (cancellationToken.IsCancellationRequested)
             {
-                validPort.Close();
-                validPort.Dispose();
-                return true; // 이미 파괴 중이므로 추가 재시도 루프를 막기 위해 true 반환
+                ClosePortQuietly(validPort);
+                return (true, string.Empty);
             }
 
             EstablishConnection(validPort, validPort.PortName);
-            return true;
+            return (true, string.Empty);
         }
-        
+
         /// <summary>
         /// 사용 가능한 모든 시리얼 포트를 순회하며 핸드셰이크 응답을 검증함.
-        /// 검증에 성공한 SerialPort 객체를 반환함.
+        /// 검증에 성공한 SerialPort 객체를, 실패하면 null과 포트별 실패 이유를 돌려줌.
         /// </summary>
-        private SerialPort TryHandshake(int baudRate, string expectedHandshake)
+        private (SerialPort validPort, string failures) TryHandshake(int baudRate, string expectedHandshake)
         {
             string[] ports = SerialPort.GetPortNames();
+            if (ports.Length == 0) return (null, "no serial ports");
 
+            // 실패 이유는 연결에 모두 실패했을 때 한 번 남기는 용도라 할당을 아끼지 않음.
+            string failures = string.Empty;
             foreach (string port in ports)
             {
-                SerialPort validPort = TryConnectPort(port, baudRate, expectedHandshake);
+                SerialPort validPort = TryConnectPort(port, baudRate, expectedHandshake, out string failureReason);
                 if (validPort != null)
                 {
-                    return validPort;
+                    return (validPort, string.Empty);
                 }
+
+                failures = failures.Length == 0
+                    ? ZString.Concat(port, ": ", failureReason)
+                    : ZString.Concat(failures, "; ", port, ": ", failureReason);
             }
 
-            return null;
+            return (null, failures);
         }
-        
+
         /// <summary>
         /// 지정된 단일 포트에 연결을 시도하고 기대 응답 문자열을 대기함.
-        /// 백그라운드에서 실행되므로 내부 상태를 변경하지 않고 포트 객체만 반환함.
+        /// 백그라운드에서 실행되므로 내부 상태를 변경하지 않고 포트 객체만 반환하며, 실패하면 이유를 failureReason에 담음.
         /// </summary>
-        private SerialPort TryConnectPort(string port, int baudRate, string expectedHandshake)
+        private SerialPort TryConnectPort(string port, int baudRate, string expectedHandshake, out string failureReason)
         {
             SerialPort testPort = null;
             bool ownershipTransferred = false;
+            failureReason = string.Empty;
 
             try
             {
                 testPort = new SerialPort(port, baudRate);
 
                 testPort.DtrEnable = true;
-                testPort.ReadTimeout = 500;
-                testPort.WriteTimeout = 500;
+                testPort.ReadTimeout = HandshakeTimeoutMs;
+                testPort.WriteTimeout = HandshakeTimeoutMs;
                 testPort.Open();
 
                 string received = testPort.ReadLine().Trim();
@@ -223,10 +355,18 @@ namespace HuliacDev.Hardware
                     ownershipTransferred = true;
                     return testPort;
                 }
+
+                failureReason = ZString.Concat("unexpected handshake '", received, "'");
             }
-            catch (Exception)
+            catch (TimeoutException)
             {
-                // 다음 포트 연결 테스트를 진행하기 위해 현재 예외를 무시함.
+                // 아두이노가 아닌 장치이거나 핸드셰이크를 보내지 않는 장치
+                failureReason = "no handshake";
+            }
+            catch (Exception e)
+            {
+                // 다른 프로그램이 포트를 점유하는 등 열지 못한 경우. 다음 포트 연결 테스트를 이어감.
+                failureReason = e.Message;
             }
             finally
             {
@@ -235,20 +375,28 @@ namespace HuliacDev.Hardware
                 // 정작 그 포트에 장치가 있어도 영영 찾지 못함. 따라서 모든 실패 경로에서 반드시 해제함.
                 if (!ownershipTransferred && testPort != null)
                 {
-                    try
-                    {
-                        testPort.Dispose();
-                    }
-                    catch (Exception)
-                    {
-                        // 장치가 물리적으로 분리된 경우 Dispose에서도 예외가 날 수 있으므로 무시함.
-                    }
+                    ClosePortQuietly(testPort);
                 }
             }
 
             return null;
         }
-        
+
+        /// <summary>
+        /// 포트를 해제함. 장치가 물리적으로 분리된 경우 해제에서도 예외가 날 수 있으므로 무시함.
+        /// </summary>
+        private static void ClosePortQuietly(SerialPort port)
+        {
+            try
+            {
+                port.Dispose();
+            }
+            catch (Exception)
+            {
+                // 이미 분리된 장치의 해제 실패는 복구할 수 없고 다음 연결에 영향이 없으므로 무시함.
+            }
+        }
+
         /// <summary>
         /// 검증 완료된 시리얼 포트를 인스턴스에 할당하고 수신 스레드를 가동함.
         /// 메인 스레드 점유율을 낮추기 위해 우선순위를 BelowNormal로 설정함.
@@ -259,71 +407,101 @@ namespace HuliacDev.Hardware
             {
                 _serialPort = validPort;
                 _isRunning = true;
-
-                _readThread = new Thread(ReadSerialLoop)
-                {
-                    Priority = System.Threading.ThreadPriority.BelowNormal
-                };
-                _readThread.Start();
+                StartReadThread();
             }
 
             if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Connection success: {portName}");
             _connectedSubject.OnNext(Unit.Default);
         }
-        
+
+        /// <summary>
+        /// 수신 스레드를 새로 만들어 시작함. 호출자가 _connectionLock을 잡은 상태에서 부름.
+        /// </summary>
+        private void StartReadThread()
+        {
+            _readThread = new Thread(ReadSerialLoop)
+            {
+                Priority = System.Threading.ThreadPriority.BelowNormal
+            };
+            _readThread.Start();
+        }
+
         /// <summary>
         /// DTR 핀을 제어하여 아두이노를 하드웨어 리셋함.
         /// 비동기 대기 중 오브젝트가 파괴되면 작업을 안전하게 취소함.
         /// </summary>
         public async UniTask RebootDeviceAsync()
         {
-            if (!IsConnected) 
+            if (!IsConnected)
             {
-                if(_logger != null) _logger.ZLogWarning($"[ArduinoManager] Cannot reboot. Device is not connected.");
+                if (_logger != null) _logger.ZLogWarning($"[ArduinoManager] Cannot reboot. Device is not connected.");
                 return;
             }
+
+            // 대기 중 파괴되면 파괴 토큰을 얻는 것 자체가 실패할 수 있으므로, 살아 있을 때 한 번 얻어 둠.
+            CancellationToken destroyToken = this.GetCancellationTokenOnDestroy();
 
             try
             {
                 // 기존 읽기 스레드를 확실히 종료시킨 뒤 재기동함.
                 // 조인하지 않으면 이전 스레드가 살아 있는 채로 새 스레드가 붙어
                 // 같은 포트를 두 스레드가 읽는 상태가 될 수 있음.
+                SerialPort port = _serialPort;
                 _isRunning = false;
+                JoinReadThread(_readThread);
 
-                Thread previousThread = _readThread;
-                if (previousThread != null && previousThread.IsAlive && previousThread != Thread.CurrentThread)
-                {
-                    previousThread.Join(600);
-                }
-
-                _serialPort.DtrEnable = true;
-                await UniTask.Delay(100, cancellationToken: this.GetCancellationTokenOnDestroy());
-                _serialPort.DtrEnable = false;
+                port.DtrEnable = true;
+                await UniTask.Delay(100, cancellationToken: destroyToken);
+                if (IsDisconnectedDuringReboot(port)) return;
+                port.DtrEnable = false;
 
                 // 부트로더 대기
-                await UniTask.Delay(2000, cancellationToken: this.GetCancellationTokenOnDestroy());
+                await UniTask.Delay(2000, cancellationToken: destroyToken);
+                if (IsDisconnectedDuringReboot(port)) return;
 
                 lock (_connectionLock)
                 {
                     _isRunning = true;
-                    _readThread = new Thread(ReadSerialLoop)
-                    {
-                        Priority = System.Threading.ThreadPriority.BelowNormal
-                    };
-                    _readThread.Start();
+                    StartReadThread();
                 }
 
-                if(_logger != null) _logger.ZLogInformation($"[ArduinoManager] Device reboot complete. Clean state restored.");
+                if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Device reboot complete. Clean state restored.");
             }
             catch (OperationCanceledException)
             {
                 // 오브젝트 파괴로 인한 정상적인 취소이므로 경고를 띄우지 않음.
-                if(_logger != null) _logger.ZLogInformation($"[ArduinoManager] Reboot canceled due to object destruction.");
+                if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Reboot canceled due to object destruction.");
             }
             catch (Exception e)
             {
-                if(_logger != null) _logger.ZLogWarning($"[ArduinoManager] Device reboot failed: {e.Message}");
+                if (_logger != null) _logger.ZLogWarning($"[ArduinoManager] Device reboot failed: {e.Message}");
                 Disconnect();
+            }
+        }
+
+        /// <summary>
+        /// 재부팅을 기다리는 사이 연결이 끊겼는지(수동 해제, 다른 연결로 바뀜) 확인하고, 끊겼으면 로그를 남김.
+        /// 끊긴 뒤 읽기 스레드를 다시 띄우거나 해제된 포트를 만지지 않게 하기 위함.
+        /// </summary>
+        private bool IsDisconnectedDuringReboot(SerialPort port)
+        {
+            if (_serialPort == port) return false;
+
+            if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Reboot stopped because the device was disconnected.");
+            return true;
+        }
+
+        /// <summary>
+        /// 읽기 스레드가 끝나기를 제한 시간까지 기다림. 메인 스레드를 멈출 수 있어 프로파일러에 따로 보이도록 마커로 감쌈.
+        /// 읽기 스레드가 스스로 부른 경우 자기 자신을 기다리면 제한 시간만큼 무의미하게 멈추므로 건너뜀.
+        /// </summary>
+        private static void JoinReadThread(Thread thread)
+        {
+            if (thread == null || !thread.IsAlive || thread == Thread.CurrentThread) return;
+
+            using (JoinReadThreadMarker.Auto())
+            {
+                thread.Join(ReadThreadJoinTimeoutMs);
             }
         }
 
@@ -344,6 +522,8 @@ namespace HuliacDev.Hardware
         {
             if (isManual)
             {
+                _isManuallyDisconnected = true;
+                StopConnect();
                 StopAutoReconnect();
             }
 
@@ -366,23 +546,12 @@ namespace HuliacDev.Hardware
             }
 
             // 읽기 오류 발생 시 읽기 스레드가 스스로 이 메서드를 호출함.
-            // 그 경우 자기 자신을 Join하면 타임아웃만큼 무의미하게 정지하므로 건너뜀.
             // (_isRunning이 이미 false이므로 루프는 다음 검사에서 정상 종료됨)
-            if (threadToJoin != null && threadToJoin.IsAlive && threadToJoin != Thread.CurrentThread)
-            {
-                threadToJoin.Join(600);
-            }
+            JoinReadThread(threadToJoin);
 
             if (portToDispose != null)
             {
-                try
-                {
-                    portToDispose.Dispose();
-                }
-                catch (Exception)
-                {
-                    // 장치가 물리적으로 분리된 상태에서는 Dispose에서도 예외가 날 수 있으므로 무시함.
-                }
+                ClosePortQuietly(portToDispose);
             }
 
             if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Disconnected");
@@ -415,6 +584,8 @@ namespace HuliacDev.Hardware
             {
                 await UniTask.SwitchToMainThread();
                 if (!this || !isActiveAndEnabled) return;
+                // 읽기 오류로 끊긴 순간 수동 해제가 겹치면, 수동 해제가 이기도록 재연결을 시작하지 않음.
+                if (_isManuallyDisconnected) return;
                 if (_isReconnecting) return;
                 StopAutoReconnect();
 
@@ -432,38 +603,64 @@ namespace HuliacDev.Hardware
         /// </summary>
         private void StopAutoReconnect()
         {
-            if (_reconnectCts != null)
-            {
-                _reconnectCts.Cancel();
-                _reconnectCts.Dispose();
-                _reconnectCts = null;
-            }
+            // Disconnect는 어느 스레드에서도 부를 수 있어, 두 호출이 같은 토큰 소스를 함께 정리하지 않도록 원자적으로 꺼냄.
+            CancellationTokenSource cts = Interlocked.Exchange(ref _reconnectCts, null);
+            if (cts == null) return;
+
+            cts.Cancel();
+            cts.Dispose();
         }
 
         /// <summary>
-        /// 연결에 성공하거나 취소될 때까지 일정 간격으로 재연결을 반복 시도함.
+        /// 연결에 성공하거나 취소될 때까지 간격을 두 배씩 늘려 가며(상한 AutoReconnectMaxIntervalMs) 재연결을 반복 시도함.
+        /// 로그는 시작과 결과(몇 번 만에, 얼마나 걸렸는지)만 남김.
         /// </summary>
         private async UniTaskVoid AutoReconnectLoopAsync(CancellationToken cancellationToken)
         {
             _isReconnecting = true;
+            int attemptCount = 0;
+            // 첫 대기도 최소 간격을 지켜, 잘못된 설정(0 이하)으로 끊기자마자 쉬지 않고 스캔하지 않게 함.
+            int delayMs = Math.Max(MinReconnectDelayMs, AutoReconnectIntervalMs);
+            float startedAt = Time.realtimeSinceStartup;
             if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Auto-reconnect started.");
 
             try
             {
                 while (!cancellationToken.IsCancellationRequested && !IsConnected)
                 {
-                    await UniTask.Delay(AutoReconnectIntervalMs, cancellationToken: cancellationToken);
+                    await UniTask.Delay(delayMs, DelayType.Realtime, cancellationToken: cancellationToken);
                     if (cancellationToken.IsCancellationRequested || IsConnected) break;
 
-                    if (await TryEstablishConnectionAsync(_lastBaudRate, _lastExpectedHandshake))
+                    attemptCount++;
+                    bool isEstablished;
+
+                    // ConnectAsync와 같은 차례를 거쳐 두 스캔이 같은 포트를 동시에 열지 않게 함.
+                    await _connectGate.WaitAsync(cancellationToken);
+                    try
                     {
-                        if (_logger != null) _logger.ZLogInformation($"[ArduinoManager] Auto-reconnect successful.");
+                        if (IsConnected) break;
+                        (isEstablished, _) = await TryEstablishConnectionAsync(_lastBaudRate, _lastExpectedHandshake, cancellationToken);
+                    }
+                    finally
+                    {
+                        _connectGate.Release();
+                    }
+
+                    if (isEstablished)
+                    {
+                        if (!cancellationToken.IsCancellationRequested && _logger != null)
+                        {
+                            _logger.ZLogInformation($"[ArduinoManager] Auto-reconnect successful after {attemptCount} attempts ({Time.realtimeSinceStartup - startedAt:F0}s).");
+                        }
                         break;
                     }
+
+                    delayMs = NextReconnectDelayMs(delayMs, Math.Max(AutoReconnectMaxIntervalMs, AutoReconnectIntervalMs));
                 }
             }
             catch (OperationCanceledException)
             {
+                // 수동 해제나 파괴로 재연결을 멈춘 정상 취소
             }
             finally
             {
@@ -472,11 +669,24 @@ namespace HuliacDev.Hardware
         }
 
         /// <summary>
+        /// 다음 재연결 대기 시간을 정함. 두 배로 늘리되 상한을 넘지 않고, 현재 간격이 0 이하면 1초부터 시작함.
+        /// 상한이 1초보다 작으면 1초로 봐 시도마다 쉬지 않고 포트를 스캔하지 않게 함.
+        /// </summary>
+        internal static int NextReconnectDelayMs(int currentDelayMs, int maxDelayMs)
+        {
+            if (maxDelayMs < MinReconnectDelayMs) maxDelayMs = MinReconnectDelayMs;
+            if (currentDelayMs < MinReconnectDelayMs) return MinReconnectDelayMs;
+            if (currentDelayMs >= maxDelayMs / 2) return maxDelayMs;
+            return currentDelayMs * 2;
+        }
+
+        /// <summary>
         /// 아두이노로 문자열 메시지를 전송함.
         /// </summary>
         public void Send(string msg)
         {
             // IsConnected와 같은 이유로 필드를 지역 변수에 고정한 뒤 검사·사용함.
+            // 끊긴 동안 매 프레임 보내는 프로젝트가 있어, 연결되지 않은 경우는 자주 생기는 no-op으로 보고 로그를 남기지 않음.
             SerialPort port = _serialPort;
             if (port == null || !port.IsOpen) return;
 
@@ -486,7 +696,7 @@ namespace HuliacDev.Hardware
             }
             catch (Exception e)
             {
-                if(_logger != null) _logger.ZLogWarning($"[ArduinoManager] Send fail: {e.Message}");
+                if (_logger != null) _logger.ZLogWarning($"[ArduinoManager] Send fail: {e.Message}");
             }
         }
 
@@ -515,21 +725,24 @@ namespace HuliacDev.Hardware
         }
 
         /// <summary>
-        /// 단일 메시지 수신 및 R3 스트림 발행 처리.
+        /// 단일 메시지 수신 및 R3 스트림 발행 처리. 발행 구간만 마커로 감싸 수신 대기 시간이 섞이지 않게 함.
         /// </summary>
         private void ProcessNextSerialMessage(SerialPort port)
         {
             try
             {
                 string data = port.ReadLine();
-        
+
                 if (!string.IsNullOrEmpty(data))
                 {
-                    _messageSubject.OnNext(data);
+                    using (DispatchMarker.Auto())
+                    {
+                        _messageSubject.OnNext(data);
+                    }
                 }
             }
-            catch (TimeoutException) 
-            { 
+            catch (TimeoutException)
+            {
                 // 정상적인 대기 시간 초과이므로 루프 유지를 위해 무시함.
             }
             catch (Exception e)
@@ -560,24 +773,22 @@ namespace HuliacDev.Hardware
         }
 
         /// <summary>
-        /// 유니티 생명주기 종료 시 시리얼 포트 연결 및 R3 리소스를 안전하게 해제함.
-        /// 메모리 누수 방지 목적.
+        /// 유니티 생명주기 종료 시 시리얼 포트 연결과 R3 리소스를 해제해 메모리 누수를 막음.
         /// </summary>
         private void OnDestroy()
         {
             SingletonGuard<ArduinoManager>.Release(_isOriginal);
             if (!_isOriginal) return;
 
-            StopAutoReconnect();
+            _isDestroyed = true;
             DisconnectInternal(true);
-            _messageSubject?.Dispose();
-            _connectedSubject?.Dispose();
-            _disconnectedSubject?.Dispose();
+            _messageSubject.Dispose();
+            _connectedSubject.Dispose();
+            _disconnectedSubject.Dispose();
         }
 
         /// <summary>
-        /// 애플리케이션 종료 시 시리얼 포트 점유를 즉시 해제함.
-        /// 다음 실행 시 포트 충돌을 방지하기 위함.
+        /// 애플리케이션 종료 시 다음 실행에서 포트가 충돌하지 않도록 시리얼 포트 점유를 즉시 해제함.
         /// </summary>
         private void OnApplicationQuit()
         {

@@ -22,6 +22,9 @@ namespace HuliacDev.Editor
         const string PublishRelativePath = "bin/Release/net8.0-windows/win-x64/publish";
         const string ExeFileName = "ShutdownScheduleEditor.exe";
 
+        /// <summary>
+        /// 종료 스케줄 편집기(Tools~/ShutdownScheduleEditor)를 빌드해 StreamingAssets에 실행 파일로 둠.
+        /// </summary>
         [MenuItem("Tools/Build Shutdown Scheduler Exe")]
         static void Build()
         {

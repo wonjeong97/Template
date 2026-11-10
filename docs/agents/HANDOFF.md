@@ -4,6 +4,32 @@ Claude가 Antigravity(agy)와 리뷰 서브에이전트에 맡긴 검증 기록.
 
 ---
 
+### [2026-11-10 12:30] Claude → Antigravity + 서브에이전트 · 코딩 스킬 기준 패키지 점검과 정리 (fix/audit-defects)
+- 요청: 수정된 코딩 스킬(`unity-stack-scaffold`·`unity-network-protocol`)로 템플릿 전체를 점검하고 나온 것을 전부 수정. summary "한 문장" 규칙은 스킬 문구를 고치기로 함(사용자 결정).
+- 점검: grep(규칙 기계 확인) + 영역별 감사(agy: Core·App·Data·Utils, 서브에이전트: UI·네트워크·하드웨어·Editor·Tests). agy 첫 Core 요청은 저장소 밖 파일 읽기 권한 거부로 빈 결과 → 둘로 나눠 저장소 밖 금지를 적고 다시 맡김. 순수 C# 객체의 `?.`·`??` 지적은 스킬이 허용해 오탐으로 뺌.
+- 변경: SoundManager 페이드 취소 NRE, 외부 API 로그가 호출을 늦춤, ArduinoManager(재연결 간격 늘리기, 수동 해제 뒤 재연결, 파괴 토큰, 포트별 실패 이유, 재부팅 중 해제), UIManager(효과음 캐시, Graphic 충돌, raycastTarget), JsonLoader(교체 재시도, 교체 실패 시 내용 유실 방지), ShutdownScheduler 할당, 조용한 실패 로그, ProfilerMarker, 필드 순서·summary·테스트 코드 규칙. 스킬 문서 오류 7곳 수정(G: 드라이브, git 밖). 26.11.10-2. 테스트 6건 추가.
+- Claude 확인: 검증 프로젝트 PlayMode 174/174(2·3차 수정 뒤 다시 확인), Windows 플레이어 빌드 성공. 변이: SoundManager를 예전 순서로 되돌리면 새 테스트가 NullReferenceException으로 실패함을 확인. 새 페이드 테스트는 이 환경에서 결론 없음이 아니라 실제로 실행됨.
+- agy (gemini-4-argon-high):
+  - 외부 API(b2) → 통과
+  - ArduinoManager 연결부(b3a) → 인증 만료("Authentication required")로 실패, 서브에이전트 단독
+  - ArduinoManager 재연결(b3b) → 지적: 읽기 오류와 수동 해제가 겹치면 재연결(중간, 서브에이전트와 같음), 첫 대기 보정 누락·CTS 교체 원자성(낮음) → 모두 고침
+  - JSON·예약 종료·타이머(b5) → 통과
+  - 2차 수정 재검증 → 통과
+- 서브에이전트 (8묶음 + 재검증):
+  - SoundManager → 통과(예전 코드에서 실패하는지 추정 → 변이로 확인)
+  - 외부 API → 통과, 성공 Return 로그가 호출자 취소로 빠질 수 있음(낮음) → 파괴 토큰으로 보냄
+  - ArduinoManager → 첫 연결 중 수동 해제 뒤 연결됨(중간), 읽기 오류·수동 해제 겹침, 간격 상한·0 이하 설정(낮음) → 모두 고침. 빈 handshake 거부는 Breaking으로 적음
+  - UIManager → `SetImage` 뒤 `SetButton`이면 클릭 안 됨(중간) → Button을 붙일 때 Graphic을 켬. 꺼진 오브젝트의 TMP가 raycastTarget을 덮어씀(낮음) → 주석·CHANGELOG에 적음
+  - JSON·예약 종료·타이머 → 통과. 기존 코드의 교체 실패 시 저장 내용 유실(중간)·접근 거부 재시도·날짜 출처 할당(낮음) → 고침
+  - 기계적 정리(필드 순서·summary) → 통과
+  - 테스트·문서 → CHANGELOG 누락(SetText·SetTMPText·TMP), 시간 제한 실패 메시지(낮음) → 고침
+  - 2차 수정 재검증 → `ExecuteWithExternalApiLoggingAsync`가 await 뒤에 파괴 토큰을 얻음(중간) → 시작할 때 받아 둠. OnDestroy와 파괴 토큰 순서(불확실) → 파괴 표시로 막음
+- PR 리뷰(Claude `/code-review` high, 3건, 모두 낮음) → 사용자 지시로 1번만 고침: `ConnectAsync`를 연달아 부르면 이전 스캔과 같은 포트를 다툼 → `_connectGate`(SemaphoreSlim)로 스캔 차례를 하나로 묶고 호출 번호로 가장 새 호출만 스캔. 2번(빈 handshake는 예외 없이 반환)·3번(영구 접근 거부도 재시도)은 의도한 동작이라 그대로 둠.
+  - 교차 검증(agy + 서브에이전트) → 둘 다 통과. agy만: 차례를 얻은 직후 파괴되면 OCE가 빠짐(낮음) → 맨 앞에서 파괴 확인. 서브에이전트만: 자동 재연결 스캔과 ConnectAsync가 같은 포트를 다툼(중간, 기존 문제) → 재연결 스캔도 같은 차례를 거치고 시도마다 이미 연결됐는지 확인
+  - 재검증(서브에이전트) → ConnectAsync가 자동 재연결을 멈추게 했더니 그 연결이 실패하면 재연결이 다시 시작되지 않음(중간) → 멈추지 않도록 되돌림(차례만으로 다툼이 막힘)
+  - Claude 확인: PlayMode 174/174, Windows 빌드 성공, 마지막 수정 뒤 ArduinoManagerTests 2/2·컴파일 오류 0
+- 남은 것: IL2CPP 빌드 미시험. 실제 시리얼 장치로 ArduinoManager를 시험하지 않음(스캔·재연결은 코드 리뷰와 간격 계산 테스트만). 백그라운드 스레드에서 `Disconnect`를 부르면 ConnectAsync 이어지는 코드가 그 스레드에서 돌 수 있음(기존 StopAutoReconnect와 같은 성질, 기록만). 영구 접근 거부도 저장을 약 200ms 늦춤(낮음, 기록만). agy 인증이 한 번 만료됐다가 이후 요청은 됐으므로, 다음 세션 전에 `agy` 로그인 상태를 확인할 것.
+
 ### [2026-11-10 10:45] Claude → Antigravity + 서브에이전트 · 자동 재시작 상태 API·종료 코드 유지·영상 재생 결과 (feat/auto-restart-status-api)
 - 요청: TODO 할 일 중 Reporter 항목을 뺀 4건 처리(재시작 이유 공개 API, 감시 상태 API, ApiManagerBase 종료 코드 0 문제, `PrepareAndPlayAsync` 성공 여부).
 - 변경: `AutoRestartWatchdog` 에 `WasRestarted`·`RestartReason`·`IsWatching`·`WaitUntilWatchingAsync`·`TryRequestRestart` 추가. 앱이 `CreateEventW` 로 이벤트를 만들고 감시가 앱 핸들을 연 뒤 Set하면 지켜보는 것으로 봄. 종료 코드 75는 "restart requested by the app"으로 기록. `QuitReason.ExitCode`·`Set(reason, exitCode)` 추가, `ApiManagerBase` 가 그 코드로 다시 끝냄. `PrepareAndPlayAsync` 가 `UniTask<bool>` 을 돌려줌. 26.11.10-1. 테스트 8건 추가.

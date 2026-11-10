@@ -19,8 +19,6 @@ namespace HuliacDev.UI
         private const string CanceledMessage = "Canceled";
         private const string DestroyedMessage = "Destroyed";
 
-        private bool _isOriginal;
-
         private readonly List<RenderTexture> _activeRenderTextures = new List<RenderTexture>();
 
         // 각 RenderTexture를 연결한 VideoPlayer. 고아 판정 시 씬 전체를 탐색하지 않고
@@ -29,6 +27,8 @@ namespace HuliacDev.UI
             new Dictionary<RenderTexture, VideoPlayer>();
 
         private ILogger<VideoManager> _logger;
+
+        private bool _isOriginal;
 
         /// <summary>
         /// VContainer 의존성 주입.

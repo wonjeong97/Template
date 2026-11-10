@@ -10,9 +10,8 @@ namespace HuliacDev.Network
     public static class PacketUtility
     {
         /// <summary>
-        /// 바이트 배열을 구조체로 역직렬화함.
+        /// 바이트 배열의 offset 위치부터 대상 구조체 T로 역직렬화함.
         /// </summary>
-        /// <typeparam name="T">대상 구조체 타입</typeparam>
         public static T FromBytes<T>(byte[] bytes, int offset = 0) where T : struct
         {
             if (bytes == null)
@@ -41,7 +40,6 @@ namespace HuliacDev.Network
         /// <summary>
         /// 구조체를 바이트 배열로 직렬화함 (새 바이트 배열 할당).
         /// </summary>
-        /// <typeparam name="T">구조체 타입</typeparam>
         public static byte[] ToBytes<T>(in T packet) where T : struct
         {
             int size = Marshal.SizeOf<T>();
@@ -53,7 +51,6 @@ namespace HuliacDev.Network
         /// <summary>
         /// 구조체를 기존 바이트 배열에 직렬화해 새 바이트 배열 할당을 피함. 기록한 바이트 수를 반환함.
         /// </summary>
-        /// <typeparam name="T">구조체 타입</typeparam>
         public static int ToBytes<T>(in T packet, byte[] destination, int offset = 0) where T : struct
         {
             if (destination == null)

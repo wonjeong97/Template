@@ -25,6 +25,7 @@ namespace HuliacDev.Tests
 
         private string _settingsPath;
         private bool _createdByTest;
+        private bool _createdFolderByTest;
 
         /// <summary>
         /// 동시성 조건을 만들려면 로드가 실제로 '대기'해야 함.
@@ -39,6 +40,7 @@ namespace HuliacDev.Tests
 
             if (File.Exists(_settingsPath)) return;
 
+            _createdFolderByTest = !Directory.Exists(Application.streamingAssetsPath);
             Directory.CreateDirectory(Application.streamingAssetsPath);
             File.WriteAllText(_settingsPath, "{\"resetTime\":90}");
             _createdByTest = true;
@@ -51,6 +53,15 @@ namespace HuliacDev.Tests
             if (_createdByTest && File.Exists(_settingsPath))
             {
                 File.Delete(_settingsPath);
+            }
+
+            // 테스트가 폴더까지 만들었으면 비어 있을 때만 지움. 프로젝트에 StreamingAssets 폴더와 .meta가 남지 않게 함.
+            string folderPath = Application.streamingAssetsPath;
+            if (_createdFolderByTest && Directory.Exists(folderPath) && Directory.GetFileSystemEntries(folderPath).Length == 0)
+            {
+                Directory.Delete(folderPath);
+                string metaPath = folderPath.TrimEnd('/', '\\') + ".meta";
+                if (File.Exists(metaPath)) File.Delete(metaPath);
             }
         }
 

@@ -26,6 +26,10 @@ namespace HuliacDev.Network
     {
         private static InternetAccessJudge _judge = new InternetAccessJudge();
 
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+        private static string _hintFailure;
+#endif
+
         /// <summary>네트워크 어댑터가 연결돼 있는지 여부. 인터넷에 나갈 수 있는지는 알려 주지 않음.</summary>
         public static bool IsNetworkConnected => Application.internetReachability != NetworkReachability.NotReachable;
 
@@ -79,8 +83,6 @@ namespace HuliacDev.Network
         }
 
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-        private static string _hintFailure;
-
         /// <summary>
         /// Windows 판정을 읽지 못해 어댑터만 보게 된 이유. 읽을 수 있으면 null임.
         /// 아래 경고는 Unity 로그에만 남으므로, NetworkStatusService가 시작 로그(ZLogger)에 함께 적음.
@@ -139,6 +141,7 @@ namespace HuliacDev.Network
                 public byte Roaming;
             }
 
+            /// <summary>Windows가 판정한 인터넷 연결 수준(작업 표시줄 네트워크 아이콘과 같은 값)을 읽음.</summary>
             [DllImport("iphlpapi.dll")]
             public static extern int GetNetworkConnectivityHint(out NetworkConnectivityHint hint);
         }

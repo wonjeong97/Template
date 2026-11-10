@@ -8,10 +8,10 @@ namespace HuliacDev.Utils
 {
     public class SystemCanvas : MonoBehaviour
     {
+        private ILogger<SystemCanvas> _logger;
+
         // 중복 생성되어 파괴되는 객체가 정적 플래그를 건드리는 것을 막기 위한 인스턴스 확인 변수
         private bool _isOriginal;
-
-        private ILogger<SystemCanvas> _logger;
 
         /// <summary>
         /// VContainer 의존성 주입.

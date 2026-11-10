@@ -50,7 +50,7 @@ namespace HuliacDev.Tests
         [TearDown]
         public void TearDown()
         {
-            if (_go != null) UnityEngine.Object.DestroyImmediate(_go);
+            if (_go) UnityEngine.Object.DestroyImmediate(_go);
             SingletonGuard<SoundManager>.ResetForTesting();
 
             if (File.Exists(_clipPath)) File.Delete(_clipPath);
@@ -209,6 +209,37 @@ namespace HuliacDev.Tests
             bool isLoaded = await _soundManager.PreloadAsync("missing").AwaitWithRealtimeTimeout();
 
             Assert.IsFalse(isLoaded, "읽지 못한 클립인데 true를 반환함");
+        });
+
+        /// <summary>
+        /// BGM 페이드아웃 중에 다시 페이드아웃하거나 정지해도 예외가 나면 안 됨. 취소가 트윈 Kill을 거쳐 페이드의 finally를
+        /// 동기로 실행하는데, 예전 구현은 그 finally가 필드를 비운 뒤 같은 필드로 Dispose를 불러 NullReferenceException이 났음.
+        /// 이 환경에서 AudioSource가 재생되지 않으면 페이드를 시작할 수 없어 결론 없음으로 처리함.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 페이드아웃_중_다시_페이드하거나_정지해도_예외가_나지_않는다() => UniTask.ToCoroutine(async () =>
+        {
+            ExpectMissingSettingsProviderError();
+            AudioSource bgmSource = GetBgmSource();
+            AudioClip clip = AudioClip.Create("Silent", 44100, 1, 44100, false);
+
+            try
+            {
+                bgmSource.clip = clip;
+                bgmSource.Play();
+                await UniTask.Yield();
+                Assume.That(bgmSource.isPlaying, "이 환경에서 AudioSource가 재생되지 않아 페이드를 시작할 수 없음");
+
+                _soundManager.FadeOutBGM(5f);
+                Assert.DoesNotThrow(() => _soundManager.FadeOutBGM(5f), "페이드 중 다시 페이드아웃하면 예외가 남");
+                Assert.DoesNotThrow(() => _soundManager.StopBGM(), "페이드 중 정지하면 예외가 남");
+            }
+            finally
+            {
+                bgmSource.Stop();
+                bgmSource.clip = null;
+                UnityEngine.Object.DestroyImmediate(clip);
+            }
         });
 
         /// <summary>

@@ -16,10 +16,12 @@ namespace HuliacDev.UI
         private Canvas _fadeCanvas;
         private CanvasGroup _canvasGroup;
         private RawImage _fadeImage;
-        private bool _isTransitioning;
-        private bool _isOriginal;
+        private ILogger<FadeManager> _logger;
 
         private int _activeSortingOrder = 999;
+
+        private bool _isTransitioning;
+        private bool _isOriginal;
 
         /// <summary>
         /// 페이드 진행 중 캔버스에 적용될 sortingOrder. 기본값 999.
@@ -37,8 +39,6 @@ namespace HuliacDev.UI
         {
             _activeSortingOrder = order;
         }
-
-        private ILogger<FadeManager> _logger;
 
         /// <summary>
         /// VContainer 의존성 주입.

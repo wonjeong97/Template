@@ -40,6 +40,9 @@ namespace HuliacDev.Editor
             return _isAnswered && _isCopyChosen;
         }
 
+        /// <summary>
+        /// 복사 여부를 묻는 문구와 다시 묻지 않음 체크, 복사·건너뛰기 버튼을 그림.
+        /// </summary>
         void OnGUI()
         {
             EditorGUILayout.Space();
@@ -65,6 +68,9 @@ namespace HuliacDev.Editor
             EditorGUILayout.Space();
         }
 
+        /// <summary>
+        /// 누른 버튼과 다시 묻지 않음 선택을 기록하고 창을 닫음.
+        /// </summary>
         void Answer(bool isCopy)
         {
             _isCopyChosen = isCopy;

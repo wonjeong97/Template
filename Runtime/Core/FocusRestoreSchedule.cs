@@ -19,9 +19,9 @@ namespace HuliacDev.Core
         /// <summary>대기 시간과 재시도 간격의 최소값(초). 너무 짧으면 운영자가 다른 창을 잠깐 열어 볼 틈도 없이 창을 빼앗김.</summary>
         public const float MinIntervalSeconds = 1f;
 
-        private bool _isWaitingForFocus;
         private double _nextAttemptTime;
         private int _attemptCount;
+        private bool _isWaitingForFocus;
         private bool _hasReportedFailure;
 
         /// <summary>실제로 적용한 대기 시간(초).</summary>

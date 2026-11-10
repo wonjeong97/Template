@@ -19,8 +19,8 @@ namespace HuliacDev.Core
         private const int MinFontSize = 16;
 
         private string _message;
-        private float _hideTime;
         private GUIStyle _boxStyle;
+        private float _hideTime;
 
         /// <summary>
         /// 새 GameObject에 꺼진 상태의 오버레이를 만들고 씬을 넘어 유지되게 함. 파괴는 만든 쪽이 맡음.

@@ -39,11 +39,11 @@ namespace HuliacDev.Tests
         {
             foreach (GameObject go in _spawned)
             {
-                if (go != null) UnityEngine.Object.DestroyImmediate(go);
+                if (go) UnityEngine.Object.DestroyImmediate(go);
             }
             _spawned.Clear();
 
-            if (_managerGo != null) UnityEngine.Object.DestroyImmediate(_managerGo);
+            if (_managerGo) UnityEngine.Object.DestroyImmediate(_managerGo);
         }
 
         /// <summary>
@@ -69,7 +69,7 @@ namespace HuliacDev.Tests
 
             Assert.AreEqual(2, released, "파괴된 2개가 회수되어야 함");
             Assert.AreEqual(1, GetTrackedCount(), "사용 중인 1개만 남아야 함");
-            Assert.IsTrue(keepTexture != null, "사용 중인 RenderTexture가 파괴되면 화면이 깨짐");
+            Assert.IsTrue(keepTexture, "사용 중인 RenderTexture가 파괴되면 화면이 깨짐");
             Assert.AreSame(keepTexture, keep.targetTexture, "사용 중인 VideoPlayer의 연결이 끊기면 안 됨");
         }
 
@@ -99,7 +99,8 @@ namespace HuliacDev.Tests
             RenderTexture first = vp.targetTexture;
             Assert.AreEqual(1, GetTrackedCount());
 
-            _videoManager.WireRawImageAndRenderTexture(vp, vp.GetComponent<RawImage>(), new Vector2Int(32, 32));
+            Assert.IsTrue(vp.TryGetComponent(out RawImage raw));
+            _videoManager.WireRawImageAndRenderTexture(vp, raw, new Vector2Int(32, 32));
 
             Assert.AreEqual(1, GetTrackedCount(), "재연결 시 이전 텍스처가 목록에서 빠져야 함");
             Assert.AreNotSame(first, vp.targetTexture, "새 텍스처로 교체되어야 함");
@@ -140,7 +141,7 @@ namespace HuliacDev.Tests
 
             RenderTexture rt = _videoManager.WireRawImageAndRenderTexture(vp, raw, new Vector2Int(0, 0));
 
-            Assert.IsNotNull(rt);
+            Assert.IsTrue(rt, "RenderTexture가 만들어지지 않음");
             Assert.GreaterOrEqual(rt.width, 1);
             Assert.GreaterOrEqual(rt.height, 1);
         }
@@ -153,7 +154,7 @@ namespace HuliacDev.Tests
         {
             RenderTexture rt = _videoManager.WireRawImageAndRenderTexture(null, null, new Vector2Int(16, 16));
 
-            Assert.IsNull(rt);
+            Assert.IsFalse(rt, "VideoPlayer가 없는데 RenderTexture를 만듦");
             Assert.AreEqual(0, GetTrackedCount());
         }
 

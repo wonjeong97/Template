@@ -32,9 +32,9 @@ namespace HuliacDev.Network
         private const int WindowsLevelInternetAccess = 3;
         private const int WindowsLevelConstrainedInternetAccess = 4;
 
+        private double _lastProbeTime;
         private bool _isHintIgnored;
         private bool _hasProbed;
-        private double _lastProbeTime;
 
         /// <summary>Windows의 "인터넷 없음" 판정을 무시하고 있는지 여부.</summary>
         public bool IsHintIgnored => _isHintIgnored;

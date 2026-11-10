@@ -37,9 +37,9 @@ namespace HuliacDev.Utils
         private static readonly TimeSpan CleanupInterval = TimeSpan.FromHours(24);
 
         private readonly string _logDirectory;
-        private readonly int _retentionDays;
         private readonly ILogger<LogRetentionService> _logger;
         private CancellationTokenSource _cts;
+        private readonly int _retentionDays;
 
         /// <summary>
         /// 정리 대상 로그 디렉터리와 보관 기간(일)을 받아 서비스를 구성함.

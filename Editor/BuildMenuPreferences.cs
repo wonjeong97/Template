@@ -70,6 +70,9 @@ namespace HuliacDev.Editor
             SettingsService.OpenUserPreferences(SettingsPath);
         }
 
+        /// <summary>
+        /// Edit > Preferences에 HuliacDev Build 화면을 등록함.
+        /// </summary>
         [SettingsProvider]
         static SettingsProvider CreateProvider()
         {
@@ -81,6 +84,9 @@ namespace HuliacDev.Editor
             };
         }
 
+        /// <summary>
+        /// HuliacDev Build 설정 화면을 그리고 바뀐 값을 저장함.
+        /// </summary>
         static void DrawGui()
         {
             EditorGUILayout.HelpBox("Build > Windows Build 메뉴가 쓰는 설정입니다. 이 PC의 모든 프로젝트에 같이 적용됩니다.", MessageType.Info);

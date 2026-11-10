@@ -45,9 +45,6 @@ namespace HuliacDev.Core
         private readonly TemplateInputActions _inputActions;
 
         private CancellationTokenSource _cts;
-        private bool _isActive;
-        private bool _isRestoreOn = true;
-        private bool _useAlwaysOnTop;
         private StatusMessageOverlay _statusOverlay;
 
 #if UNITY_STANDALONE_WIN && !UNITY_EDITOR
@@ -55,6 +52,10 @@ namespace HuliacDev.Core
         private IntPtr _windowHandle;
         private double _nextTopmostCheckTime;
 #endif
+
+        private bool _isActive;
+        private bool _isRestoreOn = true;
+        private bool _useAlwaysOnTop;
 
         /// <summary>
         /// 설정 제공자와 로거를 주입받고, 토글 키에 쓸 TemplateInputActions를 조회함.
@@ -340,60 +341,76 @@ namespace HuliacDev.Core
             /// <summary>Unity가 지원하는 최대 디스플레이 수. 이 프로세스의 Unity 창은 이보다 많지 않음.</summary>
             private const int MaxOwnWindowCount = 8;
 
-            /// <summary>CollectOwnUnityWindows가 호출마다 배열을 만들지 않도록 재사용하는 버퍼(메인 스레드에서만 씀).</summary>
-            private static readonly IntPtr[] OwnWindowBuffer = new IntPtr[MaxOwnWindowCount];
-
             private const int GwlExStyle = -20;
             private const int WsExTopmost = 0x00000008;
             private const uint SwpNoSize = 0x0001;
             private const uint SwpNoMove = 0x0002;
             private const uint SwpNoActivate = 0x0010;
+
+            /// <summary>CollectOwnUnityWindows가 호출마다 배열을 만들지 않도록 재사용하는 버퍼(메인 스레드에서만 씀).</summary>
+            private static readonly IntPtr[] OwnWindowBuffer = new IntPtr[MaxOwnWindowCount];
+
             private static readonly IntPtr HwndTopmost = new IntPtr(-1);
             private static readonly IntPtr HwndNoTopmost = new IntPtr(-2);
 
+            /// <summary>이 스레드의 활성 창 핸들을 돌려줌.</summary>
             [DllImport("user32.dll")]
             public static extern IntPtr GetActiveWindow();
 
+            /// <summary>핸들이 아직 살아 있는 창인지 확인함.</summary>
             [DllImport("user32.dll")]
             public static extern bool IsWindow(IntPtr hWnd);
 
+            /// <summary>지금 포그라운드인 창 핸들을 돌려줌.</summary>
             [DllImport("user32.dll")]
             private static extern IntPtr GetForegroundWindow();
 
+            /// <summary>창을 포그라운드로 가져오고 성공 여부를 돌려줌.</summary>
             [DllImport("user32.dll")]
             private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+            /// <summary>창을 Z 순서 맨 위로 올림.</summary>
             [DllImport("user32.dll")]
             private static extern bool BringWindowToTop(IntPtr hWnd);
 
+            /// <summary>창의 표시 상태(복원 등)를 바꿈.</summary>
             [DllImport("user32.dll")]
             private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+            /// <summary>창이 최소화돼 있는지 확인함.</summary>
             [DllImport("user32.dll")]
             private static extern bool IsIconic(IntPtr hWnd);
 
+            /// <summary>두 스레드의 입력 상태를 붙이거나 뗌.</summary>
             [DllImport("user32.dll")]
             private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
 
+            /// <summary>창이 Windows에 응답 없음으로 판정됐는지 확인함.</summary>
             [DllImport("user32.dll")]
             private static extern bool IsHungAppWindow(IntPtr hWnd);
 
+            /// <summary>창을 만든 스레드와 프로세스 ID를 돌려줌.</summary>
             [DllImport("user32.dll")]
             private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
+            /// <summary>클래스 이름으로 다음 최상위 창을 찾음.</summary>
             [DllImport("user32.dll", CharSet = CharSet.Unicode)]
             private static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpszClass, string lpszWindow);
 
+            /// <summary>창의 Z 순서(항상 위 여부)를 바꿈.</summary>
             [DllImport("user32.dll")]
             private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
+            /// <summary>창의 확장 스타일(항상 위 여부 포함)을 읽음.</summary>
             // 확장 스타일(32비트 값)만 읽으므로 64비트에서도 GetWindowLongPtr가 필요 없음. A/W 접미사 탐색에 기대지 않도록 이름을 직접 지정함.
             [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
             private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
+            /// <summary>지금 스레드의 ID를 돌려줌.</summary>
             [DllImport("kernel32.dll")]
             private static extern uint GetCurrentThreadId();
 
+            /// <summary>이 프로세스의 ID를 돌려줌.</summary>
             [DllImport("kernel32.dll")]
             private static extern uint GetCurrentProcessId();
 
