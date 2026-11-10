@@ -297,7 +297,7 @@ namespace HuliacDev.Hardware
         /// <summary>
         /// 백그라운드 스레드에서 포트를 스캔해 핸드셰이크가 맞는 포트를 찾고, 메인 스레드 복귀 후 연결을 할당함.
         /// 스캔하는 사이 취소(파괴, 수동 해제로 인한 재연결 중단)되면 찾은 포트를 닫고 연결하지 않으며,
-        /// 이때는 재시도를 멈추도록 성공으로 돌려줌.
+        /// 이때는 재시도를 멈추도록 성공으로 돌려줌. 포트를 찾지 못한 채 취소되면 OperationCanceledException을 던짐.
         /// </summary>
         private async UniTask<(bool isEstablished, string failures)> TryEstablishConnectionAsync(int baudRate, string expectedHandshake,
             CancellationToken cancellationToken)
