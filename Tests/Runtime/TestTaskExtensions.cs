@@ -14,8 +14,9 @@ namespace HuliacDev.Tests
     {
         /// <summary>
         /// 반환값이 없는 UniTask 완료를 기다리되, 제한 시간을 넘기면 Assert 실패로 끝낸다.
+        /// failureMessage를 주면 그 문구로 실패하고, 없으면 timeScale에 묶여 멈춘 것으로 보는 기본 문구를 쓴다.
         /// </summary>
-        public static async UniTask AwaitWithRealtimeTimeout(this UniTask task, float timeoutSeconds = 3f)
+        public static async UniTask AwaitWithRealtimeTimeout(this UniTask task, float timeoutSeconds = 3f, string failureMessage = null)
         {
             int finishedIndex = await UniTask.WhenAny(
                 task,
@@ -23,7 +24,7 @@ namespace HuliacDev.Tests
 
             if (finishedIndex != 0)
             {
-                Assert.Fail($"제한 시간 {timeoutSeconds}초 내에 완료되지 않음. " +
+                Assert.Fail(failureMessage ?? $"제한 시간 {timeoutSeconds}초 내에 완료되지 않음. " +
                             "timeScale에 묶여 진행이 멈춘 것으로 보임.");
             }
         }

@@ -18,29 +18,11 @@ namespace HuliacDev.UI
 {
     public class SoundManager : MonoBehaviour
     {
-        private bool _isOriginal;
-
         private AudioSource _bgmSource;
         private AudioSource _sfxSource;
 
         private CancellationTokenSource _bgmFadeCts;
-
-        private float _masterVolume = 1.0f;
-        private float _bgmVolume = 1.0f;
-        private float _sfxVolume = 1.0f;
-        private bool _isMuted;
         private string _currentBGMKey;
-
-        // StopSFX가 불린 횟수. 클립 로드를 기다리던 SFX 요청이 그 사이 정지됐는지 판정하는 데 씀.
-        private int _sfxStopCount;
-
-        // 설정 로드 완료 여부. 재생 요청이 무시됐을 때 "아직 로드 전"인지 "없는 키"인지 구분하는 데 씀.
-        private bool _isSettingsLoaded;
-
-        public float MasterVolume => _masterVolume;
-        public float BGMVolume => _bgmVolume;
-        public float SFXVolume => _sfxVolume;
-        public bool IsMuted => _isMuted;
 
         private readonly Dictionary<string, SoundSetting> _soundSettings = new Dictionary<string, SoundSetting>();
         private readonly Dictionary<string, AudioClip> _clipCache = new Dictionary<string, AudioClip>();
@@ -54,6 +36,24 @@ namespace HuliacDev.UI
 
         private ILogger<SoundManager> _logger;
         private AppSettingsProvider _settingsProvider;
+
+        private float _masterVolume = 1.0f;
+        private float _bgmVolume = 1.0f;
+        private float _sfxVolume = 1.0f;
+
+        // StopSFX가 불린 횟수. 클립 로드를 기다리던 SFX 요청이 그 사이 정지됐는지 판정하는 데 씀.
+        private int _sfxStopCount;
+
+        private bool _isOriginal;
+        private bool _isMuted;
+
+        // 설정 로드 완료 여부. 재생 요청이 무시됐을 때 "아직 로드 전"인지 "없는 키"인지 구분하는 데 씀.
+        private bool _isSettingsLoaded;
+
+        public float MasterVolume => _masterVolume;
+        public float BGMVolume => _bgmVolume;
+        public float SFXVolume => _sfxVolume;
+        public bool IsMuted => _isMuted;
 
         /// <summary>
         /// VContainer 의존성 주입.
@@ -122,7 +122,7 @@ namespace HuliacDev.UI
         /// JSON 설정 파일에서 사운드 데이터를 비동기로 읽어와 딕셔너리에 캐싱함.
         /// Android 등 URL 기반 플랫폼 지원을 위해 비동기로 동작함.
         /// </summary>
-        private async UniTask LoadSoundSettingsAsync(CancellationToken cancellationToken)
+        private async UniTaskVoid LoadSoundSettingsAsync(CancellationToken cancellationToken)
         {
             try
             {
@@ -132,10 +132,19 @@ namespace HuliacDev.UI
                 {
                     foreach (SoundSetting s in settings.sounds)
                     {
-                        if (!_soundSettings.ContainsKey(s.key))
+                        if (s == null || string.IsNullOrEmpty(s.key))
                         {
-                            _soundSettings.Add(s.key, s);
+                            if (_logger != null) _logger.ZLogWarning($"[SoundManager] A sounds entry in Settings.json has no key; skipped.");
+                            continue;
                         }
+
+                        if (_soundSettings.ContainsKey(s.key))
+                        {
+                            if (_logger != null) _logger.ZLogWarning($"[SoundManager] Duplicate sound key in Settings.json; the first entry is used: {s.key}");
+                            continue;
+                        }
+
+                        _soundSettings.Add(s.key, s);
                     }
                 }
 
@@ -375,15 +384,17 @@ namespace HuliacDev.UI
 
         /// <summary>
         /// 기존 페이드아웃 비동기 루프를 안전하게 강제 취소하고 리소스를 해제함.
+        /// Cancel()은 트윈 Kill을 거쳐 FadeOutAsync의 finally까지 동기로 실행하므로, 필드를 먼저 비워 그 finally가
+        /// 같은 CTS를 해제하지 않게 하고 여기서 한 번만 해제함(순서를 바꾸면 필드가 null이 된 뒤 Dispose를 불러 예외가 남).
         /// </summary>
         private void CancelFadeRoutine()
         {
-            if (_bgmFadeCts != null)
-            {
-                _bgmFadeCts.Cancel();
-                _bgmFadeCts.Dispose();
-                _bgmFadeCts = null;
-            }
+            CancellationTokenSource cts = _bgmFadeCts;
+            if (cts == null) return;
+
+            _bgmFadeCts = null;
+            cts.Cancel();
+            cts.Dispose();
         }
 
         /// <summary>

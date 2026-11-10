@@ -37,6 +37,9 @@ namespace HuliacDev.App
     /// </summary>
     public static class LogStackTraceConfig
     {
+        /// <summary>
+        /// 로그 종류별 스택 트레이스 출력 방식을 정함. 부팅 시 Unity가 한 번 자동으로 호출함.
+        /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
         private static void Apply()
         {

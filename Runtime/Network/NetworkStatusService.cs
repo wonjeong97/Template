@@ -18,10 +18,6 @@ namespace HuliacDev.Network
     public class NetworkStatusService : IInitializable, ITickable, IDisposable
     {
         private readonly ILogger<NetworkStatusService> _logger;
-        private readonly float _checkIntervalSeconds;
-
-        private float _elapsed;
-        private bool _hasEverConnected;
 
         // 생성 시점의 실제 도달성으로 초기화한다. NotReachable로 시작하면 Initialize() 전에
         // 구독한 소비자가 실제 상태 직전에 NotReachable을 한 번 받는 깜빡임이 생긴다.
@@ -29,6 +25,11 @@ namespace HuliacDev.Network
             new ReactiveProperty<NetworkReachability>(ReadReachability());
         private readonly Subject<Unit> _networkLostSubject = new Subject<Unit>();
         private readonly Subject<Unit> _networkRestoredSubject = new Subject<Unit>();
+
+        private readonly float _checkIntervalSeconds;
+        private float _elapsed;
+
+        private bool _hasEverConnected;
 
         /// <summary>
         /// 현재 네트워크 도달성 상태이자 그 변경 스트림.

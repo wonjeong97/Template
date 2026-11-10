@@ -651,15 +651,19 @@ while ($true) {
             public const uint WaitObject0 = 0;
             public const uint Synchronize = 0x00100000;
 
+            /// <summary>이름 있는 이벤트를 만들거나 이미 있으면 엶.</summary>
             [DllImport("kernel32.dll", EntryPoint = "CreateEventW", CharSet = CharSet.Unicode)]
             public static extern IntPtr CreateEvent(IntPtr eventAttributes, bool manualReset, bool initialState, string name);
 
+            /// <summary>이미 있는 이름 있는 이벤트를 엶. 없으면 IntPtr.Zero를 돌려줌.</summary>
             [DllImport("kernel32.dll", EntryPoint = "OpenEventW", CharSet = CharSet.Unicode)]
             public static extern IntPtr OpenEvent(uint desiredAccess, bool inheritHandle, string name);
 
+            /// <summary>이벤트가 신호 상태가 될 때까지 지정 시간만큼 기다림(0이면 바로 확인).</summary>
             [DllImport("kernel32.dll")]
             public static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
 
+            /// <summary>커널 객체 핸들을 닫음.</summary>
             [DllImport("kernel32.dll")]
             public static extern bool CloseHandle(IntPtr handle);
         }

@@ -33,7 +33,6 @@ namespace HuliacDev.Data
         // continuation이 중복 등록되어 InvalidOperationException이 발생함
         // ("Already continuation registered"). Task는 다중 awaiter를 기본 지원함.
         private Task<Settings> _loadTask;
-        private bool _isLoadStarted;
 
         // _isLoadStarted 확인과 _loadTask 생성을 원자적으로 묶기 위한 잠금 객체.
         // 백그라운드 스레드에서 동시에 최초 호출이 들어오면(예: 여러 매니저가 서로 다른
@@ -43,6 +42,8 @@ namespace HuliacDev.Data
         private readonly object _lock = new object();
 
         private readonly ILogger<AppSettingsProvider> _logger;
+
+        private bool _isLoadStarted;
 
         /// <summary>
         /// 로거를 주입받아 구성함. 로드 실패 로그를 ZLogger로 남기기 위해 JsonLoader에 전달함.

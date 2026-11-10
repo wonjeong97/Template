@@ -91,7 +91,7 @@ namespace HuliacDev.Tests
         [TearDown]
         public void TearDownTimer()
         {
-            if (_go != null) UnityEngine.Object.DestroyImmediate(_go);
+            if (_go) UnityEngine.Object.DestroyImmediate(_go);
             SingletonGuard<InactivityTimer>.ResetForTesting();
         }
 
@@ -227,22 +227,12 @@ namespace HuliacDev.Tests
         }
 
         /// <summary>
-        /// 발동을 폴링하되, 결함이 있는 구현에서 테스트가 무한 대기로 멈추지 않도록
-        /// 실시간 기준 제한 시간을 둠(TestTaskExtensions.AwaitWithRealtimeTimeout과 동일한 이유).
+        /// 타임아웃 이벤트가 발동할 때까지 기다리되, 결함이 있는 구현에서 무한 대기로 멈추지 않도록 공통 실시간 제한 시간을 씀.
         /// </summary>
-        private async UniTask AwaitInvocation(float timeoutSeconds = 3f)
+        private UniTask AwaitInvocation(float timeoutSeconds = 3f)
         {
-            float start = Time.realtimeSinceStartup;
-
-            while (!_invoked)
-            {
-                if (Time.realtimeSinceStartup - start > timeoutSeconds)
-                {
-                    Assert.Fail($"제한 시간 {timeoutSeconds}초 내에 타임아웃 이벤트가 발동하지 않음");
-                }
-
-                await UniTask.Yield();
-            }
+            return UniTask.WaitUntil(() => _invoked)
+                .AwaitWithRealtimeTimeout(timeoutSeconds, $"제한 시간 {timeoutSeconds}초 내에 타임아웃 이벤트가 발동하지 않음");
         }
     }
 }

@@ -7,6 +7,7 @@ using Cysharp.Text;
 using Cysharp.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using TMPro;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.Networking;
@@ -25,13 +26,9 @@ namespace HuliacDev.UI
         /// <summary>SetButton이 버튼 텍스트를 찾고 만드는 직계 자식 오브젝트 이름.</summary>
         public const string ButtonTextChildName = "Text";
 
-        private bool _isOriginal;
+        private static readonly ProfilerMarker DecodeSpriteMarker = new ProfilerMarker("UIManager.CreateSprite");
 
         private readonly Dictionary<string, string> _fontAddresses = new Dictionary<string, string>();
-
-        // 설정 로드 완료 여부. 로드 전에는 폰트 키의 유효성을 판단할 수 없으므로
-        // 이 플래그가 false인 동안에는 검증 없이 대기열에 등록함.
-        private bool _isSettingsLoaded;
 
         private readonly Dictionary<string, Font> _loadedFonts = new Dictionary<string, Font>();
         private readonly Dictionary<string, TMP_FontAsset> _loadedTMPFonts = new Dictionary<string, TMP_FontAsset>();
@@ -40,8 +37,10 @@ namespace HuliacDev.UI
         private readonly Dictionary<string, HashSet<Text>> _pendingLabels = new Dictionary<string, HashSet<Text>>();
         private readonly Dictionary<string, HashSet<TMP_Text>> _pendingTMPLabels = new Dictionary<string, HashSet<TMP_Text>>();
 
-        private readonly Dictionary<string, UnityEngine.Events.UnityAction> _buttonActions =
-            new Dictionary<string, UnityEngine.Events.UnityAction>();
+        // 버튼 이름과 효과음 키가 모두 같을 때만 클릭 콜백을 재사용함. 이름만 키로 쓰면 같은 이름의 버튼을 다른 효과음으로
+        // 다시 설정해도 처음 만든 콜백(처음 효과음)이 남음.
+        private readonly Dictionary<(string buttonName, string buttonSound), UnityEngine.Events.UnityAction> _buttonActions =
+            new Dictionary<(string buttonName, string buttonSound), UnityEngine.Events.UnityAction>();
 
         private readonly Dictionary<string, Sprite> _cachedSprites = new Dictionary<string, Sprite>();
 
@@ -56,6 +55,12 @@ namespace HuliacDev.UI
         private VideoManager _videoManager;
         private AppSettingsProvider _settingsProvider;
         private SoundManager _soundManager;
+
+        private bool _isOriginal;
+
+        // 설정 로드 완료 여부. 로드 전에는 폰트 키의 유효성을 판단할 수 없으므로
+        // 이 플래그가 false인 동안에는 검증 없이 대기열에 등록함.
+        private bool _isSettingsLoaded;
 
         /// <summary>
         /// VContainer 의존성 주입.
@@ -151,7 +156,13 @@ namespace HuliacDev.UI
             {
                 if (font == null || string.IsNullOrEmpty(font.key) || string.IsNullOrEmpty(font.address))
                 {
+                    if (_logger != null) _logger.ZLogWarning($"[UIManager] A fonts entry in Settings.json has no key or address; skipped.");
                     continue;
+                }
+
+                if (_fontAddresses.ContainsKey(font.key))
+                {
+                    if (_logger != null) _logger.ZLogWarning($"[UIManager] Duplicate font key in Settings.json; the last entry is used: {font.key}");
                 }
 
                 _fontAddresses[font.key] = font.address;
@@ -350,10 +361,7 @@ namespace HuliacDev.UI
 
             ApplyTransform(rt, setting);
 
-            if (!target.TryGetComponent(out Image img))
-            {
-                img = target.AddComponent<Image>();
-            }
+            if (!TryGetOrAddGraphic(target, IsInteractive(target), out Image img)) return;
 
             img.color = setting.color;
             img.type = (Image.Type)setting.type;
@@ -387,10 +395,7 @@ namespace HuliacDev.UI
 
             ApplyTransform(rt, setting);
 
-            if (!target.TryGetComponent(out Text txt))
-            {
-                txt = target.AddComponent<Text>();
-            }
+            if (!TryGetOrAddGraphic(target, IsInteractive(target), out Text txt)) return;
 
             ApplyTextSettings(txt, setting);
         }
@@ -423,7 +428,8 @@ namespace HuliacDev.UI
 
             if (!target.TryGetComponent(out TMP_Text txt))
             {
-                txt = target.AddComponent<TextMeshProUGUI>();
+                if (!TryGetOrAddGraphic(target, IsInteractive(target), out TextMeshProUGUI addedText)) return;
+                txt = addedText;
             }
 
             ApplyTMPTextSettings(txt, setting);
@@ -467,10 +473,8 @@ namespace HuliacDev.UI
         {
             if (bgSetting == null) return;
 
-            if (!target.TryGetComponent(out Image bgImg))
-            {
-                bgImg = target.AddComponent<Image>();
-            }
+            // 배경 Image는 버튼이 클릭을 받는 대상이므로 raycastTarget을 켬.
+            if (!TryGetOrAddGraphic(target, true, out Image bgImg)) return;
 
             bgImg.color = bgSetting.color;
             ApplySpriteAsync(bgImg, bgSetting.sourceImage, this.GetCancellationTokenOnDestroy()).Forget();
@@ -565,14 +569,22 @@ namespace HuliacDev.UI
             if (!target.TryGetComponent(out Button btn))
             {
                 btn = target.AddComponent<Button>();
+
+                // SetImage 등으로 표시용 Graphic(raycastTarget 꺼짐)을 먼저 붙인 오브젝트를 버튼으로 바꾸는 경우,
+                // 그 Graphic이 레이캐스트를 받지 않으면 버튼이 클릭되지 않으므로 켬.
+                if (target.TryGetComponent(out Graphic graphic))
+                {
+                    graphic.raycastTarget = true;
+                }
             }
 
             btn.onClick.RemoveAllListeners();
 
-            if (!_buttonActions.TryGetValue(buttonName, out UnityEngine.Events.UnityAction action))
+            (string buttonName, string buttonSound) key = (buttonName, buttonSound);
+            if (!_buttonActions.TryGetValue(key, out UnityEngine.Events.UnityAction action))
             {
                 action = () => OnButtonClicked(buttonName, buttonSound);
-                _buttonActions.Add(buttonName, action);
+                _buttonActions.Add(key, action);
             }
 
             btn.onClick.AddListener(action);
@@ -618,7 +630,7 @@ namespace HuliacDev.UI
 
             target.name = setting.name;
 
-            if (!target.TryGetComponent(out RawImage rawImage)) rawImage = target.AddComponent<RawImage>();
+            if (!TryGetOrAddGraphic(target, IsInteractive(target), out RawImage rawImage)) return;
             if (!target.TryGetComponent(out VideoPlayer vp)) vp = target.AddComponent<VideoPlayer>();
             if (!target.TryGetComponent(out AudioSource audioSource)) audioSource = target.AddComponent<AudioSource>();
 
@@ -637,6 +649,37 @@ namespace HuliacDev.UI
         #endregion
 
         #region Helper Methods
+
+        /// <summary>
+        /// 대상에 이미 있는 T를 쓰고, 없으면 새로 붙여 raycastTarget을 정함. 다른 Graphic(Image·Text 등)이 이미 있으면
+        /// 한 오브젝트에 Graphic을 둘 둘 수 없어 AddComponent가 null을 돌려주므로, 붙이지 않고 경고를 남긴 뒤 false를 돌려줌.
+        /// 이미 있던 컴포넌트의 raycastTarget은 프로젝트가 정한 값이라 바꾸지 않음.
+        /// </summary>
+        private bool TryGetOrAddGraphic<T>(GameObject target, bool raycastTarget, out T graphic) where T : Graphic
+        {
+            // TextMeshProUGUI는 꺼진 오브젝트에 붙이면 켜질 때 Awake에서 글자 크기가 지정되지 않았을 경우 raycastTarget을
+            // TMP 설정값으로 다시 덮어씀. 그 경우는 TMP Settings의 Enable Raycast Target을 따름.
+            if (target.TryGetComponent(out graphic)) return true;
+
+            if (target.TryGetComponent(out Graphic other))
+            {
+                if (_logger != null) _logger.ZLogWarning($"[UIManager] {target.name} already has {other.GetType().Name}; cannot add {typeof(T).Name}. Put it on a child object.");
+                return false;
+            }
+
+            graphic = target.AddComponent<T>();
+            graphic.raycastTarget = raycastTarget;
+            return true;
+        }
+
+        /// <summary>
+        /// 대상이 클릭을 받는 UI(Button 등 Selectable)인지 확인함. 새로 붙이는 Graphic은 이때만 raycastTarget을 켜서,
+        /// 입력을 받지 않는 이미지·글자가 아래 버튼의 클릭을 가로채거나 레이캐스트 검사 비용을 늘리지 않게 함.
+        /// </summary>
+        private static bool IsInteractive(GameObject target)
+        {
+            return target.TryGetComponent(out Selectable _);
+        }
 
         /// <summary>
         /// 비동기 이미지 로드 완료 후 컴포넌트에 할당함.
@@ -818,6 +861,31 @@ namespace HuliacDev.UI
         }
 
         /// <summary>
+        /// 이미지 바이트를 디코딩(필요하면 압축)해 스프라이트를 만들고, 디코딩에 실패하면 텍스처를 해제한 뒤 null을 돌려줌.
+        /// 메인 스레드에서 동기로 디코딩·압축해 큰 이미지면 프레임을 멈출 수 있으므로 프로파일러에 따로 보이도록 마커로 감쌈.
+        /// </summary>
+        private static Sprite CreateSprite(byte[] fileData, bool compress)
+        {
+            using (DecodeSpriteMarker.Auto())
+            {
+                Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+
+                if (!texture.LoadImage(fileData))
+                {
+                    DestroyUtil.SafeDestroy(texture);
+                    return null;
+                }
+
+                if (compress)
+                {
+                    texture.Compress(false);
+                }
+                texture.Apply(false, true);
+                return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+            }
+        }
+
+        /// <summary>
         /// 실제 바이트 읽기와 스프라이트 생성을 수행함. 캐시/중복 방지는 호출자가 담당하며,
         /// 캐시 키도 호출자가 계산한 것을 그대로 받아 중복 문자열 생성을 피함.
         /// </summary>
@@ -828,24 +896,14 @@ namespace HuliacDev.UI
                 byte[] fileData = await ReadSpriteBytesAsync(path, cancellationToken);
                 if (fileData == null) return null;
 
-                Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-
-                if (texture.LoadImage(fileData))
+                Sprite newSprite = CreateSprite(fileData, compress);
+                if (newSprite)
                 {
-                    if (compress)
-                    {
-                        texture.Compress(false);
-                    }
-                    texture.Apply(false, true);
-                    Sprite newSprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
-                        new Vector2(0.5f, 0.5f));
-
                     _cachedSprites[cacheKey] = newSprite;
                     return newSprite;
                 }
                 else
                 {
-                    DestroyUtil.SafeDestroy(texture);
                     if (_logger != null) _logger.ZLogError($"[UIManager] Failed to decode image data: {path}");
                     return null;
                 }

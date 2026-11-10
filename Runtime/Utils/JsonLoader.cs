@@ -32,6 +32,12 @@ namespace HuliacDev.Utils
         /// </summary>
         internal const string TempFileSuffix = ".tmp";
 
+        /// <summary>대상 파일 교체를 시도하는 최대 횟수. 백신·파일 감시가 잠깐 파일을 열고 있어 실패하는 경우를 넘기기 위함.</summary>
+        private const int ReplaceAttemptCount = 3;
+
+        /// <summary>교체에 실패했을 때 다시 시도하기 전에 기다리는 시간(밀리초).</summary>
+        private const int ReplaceRetryDelayMilliseconds = 100;
+
         /// <summary>
         /// 지정된 저장 위치 기준 전체 경로를 생성함 (.json 확장자 자동 부착).
         /// </summary>
@@ -191,8 +197,12 @@ namespace HuliacDev.Utils
                 {
                     string json = File.ReadAllText(path);
 
-                    // 내용이 "null"이거나 비어 있으면 FromJson이 null을 반환하므로 폴백 처리함.
-                    return JsonUtility.FromJson<T>(json) ?? new T();
+                    // 내용이 "null"이거나 비어 있으면 FromJson이 null을 반환하므로 폴백 처리함(비동기 TryLoadAsync와 같이 경고를 남김).
+                    T data = JsonUtility.FromJson<T>(json);
+                    if (data != null) return data;
+
+                    Debug.LogWarning(ZString.Concat("[JsonLoader] JSON file is empty: ", path));
+                    return new T();
                 }
 
                 Debug.LogWarning(ZString.Concat("[JsonLoader] JSON file not found: ", path));
@@ -315,6 +325,7 @@ namespace HuliacDev.Utils
         private static async UniTask WriteAllTextAtomicallyAsync(string path, string contents, CancellationToken cancellationToken)
         {
             string tempPath = PrepareTempPath(path);
+            bool isWritten = false;
 
             try
             {
@@ -328,11 +339,24 @@ namespace HuliacDev.Utils
                     stream.Flush(true);
                 }
 
-                ReplaceWithTempFile(tempPath, path);
+                isWritten = true;
+
+                for (int attempt = 1; ; attempt++)
+                {
+                    try
+                    {
+                        ReplaceWithTempFile(tempPath, path);
+                        break;
+                    }
+                    catch (Exception e) when (IsTransientLock(e) && attempt < ReplaceAttemptCount)
+                    {
+                        await UniTask.Delay(ReplaceRetryDelayMilliseconds, DelayType.Realtime, cancellationToken: cancellationToken);
+                    }
+                }
             }
             catch
             {
-                DeleteTempFile(tempPath);
+                CleanUpFailedSave(tempPath, path, isWritten);
                 throw;
             }
         }
@@ -343,6 +367,7 @@ namespace HuliacDev.Utils
         private static void WriteAllTextAtomically(string path, string contents)
         {
             string tempPath = PrepareTempPath(path);
+            bool isWritten = false;
 
             try
             {
@@ -353,13 +378,60 @@ namespace HuliacDev.Utils
                     stream.Flush(true);
                 }
 
-                ReplaceWithTempFile(tempPath, path);
+                isWritten = true;
+
+                for (int attempt = 1; ; attempt++)
+                {
+                    try
+                    {
+                        ReplaceWithTempFile(tempPath, path);
+                        break;
+                    }
+                    catch (Exception e) when (IsTransientLock(e) && attempt < ReplaceAttemptCount)
+                    {
+                        Thread.Sleep(ReplaceRetryDelayMilliseconds);
+                    }
+                }
             }
             catch
             {
-                DeleteTempFile(tempPath);
+                CleanUpFailedSave(tempPath, path, isWritten);
                 throw;
             }
+        }
+
+        /// <summary>
+        /// 대상 파일을 다른 프로그램(백신, 파일 감시, 동기화 도구)이 잠깐 열고 있어 교체에 실패한 경우인지 확인함.
+        /// 잠금은 공유 위반(IOException)이나 접근 거부(UnauthorizedAccessException)로 나타남. 파일이나 폴더가 없는 경우는
+        /// 기다려도 풀리지 않으므로 재시도하지 않음.
+        /// </summary>
+        private static bool IsTransientLock(Exception e)
+        {
+            if (e is UnauthorizedAccessException) return true;
+            return e is IOException && !(e is FileNotFoundException) && !(e is DirectoryNotFoundException);
+        }
+
+        /// <summary>
+        /// 저장에 실패한 뒤 임시 파일을 정리함. 내용을 다 쓴 뒤 교체만 실패했는데 대상 파일이 없어졌으면(교체 도중 대상만
+        /// 지워지는 Windows 오류 등) 새 내용까지 잃지 않도록 임시 파일을 대상 자리로 옮기고, 옮기지 못하면 지우지 않고 남김
+        /// (다음 저장이 덮어씀). 그 밖의 경우는 임시 파일을 지움. 쓰는 도중 실패·취소한 임시 파일은 내용이 불완전하므로 옮기지 않음.
+        /// </summary>
+        private static void CleanUpFailedSave(string tempPath, string path, bool isWritten)
+        {
+            if (isWritten && !File.Exists(path) && File.Exists(tempPath))
+            {
+                try
+                {
+                    File.Move(tempPath, path);
+                }
+                catch (Exception)
+                {
+                    // 옮기지 못해도 임시 파일에 새 내용이 남아 있으므로 지우지 않음. 원래 예외는 호출부가 다시 던짐.
+                }
+                return;
+            }
+
+            DeleteTempFile(tempPath);
         }
 
         /// <summary>

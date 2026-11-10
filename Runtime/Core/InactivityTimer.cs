@@ -25,18 +25,17 @@ namespace HuliacDev.Core
     /// </summary>
     public class InactivityTimer : MonoBehaviour
     {
-        private bool _isOriginal;
-
         private IPublisher<InactivityTimeoutEvent> _publisher;
-
-        private bool _isEnabled;
-        private bool _isPaused;
-        private float _timeoutSeconds;
-        private float _lastActivityTime;
-        private bool _hasTimedOut;
-
         private ILogger<InactivityTimer> _logger;
         private AppSettingsProvider _settingsProvider;
+
+        private float _timeoutSeconds;
+        private float _lastActivityTime;
+
+        private bool _isOriginal;
+        private bool _isEnabled;
+        private bool _isPaused;
+        private bool _hasTimedOut;
 
         /// <summary>Settings.json 로드가 끝난 뒤 타이머가 활성화된 상태인지.</summary>
         public bool IsEnabled => _isEnabled;
@@ -134,7 +133,11 @@ namespace HuliacDev.Core
                 {
                     _isEnabled = false;
 
-                    if (settings != null && settings.useInactivityTimer && _logger != null)
+                    if (settings == null)
+                    {
+                        if (_logger != null) _logger.ZLogWarning($"[InactivityTimer] Settings could not be loaded. Timer disabled.");
+                    }
+                    else if (settings.useInactivityTimer && _logger != null)
                     {
                         _logger.ZLogWarning($"[InactivityTimer] useInactivityTimer is true but resetTime is not positive ({settings.resetTime}). Timer disabled.");
                     }

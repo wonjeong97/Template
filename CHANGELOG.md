@@ -1,6 +1,26 @@
 # Changelog
 모든 주요 변경 사항을 이 파일에 기록합니다.
 
+## [26.11.10-2] - 2026-11-10
+
+코딩 스킬(`unity-stack-scaffold`·`unity-network-protocol`) 기준으로 패키지 전체를 점검해 나온 결함과 규칙 위반을 고침. 동작이 바뀌지 않는 정리(필드 선언 순서, 빠진 summary 주석, 테스트 코드의 `GetComponent`·null 비교 방식)는 아래에 따로 적지 않음.
+
+### Changed
+- **`ApiManagerBase.ExecuteWithExternalApiLoggingAsync`가 로그 전송을 기다리지 않음(`Runtime/Network/ApiManagerBase.cs`):** "Call API" 로그 전송이 끝나야 실제 API를 불러, 로그 서버가 오류를 내면 실제 호출이 재시도(최대 10회, 3초 간격)만큼 약 27초 늦어지고 응답하지 않으면 무기한 멈췄음. 두 로그를 뒤에서 보내 API 호출과 결과 반환이 늦어지지 않게 하고, Return 로그는 Call 로그 전송이 끝난 뒤 보내 서버 로그의 순서를 지킴. 메서드가 돌아올 때 Return 로그는 아직 보내는 중일 수 있으며, 성공 Return 로그는 호출자가 곧바로 토큰을 취소해도 빠지지 않도록 파괴 토큰으로 보냄. README의 직접 호출 예시(방법 2)도 로그를 `Forget`으로 보내도록 바꿈. 에디터에서는 로그를 보내지 않아 자동 테스트는 추가하지 않음.
+- **`ArduinoManager` 자동 재연결 간격을 늘려 가도록 바꿈(`Runtime/Hardware/ArduinoManager.cs`):** 끊긴 뒤 3초 고정 간격으로 끝없이 포트를 스캔했음. `AutoReconnectIntervalMs`(기본 3초)를 첫 간격으로 실패할 때마다 두 배로 늘려 새 속성 `AutoReconnectMaxIntervalMs`(기본 30초, 첫 간격이 더 크면 첫 간격)에서 멈추고, 다시 끊기면 첫 간격부터 시작함. 간격은 1초 아래로 내려가지 않으며(0 이하 설정으로 쉬지 않고 스캔하지 않게), `Time.timeScale`과 관계없이 실시간으로 기다림. 재연결 성공 로그에 몇 번 만에, 얼마나 걸려 연결됐는지 남김. 첫 연결(`ConnectAsync`)은 시도마다 남기던 정보 로그를 없애고, 모두 실패하면 마지막 스캔의 포트별 실패 이유(다른 프로그램이 점유, 핸드셰이크 없음, 다른 응답)를 경고에 함께 남김. `expectedHandshake`가 비어 있으면 스캔하지 않고 오류를 남김(예전에는 줄을 보내는 아무 포트에나 연결됐음). 수신 데이터 발행과 읽기 스레드 종료 대기 구간에 ProfilerMarker(`ArduinoManager.DispatchMessage`, `ArduinoManager.JoinReadThread`)를 넣음. `ArduinoManagerTests`에 테스트 2건 추가(간격 계산).
+  - **Breaking:** `ConnectAsync`에 빈 `expectedHandshake`를 넘겨 아무 장치에나 연결하던 프로젝트는 장치가 보내는 핸드셰이크 문자열을 넘길 것.
+- **`UIManager`가 새로 붙이는 표시용 Graphic의 `raycastTarget`을 끔(`Runtime/UI/UIManager.cs`):** `SetImage`·`SetText`·`SetTMPText`·`SetVideo`가 붙인 Image·Text·TextMeshProUGUI·RawImage가 기본값대로 `raycastTarget`이 켜져 있어, 입력을 받지 않는 이미지·글자가 아래 버튼의 클릭을 가로채고 터치마다 레이캐스트 검사 대상이 늘었음. 새로 붙일 때만 끄고(대상에 Button 등 Selectable이 있으면 켬), 버튼 배경 Image는 클릭을 받는 대상이라 켬. 이미 있던 컴포넌트의 값은 바꾸지 않되, `SetButton`이 Button을 새로 붙일 때는 그 오브젝트의 Graphic을 켜서 `SetImage` 뒤에 `SetButton`을 해도 클릭을 받음. 꺼진 오브젝트에 `SetTMPText`로 붙인 TextMeshProUGUI는 켜질 때 TMP가 TMP Settings 값으로 다시 덮어쓸 수 있음. 이미지 디코딩·압축 구간에 ProfilerMarker(`UIManager.CreateSprite`)를 넣음. `UIManagerTests`에 테스트 1건 추가.
+  - **Breaking:** `Set*`로 만든 이미지·글자에 EventTrigger 등으로 클릭을 받던 프로젝트는 그 컴포넌트의 `raycastTarget`을 직접 켜거나 Button을 붙일 것.
+- **`JsonLoader`가 대상 파일 교체를 짧게 재시도함(`Runtime/Utils/JsonLoader.cs`):** 저장할 때 임시 파일과 대상 파일을 바꾸는 순간 백신·파일 감시·동기화 도구가 대상 파일을 잠깐 열고 있으면 "바꿀 파일을 열 수 없습니다"로 저장이 실패했음(검증 프로젝트 테스트에서도 가끔 실패). 파일·폴더가 없는 경우를 뺀 입출력 오류와 접근 거부면 100ms 간격으로 최대 3번 시도함. 또 내용을 다 쓴 뒤 교체만 실패했는데 대상 파일이 없어졌으면(교체 도중 대상만 지워지는 Windows 오류) 임시 파일까지 지워 저장 내용을 모두 잃던 것을, 임시 파일을 대상 자리로 옮기고 옮기지 못하면 남겨 두도록 고침. 동기 `Load`도 내용이 비어 있으면 비동기 경로처럼 경고를 남김.
+- **`ShutdownScheduler`가 확인 주기마다 문자열을 만들지 않음(`Runtime/Core/ShutdownScheduler.cs`):** 15초마다 요일 이름과 오늘 날짜 문자열(특정 날짜 설정이 있으면 출처 문자열까지)을 새로 만들었음. 요일은 미리 만든 표를 쓰고 날짜·출처 문자열은 날짜가 바뀔 때만 만듦(InvariantCulture라 그레고리력이 아닌 시스템 문화권에서도 설정 날짜와 맞음). 동작은 같음.
+
+### Fixed
+- **`SoundManager`가 BGM 페이드 중 다시 페이드·정지·재생하면 NullReferenceException이 나던 문제 수정(`Runtime/UI/SoundManager.cs`):** `CancelFadeRoutine`이 `Cancel()`을 부르면 트윈 Kill을 거쳐 페이드의 `finally`가 동기로 실행돼 필드를 비우는데, 이어서 같은 필드로 `Dispose()`를 불러 예외가 났음(`FadeOutBGM` 중 `PlayBGM`이면 새 BGM이 재생되지 않음). 필드를 먼저 지역 변수로 옮기고 비운 뒤 취소·해제함. 설정의 `sounds` 항목에 키가 없거나 중복되면 조용히 건너뛰던 것도 경고를 남김. `SoundManagerTests`에 테스트 1건 추가(이 환경에서 AudioSource가 재생되지 않으면 결론 없음).
+- **`ArduinoManager`가 수동으로 끊은 직후 다시 연결되던 문제 수정(`Runtime/Hardware/ArduinoManager.cs`):** 자동 재연결이나 첫 연결(`ConnectAsync`)의 포트 스캔이 진행 중일 때 `Disconnect()`를 부르면, 이미 돌던 핸드셰이크가 성공해 다시 연결되고 `OnConnected`가 발행됐음. 수동 해제가 두 스캔을 모두 멈추고(첫 연결은 예외 없이 끝남, 파괴로 인한 취소만 예전처럼 `OperationCanceledException`), 스캔 결과를 반영하기 전에 취소 여부를 확인해 포트를 닫음. 읽기 오류로 끊긴 순간 수동 해제가 겹치면 자동 재연결이 시작되던 것과, 재부팅을 기다리는 사이 끊기면 해제된 포트를 만져 "reboot failed" 경고가 나던 것도 고침. 첫 연결·재부팅 대기 중 오브젝트가 파괴될 때 파괴 토큰을 얻다가 예외가 날 수 있던 것도 시작할 때 한 번 얻어 두도록 고침.
+- **`UIManager`가 같은 이름의 버튼에 처음 설정한 효과음을 계속 쓰던 문제 수정(`Runtime/UI/UIManager.cs`):** 클릭 콜백을 버튼 이름만으로 캐시해, 씬마다 같은 이름 버튼(예: "Back")의 효과음이 달라도 처음 효과음이 났음. 이름과 효과음 키가 모두 같을 때만 재사용함. 또 대상에 다른 Graphic이 이미 있으면 `AddComponent`가 null을 돌려줘 NullReferenceException이 나거나 조용히 건너뛰던 것(`SetImage`·`SetText`·`SetTMPText`·`SetVideo`, 버튼 배경)을 붙이지 않고 경고를 남기도록 고침. 설정의 `fonts` 항목에 키·주소가 없거나 키가 중복되면 경고를 남김. `UIManagerTests`에 테스트 2건 추가.
+- **`ApiManagerBase` 이벤트 핸들러가 보내는 로그가 파괴 뒤에도 재시도를 이어 가던 것 수정(`Runtime/Network/ApiManagerBase.cs`):** idle·외부 API 이벤트로 보내는 로그에 파괴 토큰을 넘김.
+- **설정을 읽지 못했을 때 조용히 넘어가던 곳에 로그를 남김(`Runtime/Core/InactivityTimer.cs`, `Runtime/Network/ApiRetryUtil.cs`):** `InactivityTimer`는 설정을 읽지 못하면 "useInactivityTimer is false"로 남기던 것을 읽지 못했다는 경고로 바꿈. `ApiRetryUtil`은 시도 횟수를 0 이하로 넘기면 로그 없이 실패하던 것을 최소 1번 보내도록 바꿈.
+
 ## [26.11.10-1] - 2026-11-10
 
 ### Added

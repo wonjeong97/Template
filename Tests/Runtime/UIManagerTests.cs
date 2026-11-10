@@ -41,11 +41,11 @@ namespace HuliacDev.Tests
         {
             foreach (GameObject go in _spawned)
             {
-                if (go != null) UnityEngine.Object.DestroyImmediate(go);
+                if (go) UnityEngine.Object.DestroyImmediate(go);
             }
             _spawned.Clear();
 
-            if (_managerGo != null) UnityEngine.Object.DestroyImmediate(_managerGo);
+            if (_managerGo) UnityEngine.Object.DestroyImmediate(_managerGo);
         }
 
         /// <summary>
@@ -100,7 +100,7 @@ namespace HuliacDev.Tests
         {
             GameObject go = SetText("Styled", null, "안녕하세요", 33, TextAnchor.LowerRight);
 
-            Text text = go.GetComponent<Text>();
+            Assert.IsTrue(go.TryGetComponent(out Text text), "SetText가 Text를 붙여야 함");
             Assert.AreEqual("안녕하세요", text.text);
             Assert.AreEqual(33, text.fontSize);
             Assert.AreEqual(TextAnchor.LowerRight, text.alignment);
@@ -160,7 +160,7 @@ namespace HuliacDev.Tests
             };
             _uiManager.SetText(go, setting);
 
-            RectTransform rt = go.GetComponent<RectTransform>();
+            Assert.IsTrue(go.TryGetComponent(out RectTransform rt), "SetText가 RectTransform을 붙여야 함");
             Assert.AreEqual(new Vector2(120f, -45f), rt.anchoredPosition);
             Assert.AreEqual(new Vector2(300f, 80f), rt.sizeDelta);
             Assert.AreEqual(new Vector3(2f, 2f, 2f), rt.localScale);
@@ -173,7 +173,10 @@ namespace HuliacDev.Tests
         public void null_인자를_받아도_예외가_발생하지_않는다()
         {
             Assert.DoesNotThrow(() => _uiManager.SetText(null, new TextSetting()));
-            Assert.DoesNotThrow(() => _uiManager.SetText(new GameObject("Tmp"), null));
+            GameObject tmp = new GameObject("Tmp");
+            _spawned.Add(tmp);
+
+            Assert.DoesNotThrow(() => _uiManager.SetText(tmp, null));
             Assert.DoesNotThrow(() => _uiManager.SetImage(null, new ImageSetting()));
             Assert.DoesNotThrow(() => _uiManager.SetButton(null, new ButtonSetting()));
         }
@@ -247,7 +250,8 @@ namespace HuliacDev.Tests
 
             LogAssert.Expect(LogType.Error, new Regex("Failed to load sound.*UIManagerTests_존재하지않는파일"));
 
-            buttonGo.GetComponent<Button>().onClick.Invoke();
+            Assert.IsTrue(buttonGo.TryGetComponent(out Button button), "SetButton이 Button을 붙여야 함");
+            button.onClick.Invoke();
 
             await UniTask.Delay(1000, DelayType.UnscaledDeltaTime);
         });
@@ -351,7 +355,95 @@ namespace HuliacDev.Tests
             ButtonSetting setting = new ButtonSetting { name = "SoundButtonNoManager", buttonSound = "click" };
             _uiManager.SetButton(buttonGo, setting);
 
-            Assert.DoesNotThrow(() => buttonGo.GetComponent<Button>().onClick.Invoke());
+            Assert.IsTrue(buttonGo.TryGetComponent(out Button button), "SetButton이 Button을 붙여야 함");
+            Assert.DoesNotThrow(() => button.onClick.Invoke());
+        }
+
+        /// <summary>
+        /// 같은 이름의 버튼을 다른 효과음으로 다시 설정하면 클릭 시 새 효과음을 재생해야 함. 예전에는 클릭 콜백을 버튼 이름만으로
+        /// 캐시해, 씬마다 같은 이름 버튼("Back" 등)의 효과음이 달라도 처음 설정한 효과음이 났음.
+        /// 효과음 로드 실패 로그(클립 경로 포함)로 어느 효과음이 재생됐는지 확인함.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 같은_이름_버튼을_다른_효과음으로_다시_설정하면_새_효과음을_쓴다() => UniTask.ToCoroutine(async () =>
+        {
+            Regex missingDependency = new Regex(@"\[UIManager\] Dependencies were not injected|\[SoundManager\] AppSettingsProvider was not injected");
+            LogAssert.Expect(LogType.Error, missingDependency);
+            LogAssert.Expect(LogType.Error, missingDependency);
+
+            GameObject soundGo = new GameObject("SoundManagerForResetButtonTest");
+            _spawned.Add(soundGo);
+            SoundManager soundManager = soundGo.AddComponent<SoundManager>();
+
+            SoundManagerTestHelper.SetLogger(soundManager);
+            SetSoundManager(_uiManager, soundManager);
+            SoundManagerTestHelper.SetSoundSetting(soundManager, "first", "sounds/UIManagerTests_first_없음.wav");
+            SoundManagerTestHelper.SetSoundSetting(soundManager, "second", "sounds/UIManagerTests_second_없음.wav");
+
+            GameObject buttonGo = new GameObject("Back");
+            _spawned.Add(buttonGo);
+
+            _uiManager.SetButton(buttonGo, new ButtonSetting { name = "Back", buttonSound = "first" });
+            _uiManager.SetButton(buttonGo, new ButtonSetting { name = "Back", buttonSound = "second" });
+
+            // 두 매니저의 Start()가 실행되어 의존성 누락 오류가 먼저 출력되도록 프레임을 넘김.
+            await UniTask.Yield();
+            await UniTask.Yield();
+
+            LogAssert.Expect(LogType.Error, new Regex("Failed to load sound.*UIManagerTests_second_없음"));
+
+            Assert.IsTrue(buttonGo.TryGetComponent(out Button button), "SetButton이 Button을 붙여야 함");
+            button.onClick.Invoke();
+
+            await UniTask.Delay(1000, DelayType.UnscaledDeltaTime);
+        });
+
+        /// <summary>
+        /// 대상에 다른 Graphic(Text 등)이 이미 있으면 Image·RawImage를 붙일 수 없음. 예전에는 AddComponent가 null을 돌려줘
+        /// 다음 줄에서 NullReferenceException이 났음. 예외 없이 건너뛰고 기존 Graphic은 그대로 둬야 함.
+        /// </summary>
+        [Test]
+        public void 다른_Graphic이_있는_대상은_예외_없이_건너뛴다()
+        {
+            GameObject go = new GameObject("HasText", typeof(RectTransform));
+            _spawned.Add(go);
+            go.AddComponent<Text>();
+
+            Assert.DoesNotThrow(() => _uiManager.SetImage(go, new ImageSetting { name = "HasText" }));
+            Assert.DoesNotThrow(() => _uiManager.SetButton(go, new ButtonSetting
+            {
+                name = "HasText",
+                buttonBackgroundImage = new ImageSetting { name = "Bg" }
+            }));
+
+            Assert.IsFalse(go.TryGetComponent(out Image _), "다른 Graphic이 있는데 Image가 붙음");
+            Assert.IsTrue(go.TryGetComponent(out Text _), "기존 Text가 사라짐");
+        }
+
+        /// <summary>
+        /// 새로 붙이는 표시용 Graphic(이미지·글자)은 입력을 받지 않으므로 raycastTarget을 꺼야 함. 켜 두면 아래 버튼의 클릭을
+        /// 가로채고 터치마다 레이캐스트 검사 대상이 늘어남. 버튼 배경 Image는 클릭을 받는 대상이므로 켜야 함.
+        /// </summary>
+        [Test]
+        public void 새로_붙인_표시용_Graphic은_raycastTarget이_꺼지고_버튼_배경은_켜진다()
+        {
+            GameObject imageGo = new GameObject("Picture", typeof(RectTransform));
+            _spawned.Add(imageGo);
+            GameObject textGo = new GameObject("Caption", typeof(RectTransform));
+            _spawned.Add(textGo);
+            GameObject buttonGo = new GameObject("Confirm", typeof(RectTransform));
+            _spawned.Add(buttonGo);
+
+            _uiManager.SetImage(imageGo, new ImageSetting { name = "Picture" });
+            _uiManager.SetText(textGo, new TextSetting { name = "Caption", text = "안내" });
+            _uiManager.SetButton(buttonGo, new ButtonSetting { name = "Confirm", buttonBackgroundImage = new ImageSetting { name = "Bg" } });
+
+            Assert.IsTrue(imageGo.TryGetComponent(out Image image));
+            Assert.IsFalse(image.raycastTarget, "표시용 이미지가 클릭을 가로챔");
+            Assert.IsTrue(textGo.TryGetComponent(out Text text));
+            Assert.IsFalse(text.raycastTarget, "표시용 글자가 클릭을 가로챔");
+            Assert.IsTrue(buttonGo.TryGetComponent(out Image background));
+            Assert.IsTrue(background.raycastTarget, "버튼 배경이 클릭을 받지 못함");
         }
 
         // --- 헬퍼 ---

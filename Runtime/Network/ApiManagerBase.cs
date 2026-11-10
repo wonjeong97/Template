@@ -63,12 +63,6 @@ namespace HuliacDev.Network
         /// </summary>
         private static readonly Regex FailReasonQueryStringPattern = new Regex(@"\?[^\s""')]*", RegexOptions.Compiled);
 
-        private bool _isOriginal;
-
-        // 종료 요청을 한 번 보류하고 로그를 보낸 뒤 다시 종료를 진행하기 위한 상태.
-        private bool _isQuitConfirmed;
-        private bool _isSendingExitLog;
-
         private ISubscriber<InactivityTimeoutEvent> _inactivityTimeoutSubscriber;
         private IDisposable _inactivityTimeoutSubscription;
 
@@ -80,6 +74,12 @@ namespace HuliacDev.Network
 
         private ISubscriber<ExternalApiReturnEvent> _externalApiReturnSubscriber;
         private IDisposable _externalApiReturnSubscription;
+
+        private bool _isOriginal;
+
+        // 종료 요청을 한 번 보류하고 로그를 보낸 뒤 다시 종료를 진행하기 위한 상태.
+        private bool _isQuitConfirmed;
+        private bool _isSendingExitLog;
 
         protected ILogger<ApiManagerBase> Logger { get; private set; }
         protected AppSettingsProvider SettingsProvider { get; private set; }
@@ -248,6 +248,7 @@ namespace HuliacDev.Network
         /// </summary>
         protected virtual async UniTask SendExitLogAsync()
         {
+            // 주입 실패는 시작 로그(SendStartupLogAsync)가 원인과 함께 한 번 알리므로, 로그마다 반복해 남기지 않음.
             if (SettingsProvider == null)
             {
                 return;
@@ -371,7 +372,7 @@ namespace HuliacDev.Network
         /// </summary>
         protected virtual void OnInactivityTimeout()
         {
-            SendMoveIdleTimeoutLogAsync().Forget();
+            SendMoveIdleTimeoutLogAsync(this.GetCancellationTokenOnDestroy()).Forget();
         }
 
         /// <summary>
@@ -381,7 +382,7 @@ namespace HuliacDev.Network
         /// </summary>
         protected virtual void OnMoveIdle()
         {
-            SendMoveIdleLogAsync().Forget();
+            SendMoveIdleLogAsync(this.GetCancellationTokenOnDestroy()).Forget();
         }
 
         /// <summary>
@@ -391,7 +392,7 @@ namespace HuliacDev.Network
         /// </summary>
         protected virtual void OnExternalApiCall(string requestUrl)
         {
-            SendExternalApiCallLogAsync(requestUrl).Forget();
+            SendExternalApiCallLogAsync(requestUrl, this.GetCancellationTokenOnDestroy()).Forget();
         }
 
         /// <summary>
@@ -402,7 +403,7 @@ namespace HuliacDev.Network
         /// </summary>
         protected virtual void OnExternalApiReturn(bool isSuccess, string failReason = null)
         {
-            SendExternalApiReturnLogAsync(isSuccess, failReason).Forget();
+            SendExternalApiReturnLogAsync(isSuccess, failReason, this.GetCancellationTokenOnDestroy()).Forget();
         }
 
         /// <summary>
@@ -495,8 +496,9 @@ namespace HuliacDev.Network
 
         /// <summary>
         /// 외부 API 호출 전후로 서버에 Call/Return 로그를 자동 전송하며 비동기 작업을 수행하는 헬퍼 메서드.
-        /// 시작 시 "Call API {requestUrl}"을 전송하고, 성공 시 "Return OK", 예외 발생 시
-        /// "Return fail: {예외 메시지}"를 전송함(발생한 예외는 로그 전송 후 다시 throw됨).
+        /// 시작 시 "Call API {requestUrl}"을, 성공 시 "Return OK", 예외 발생 시 "Return fail: {예외 메시지}"를 전송하고 예외는 다시 throw함.
+        /// 로그 전송(재시도 포함 수십 초 걸릴 수 있음)은 기다리지 않고 뒤에서 보내므로 실제 API 호출과 결과 반환이 늦어지지 않으며,
+        /// Return 로그는 Call 로그 전송이 끝난 뒤 보내 서버 로그의 순서를 지킴.
         /// 예외 메시지에 URL 쿼리 스트링이 포함돼 있으면 <see cref="SanitizeFailReason"/>이 제거한 뒤 전송함.
         /// </summary>
         public async UniTask<T> ExecuteWithExternalApiLoggingAsync<T>(string requestUrl, Func<UniTask<T>> apiAction, CancellationToken cancellationToken = default)
@@ -506,26 +508,29 @@ namespace HuliacDev.Network
                 throw new ArgumentNullException(nameof(apiAction));
             }
 
-            await SendExternalApiCallLogAsync(requestUrl, cancellationToken);
+            // await 뒤에 파괴되면 파괴 토큰을 얻는 것 자체가 실패할 수 있으므로, 살아 있을 때 받아 둠.
+            CancellationToken destroyToken = this.GetCancellationTokenOnDestroy();
+            UniTask callLog = SendExternalApiCallLogAsync(requestUrl, cancellationToken);
+            T result;
             try
             {
-                T result = await apiAction();
-                await SendExternalApiReturnLogAsync(true, null, cancellationToken);
-                return result;
+                result = await apiAction();
             }
             catch (Exception ex)
             {
                 // apiAction 실행 도중 전달된 토큰이 취소되었더라도 Return fail 로그가 유실되지 않도록 CancellationToken.None으로 전송함.
-                await SendExternalApiReturnLogAsync(false, SanitizeFailReason(ex.Message), CancellationToken.None);
+                SendReturnLogAfterCallLogAsync(callLog, false, SanitizeFailReason(ex.Message), CancellationToken.None).Forget();
                 throw;
             }
+
+            // 메서드가 돌아온 뒤 보내므로 호출자가 곧바로 토큰을 취소해도 Return OK가 빠지지 않도록 파괴 토큰으로 보냄.
+            SendReturnLogAfterCallLogAsync(callLog, true, null, destroyToken).Forget();
+            return result;
         }
 
         /// <summary>
         /// 반환값이 없는 외부 API 호출 전후로 서버에 Call/Return 로그를 자동 전송하며 비동기 작업을 수행하는 헬퍼 메서드.
-        /// 시작 시 "Call API {requestUrl}"을 전송하고, 성공 시 "Return OK", 예외 발생 시
-        /// "Return fail: {예외 메시지}"를 전송함(발생한 예외는 로그 전송 후 다시 throw됨).
-        /// 예외 메시지에 URL 쿼리 스트링이 포함돼 있으면 <see cref="SanitizeFailReason"/>이 제거한 뒤 전송함.
+        /// 로그 전송 방식과 순서는 반환값이 있는 오버로드와 같음(로그를 기다리지 않고, Return은 Call 전송이 끝난 뒤 보냄).
         /// </summary>
         public async UniTask ExecuteWithExternalApiLoggingAsync(string requestUrl, Func<UniTask> apiAction, CancellationToken cancellationToken = default)
         {
@@ -534,18 +539,32 @@ namespace HuliacDev.Network
                 throw new ArgumentNullException(nameof(apiAction));
             }
 
-            await SendExternalApiCallLogAsync(requestUrl, cancellationToken);
+            // await 뒤에 파괴되면 파괴 토큰을 얻는 것 자체가 실패할 수 있으므로, 살아 있을 때 받아 둠.
+            CancellationToken destroyToken = this.GetCancellationTokenOnDestroy();
+            UniTask callLog = SendExternalApiCallLogAsync(requestUrl, cancellationToken);
             try
             {
                 await apiAction();
-                await SendExternalApiReturnLogAsync(true, null, cancellationToken);
             }
             catch (Exception ex)
             {
                 // apiAction 실행 도중 전달된 토큰이 취소되었더라도 Return fail 로그가 유실되지 않도록 CancellationToken.None으로 전송함.
-                await SendExternalApiReturnLogAsync(false, SanitizeFailReason(ex.Message), CancellationToken.None);
+                SendReturnLogAfterCallLogAsync(callLog, false, SanitizeFailReason(ex.Message), CancellationToken.None).Forget();
                 throw;
             }
+
+            // 메서드가 돌아온 뒤 보내므로 호출자가 곧바로 토큰을 취소해도 Return OK가 빠지지 않도록 파괴 토큰으로 보냄.
+            SendReturnLogAfterCallLogAsync(callLog, true, null, destroyToken).Forget();
+        }
+
+        /// <summary>
+        /// Call 로그 전송이 끝난 뒤 Return 로그를 보냄. 호출부가 로그를 기다리지 않게 하면서 서버 로그의 Call → Return 순서를 지키기 위함.
+        /// callLog는 여기서 한 번만 await함(UniTask는 두 번 await할 수 없음).
+        /// </summary>
+        private async UniTaskVoid SendReturnLogAfterCallLogAsync(UniTask callLog, bool isSuccess, string failReason, CancellationToken cancellationToken)
+        {
+            await callLog;
+            await SendExternalApiReturnLogAsync(isSuccess, failReason, cancellationToken);
         }
 
         /// <summary>
@@ -555,6 +574,7 @@ namespace HuliacDev.Network
         /// </summary>
         private async UniTask SendSimpleLogAsync(string message, CancellationToken cancellationToken)
         {
+            // 주입 실패는 시작 로그(SendStartupLogAsync)가 원인과 함께 한 번 알리므로, 로그마다 반복해 남기지 않음.
             if (SettingsProvider == null)
             {
                 return;

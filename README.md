@@ -130,7 +130,7 @@ UPM 패키지에는 제너레이터가 포함되어 있지 않으므로, 기본 
 리플렉션 폴백이 남아 있는지 코드로 확인할 수 있습니다.
 
 ```csharp
-var injector = VContainer.Internal.InjectorCache.GetOrBuild(typeof(HuliacDev.UI.UIManager));
+VContainer.IInjector injector = VContainer.Internal.InjectorCache.GetOrBuild(typeof(HuliacDev.UI.UIManager));
 Debug.Log(injector.GetType().Name);
 // 생성됨    -> UIManagerGeneratedInjector
 // 폴백 중   -> ReflectionInjector
@@ -244,7 +244,7 @@ Tests/
 | | `WindowFocusRestorer` | 앱 창이 포커스를 잃으면 다시 앞으로 가져와 키보드형 스캐너 입력 유지, 선택적으로 창을 항상 위로 둠 (Windows 스탠드얼론, `F` 키로 끄고 켬) |
 | | `AutoRestartWatchdog` | 크래시·강제 종료·응답 없음으로 앱이 끝나면 숨은 감시 스크립트가 다시 실행, 정상 종료(숨은 종료 버튼·예약 종료·창 닫기)는 다시 켜지 않음 (Windows 스탠드얼론, `autoRestart`로 켬) |
 | | `StateMachine<TContext>` | `IState<TContext>` 기반 상태 머신. 전환할 때 상태를 새로 만들지 않고 미리 만든 인스턴스의 참조만 바꿈 |
-| **UI & Media** | `UIManager` | uGUI/TextMeshPro 비동기 폰트 프리로드/일괄 적용, 텍스처 VRAM 압축(`compress`) 제어 |
+| **UI & Media** | `UIManager` | uGUI/TextMeshPro 비동기 폰트 프리로드/일괄 적용, 텍스처 VRAM 압축(`compress`) 제어. `Set*`가 새로 붙이는 이미지·글자·영상은 클릭을 받지 않도록 `raycastTarget`을 끄고(대상에 Button 등 Selectable이 있거나 버튼 배경이면 켬), 대상에 다른 Graphic이 이미 있으면 붙이지 않고 경고를 남김 |
 | | `FadeManager` | 화면 페이드 인/아웃(DOTween/UniTask), 커스텀 색상(`Color? color`) 및 `SortingOrder` 제어 |
 | | `SoundManager` | BGM/SFX 비동기 재생, 미리 불러오기(`PreloadAsync`), 마스터/BGM/SFX 개별 볼륨 및 음소거(`Mute`), DOTween 페이드 충돌 방어 |
 | | `VideoManager` | 비디오 비동기 프리로드/재생(`PrepareAndPlayAsync`는 재생을 시작했는지 bool로 돌려줌), 고아 RenderTexture 메모리 최적 해제 ($O(N+M)$) |
@@ -253,7 +253,7 @@ Tests/
 | | `ApiRetryUtil` | 고정 간격 재시도 및 소켓/DNS 네트워크 예외 격리를 지원하는 WebRequest 안정적 재시도, 응답 본문 반환(`GetTextWithRetryAsync`), 인터넷이 없으면 전송 생략 |
 | | `PacketUtility` | 바이너리 패킷과 구조체 변환(`FromBytes<T>`, `ToBytes<T>`, `GetPacketSize<T>`) |
 | **Logging** | `LogRetentionService` | 일별 로그 파일 회전(`AddZLoggerRollingFile`) 및 30일 보관 주기 만료 파일 자동 정리 |
-| **Hardware** | `ArduinoManager` | 시리얼 통신, 읽기 스레드 예외 격리 및 메인 스레드 마샬링 기반 자동 재연결(`AutoReconnect`) |
+| **Hardware** | `ArduinoManager` | 시리얼 통신, 읽기 스레드 예외 격리 및 메인 스레드 마샬링 기반 자동 재연결(`AutoReconnect`, 연결된 뒤 끊겼을 때만 동작하며 `AutoReconnectIntervalMs`(기본 3초)에서 두 배씩 늘려 `AutoReconnectMaxIntervalMs`(기본 30초)에서 멈춤). 연결 변화는 이벤트(`OnConnected`·`OnDisconnected`)라 현재 상태는 `IsConnected`로 읽음 |
 | **Data & Utils**| `AppSettingsProvider` | `Settings.json` 단일 로드/캐싱 및 런타임 핫 리로드(`ReloadAsync`) 지원, 읽기 실패 시 비활동 타이머를 켠 대체 설정 사용 |
 | | `JsonLoader` | `StreamingAssets` 및 `PersistentData` 지원, `.json` 확장자 자동 보정 직렬화, 읽기 성공 여부 반환(`TryLoadAsync`), 임시 파일을 거친 저장과 저장 성공 여부 반환 |
 | | `ConsecutiveClickCounter` | "N초 안에 M번 누르기" 연속 클릭 판정 (`GameCloser`가 사용, 운영자용 숨은 버튼에 재사용) |
@@ -383,15 +383,18 @@ _soundManager.PlaySFX("narration");
 ```csharp
 // 방법 1: 래퍼 메서드로 자동 전송 (호출 전 "Call API ~", 성공 시 "Return OK",
 // 예외 발생 시 "Return fail: {예외 메시지}" — 예외 메시지는 자동으로 채워지며,
-// 메시지에 URL 쿼리 스트링이 있으면 API 키/토큰 유출 방지를 위해 제거 후 전송됨)
-var response = await _apiManager.ExecuteWithExternalApiLoggingAsync(
+// 메시지에 URL 쿼리 스트링이 있으면 API 키/토큰 유출 방지를 위해 제거 후 전송됨).
+// 로그는 기다리지 않고 뒤에서 보내므로 API 호출이 늦어지지 않고, Return은 Call 전송이 끝난 뒤 보냄.
+WavespeedResult response = await _apiManager.ExecuteWithExternalApiLoggingAsync(
     "https://api.wavespeed.ai/v1/task?user=123",
     async () => await CallWavespeedAsync());
 
-// 방법 2: ApiManagerBase 직접 호출 (실패 사유는 두 번째 인자로 직접 전달)
-await _apiManager.SendExternalApiCallLogAsync("https://api.openai.com/v1/chat/completions");
+// 방법 2: ApiManagerBase 직접 호출 (실패 사유는 두 번째 인자로 직접 전달).
+// 로그 전송은 재시도로 수십 초 걸릴 수 있어 기다리면 API 호출이 그만큼 늦어지므로 Forget으로 보냄.
+// 이때 두 로그가 서버에 도착하는 순서는 보장되지 않으므로, 순서가 중요하면 방법 1을 씀.
+_apiManager.SendExternalApiCallLogAsync("https://api.openai.com/v1/chat/completions").Forget();
 (bool success, string errorReason) = await CallGptAsync();
-await _apiManager.SendExternalApiReturnLogAsync(success, errorReason);
+_apiManager.SendExternalApiReturnLogAsync(success, errorReason).Forget();
 
 // 방법 3: MessagePipe 이벤트 발행 (ApiManagerBase를 직접 참조하지 않는 경우)
 _externalApiCallPublisher.Publish(new ExternalApiCallEvent("https://api.openai.com/v1/chat/completions"));

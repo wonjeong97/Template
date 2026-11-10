@@ -24,14 +24,6 @@ namespace HuliacDev.Tests
     /// </summary>
     public class ConcurrentLoadTests
     {
-        private GameObject _go;
-
-        [TearDown]
-        public void TearDown()
-        {
-            if (_go != null) UnityEngine.Object.DestroyImmediate(_go);
-        }
-
         /// <summary>
         /// 공유 소스가 UniTask면 실패하고 Task면 통과하는 조건을 그대로 재현함.
         /// 완료 전에 두 소비자가 동시에 대기하는 상황을 만든다.

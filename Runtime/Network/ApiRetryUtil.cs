@@ -135,6 +135,9 @@ namespace HuliacDev.Network
             LogLevel successLogLevel,
             bool requireInternetAccess)
         {
+            // 0 이하를 넘기면 루프를 한 번도 돌지 않고 로그 없이 실패하므로 최소 한 번은 보냄.
+            if (maxAttemptCount < 1) maxAttemptCount = 1;
+
             // 네트워크 자체가 연결되어 있지 않으면 시도해도 무조건 실패하므로, 재시도 루프를
             // 돌리며 최대 대기 시간을 허비하지 않도록 먼저 걸러냄.
             if (!InternetConnectivity.IsNetworkConnected)

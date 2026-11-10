@@ -35,7 +35,7 @@ namespace HuliacDev.Tests
             // 다른 테스트에 영향을 주지 않도록 전역 상태를 반드시 복구함.
             Time.timeScale = _originalTimeScale;
 
-            if (_go != null) UnityEngine.Object.DestroyImmediate(_go);
+            if (_go) UnityEngine.Object.DestroyImmediate(_go);
         }
 
         /// <summary>
@@ -97,8 +97,7 @@ namespace HuliacDev.Tests
 
         private float GetAlpha()
         {
-            CanvasGroup cg = _go.GetComponentInChildren<CanvasGroup>(true);
-            return cg == null ? -1f : cg.alpha;
+            return TryFindFadeComponent(out CanvasGroup cg) ? cg.alpha : -1f;
         }
 
         private bool GetIsTransitioning()
@@ -111,14 +110,32 @@ namespace HuliacDev.Tests
 
         private bool GetRaycastTarget()
         {
-            UnityEngine.UI.RawImage img = _go.GetComponentInChildren<UnityEngine.UI.RawImage>(true);
-            return img != null && img.raycastTarget;
+            return TryFindFadeComponent(out UnityEngine.UI.RawImage img) && img.raycastTarget;
         }
 
         private bool GetCanvasEnabled()
         {
-            Canvas canvas = _go.GetComponentInChildren<Canvas>(true);
-            return canvas != null && canvas.enabled;
+            return TryFindFadeComponent(out Canvas canvas) && canvas.enabled;
+        }
+
+        /// <summary>
+        /// FadeManager가 만드는 계층(FadeCanvas 자식, 그 아래 FadeImage 자식)을 두 단계까지 직계 자식으로 순회하며 컴포넌트를 찾음.
+        /// GetComponentInChildren은 계층이 바뀌면 조용히 다른 오브젝트를 잡을 수 있어 쓰지 않음.
+        /// </summary>
+        private bool TryFindFadeComponent<T>(out T component) where T : Component
+        {
+            foreach (Transform canvasChild in _go.transform)
+            {
+                if (canvasChild.TryGetComponent(out component)) return true;
+
+                foreach (Transform imageChild in canvasChild)
+                {
+                    if (imageChild.TryGetComponent(out component)) return true;
+                }
+            }
+
+            component = null;
+            return false;
         }
     }
 }

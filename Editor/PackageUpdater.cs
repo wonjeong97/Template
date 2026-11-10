@@ -58,6 +58,9 @@ namespace HuliacDev.Editor
         static AddAndRemoveRequest _addRequest;
         static HashSet<string> _requestedNames;
 
+        /// <summary>
+        /// 스택 UPM 패키지 목록을 받아 새 버전이 있으면 한 번에 올리는 업데이트를 시작함.
+        /// </summary>
         [MenuItem("Tools/Update Stack Packages")]
         static void Run()
         {
@@ -83,6 +86,9 @@ namespace HuliacDev.Editor
             };
         }
 
+        /// <summary>
+        /// 패키지 목록 요청이 끝나면 올릴 패키지를 고르고 업데이트 요청을 보냄.
+        /// </summary>
         static void WaitForList()
         {
             if (!_listRequest.IsCompleted) return;
@@ -144,6 +150,9 @@ namespace HuliacDev.Editor
             EditorApplication.update += WaitForAdd;
         }
 
+        /// <summary>
+        /// UPM 업데이트 요청이 끝나면 결과를 남기고 NuGet 업데이트로 넘어감.
+        /// </summary>
         static void WaitForAdd()
         {
             if (!_addRequest.IsCompleted) return;
