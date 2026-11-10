@@ -8,10 +8,10 @@
 
 ## 할 일
 
-- [ ] README "프로젝트 코드에서 쓰기"의 `WaitUntilWatchingAsync` 예시가 시간 제한을 `CancelAfter` 로 걸어, 시간이 다 되면 스레드 풀 타이머에서 취소되고 이어지는 코드가 메인 스레드 밖에서 돎(예시 자체는 그 뒤에 Unity API를 부르지 않아 문제없지만, 따라 쓴 프로젝트가 취소 뒤 화면을 바꾸면 메인 스레드 밖에서 Unity API를 부름). 예시에 `CancelAfterSlim`(PlayerLoop에서 취소)이나 대기 뒤 `UniTask.SwitchToMainThread()` 를 쓰고 이유를 적기 — 발견일: 2026-11-10
 
 ## 완료
 
+- [x] README "프로젝트 코드에서 쓰기"의 `WaitUntilWatchingAsync` 예시가 시간 제한을 `CancelAfter` 로 걸어, 시간이 다 되면 스레드 풀 타이머에서 취소되고 이어지는 코드가 메인 스레드 밖에서 돎(예시 자체는 그 뒤에 Unity API를 부르지 않아 문제없지만, 따라 쓴 프로젝트가 취소 뒤 화면을 바꾸면 메인 스레드 밖에서 Unity API를 부름). 예시를 `CancelAfterSlim`(PlayerLoop에서 취소)으로 바꾸고 이유를 README 표·예시와 메서드 summary에 적음 — 완료: 2026-11-10
 - [x] 랜선으로 연결하는 아두이노용 통신 클래스가 없어 프로젝트마다 UDP·TCP 코드를 따로 만들던 것. `UdpCommandClient`(명령·응답 확인·재전송)와 `TcpLineClient`(접속 유지·재접속·줄 단위 수신) 추가 — 완료: 2026-11-10 (#76)
 - [x] `ArduinoManager` 스캔이 응답 없는 포트마다 핸드셰이크 대기(3초)만큼 늦어지던 것. 모든 포트를 동시에 확인하고, 핸드셰이크 줄을 받은 바이트로 직접 모아 경계에서 잃지 않게 함 — 완료: 2026-11-10 (#75)
 - [x] `ArduinoManager` 가 포트를 열 때 리셋되는 보드(Uno·Nano 계열)에 연결하지 못하던 것(핸드셰이크 0.5초 대기 < 부팅 약 1.7초). 실제 장치로 확인 — 완료: 2026-11-10 (#75)
