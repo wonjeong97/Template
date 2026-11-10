@@ -225,23 +225,26 @@ namespace HuliacDev.Tests
         {
             Assert.IsTrue(_client.Connect("127.0.0.1", _port));
 
-            // 간격을 늘리면 0·1·3초에, 늘리지 않으면 0~4초에 매초 접속함.
-            int acceptedCount = 0;
+            // 접속 세 번의 시각을 재 두 간격을 비교함. 간격을 늘리면 약 1초 다음 약 2초이고, 늘리지 않으면 둘 다 약 1초.
+            // 횟수가 아니라 간격의 비로 보고, 접속은 백그라운드 스레드에서 받아 시각을 재므로 에디터 프레임이 멈춰도 흔들리지 않음.
             System.Diagnostics.Stopwatch elapsed = System.Diagnostics.Stopwatch.StartNew();
-            while (elapsed.ElapsedMilliseconds < 4500)
+            TcpListener listener = _listener;
+            long[] acceptedAt = await System.Threading.Tasks.Task.Run(() =>
             {
-                if (_listener.Pending())
+                long[] times = new long[3];
+                for (int i = 0; i < times.Length; i++)
                 {
-                    TcpClient accepted = _listener.AcceptTcpClient();
+                    TcpClient accepted = listener.AcceptTcpClient();
+                    times[i] = elapsed.ElapsedMilliseconds;
                     accepted.Close();
-                    acceptedCount++;
                 }
 
-                await UniTask.Delay(20, DelayType.Realtime);
-            }
+                return times;
+            }).AsUniTask().AwaitWithRealtimeTimeout(8f);
 
-            Assert.LessOrEqual(acceptedCount, 3, "받자마자 끊겨도 처음 간격으로 다시 접속함");
-            Assert.GreaterOrEqual(acceptedCount, 2, "다시 접속하지 않음");
+            long firstGap = acceptedAt[1] - acceptedAt[0];
+            long secondGap = acceptedAt[2] - acceptedAt[1];
+            Assert.Greater(secondGap, firstGap * 3 / 2, $"받자마자 끊겨도 간격을 늘리지 않음 ({firstGap}ms, {secondGap}ms)");
         });
 
         /// <summary>

@@ -54,7 +54,7 @@ namespace HuliacDev.Hardware
         private const int ReadThreadJoinTimeoutMs = 600;
 
         /// <summary>자동 재연결 간격의 최소값(ms). 잘못된 설정으로 쉬지 않고 포트를 스캔하지 않게 함.</summary>
-        private const int MinReconnectDelayMs = 1000;
+        private const int MinReconnectDelayMs = ReconnectBackoff.MinDelayMs;
 
         private static readonly ProfilerMarker DispatchMarker = new ProfilerMarker("ArduinoManager.DispatchMessage");
         private static readonly ProfilerMarker JoinReadThreadMarker = new ProfilerMarker("ArduinoManager.JoinReadThread");
@@ -968,10 +968,7 @@ namespace HuliacDev.Hardware
         /// </summary>
         internal static int NextReconnectDelayMs(int currentDelayMs, int maxDelayMs)
         {
-            if (maxDelayMs < MinReconnectDelayMs) maxDelayMs = MinReconnectDelayMs;
-            if (currentDelayMs < MinReconnectDelayMs) return MinReconnectDelayMs;
-            if (currentDelayMs >= maxDelayMs / 2) return maxDelayMs;
-            return currentDelayMs * 2;
+            return ReconnectBackoff.NextDelayMs(currentDelayMs, maxDelayMs);
         }
 
         /// <summary>

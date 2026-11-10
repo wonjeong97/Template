@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Text;
+using HuliacDev.Utils;
 using Microsoft.Extensions.Logging;
 using R3;
 using ZLogger;
@@ -37,10 +38,13 @@ namespace HuliacDev.Network
         private const int MinConnectTimeoutMs = 500;
 
         /// <summary>다시 접속하는 간격의 최소값(ms). 잘못된 설정으로 쉬지 않고 접속을 시도하지 않게 함.</summary>
-        private const int MinReconnectDelayMs = 1000;
+        private const int MinReconnectDelayMs = ReconnectBackoff.MinDelayMs;
 
         /// <summary>접속이 이 시간(ms)보다 짧게 유지되고 끊기면 실패처럼 간격을 늘림. 받자마자 끊는 장치에 1초마다 붙었다 끊기지 않게 함.</summary>
         private const int StableConnectionMs = 5000;
+
+        /// <summary>접속하는 사이 Disconnect·Connect로 멈춘 경우의 결과. 실패가 아니므로 실패 로그를 남기지 않음.</summary>
+        private const string StoppedResult = "stopped";
 
         /// <summary>한 번에 받는 바이트 수.</summary>
         private const int ReceiveBufferSize = 512;
@@ -71,6 +75,10 @@ namespace HuliacDev.Network
         private int _loopGeneration;
 
         private volatile bool _isConnected;
+
+        // 끊긴 동안 Send를 버렸다고 이미 알렸는지. 주기적으로 보내는 앱에서 장치가 꺼진 동안 경고가 쌓이지 않게 끊긴 기간마다 한 번만 남김.
+        // 끊길 때 되돌리므로, Send와 접속이 겹쳐도 경고가 빠지지 않고 많아야 한 번 더 남음.
+        private volatile bool _isDropWarned;
         private bool _isDisposed;
 
         /// <summary>
@@ -175,7 +183,12 @@ namespace HuliacDev.Network
             Outbox outbox = _outbox;
             if (_isDisposed || !_isConnected || outbox == null)
             {
-                if (_logger != null) _logger.ZLogWarning($"[TcpLineClient] Not connected; dropped '{message}'.");
+                if (!_isDropWarned)
+                {
+                    _isDropWarned = true;
+                    if (_logger != null) _logger.ZLogWarning($"[TcpLineClient] Not connected; dropped '{message}'. Messages are dropped silently until connected.");
+                }
+
                 return false;
             }
 
@@ -221,6 +234,7 @@ namespace HuliacDev.Network
                 if (_isConnected)
                 {
                     _isConnected = false;
+                    _isDropWarned = false;
                     _disconnectedSubject.OnNext(Unit.Default);
                 }
             }
@@ -287,7 +301,8 @@ namespace HuliacDev.Network
                     failure = ZString.Concat("unexpected error: ", e.GetType().Name, ": ", e.Message);
                 }
 
-                if (token.IsCancellationRequested) return;
+                // 멈춘 경우는 실패가 아니므로 로그 없이 끝냄(세대가 바뀐 뒤 토큰 취소가 아직 닿지 않았을 수 있음).
+                if (token.IsCancellationRequested || ReferenceEquals(failure, StoppedResult)) return;
 
                 // 접속했다가 곧바로 끊긴 경우는 실패처럼 간격을 늘림.
                 bool isStable = failure == null && connectedFor.ElapsedMilliseconds >= StableConnectionMs;
@@ -318,7 +333,7 @@ namespace HuliacDev.Network
                     return;
                 }
 
-                if (!isStable) delayMs = Math.Min(delayMs * 2, options.ReconnectMaxIntervalMs);
+                if (!isStable) delayMs = ReconnectBackoff.NextDelayMs(delayMs, options.ReconnectMaxIntervalMs);
             }
         }
 
@@ -347,7 +362,7 @@ namespace HuliacDev.Network
                     lines.Clear();
 
                     // 접속하는 사이 Disconnect·Connect로 멈췄으면 접속했다고 알리지 않고 닫음.
-                    if (!TryMarkConnected(options)) return "stopped";
+                    if (!TryMarkConnected(options)) return StoppedResult;
 
                     isConnected = true;
                     connectedFor.Restart();
@@ -421,6 +436,7 @@ namespace HuliacDev.Network
                 if (options.Generation != _loopGeneration || !_isConnected) return;
 
                 _isConnected = false;
+                _isDropWarned = false;
                 _disconnectedSubject.OnNext(Unit.Default);
             }
         }
