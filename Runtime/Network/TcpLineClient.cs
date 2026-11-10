@@ -198,7 +198,7 @@ namespace HuliacDev.Network
                 return;
             }
 
-            // 루프가 아직 세마포어와 Subject를 쓰는 동안 해제하면 예외가 나므로 끝난 뒤에 해제함.
+            // 루프가 아직 Subject를 쓰는 동안 해제하면 예외가 나므로 끝난 뒤에 해제함(보낼 큐는 루프가 끝날 때 스스로 해제함).
             loop.ContinueWith(_ => ReleaseResources(), TaskScheduler.Default);
         }
 
