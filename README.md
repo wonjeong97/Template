@@ -468,6 +468,7 @@ _tcp.Send("S2\n");   // 줄 끝 문자는 붙이지 않으므로 장치가 줄 �
 - `UdpCommandClient`는 응답이 없으면 `ReplyTimeoutMs`(기본 3초)마다 `MaxSendAttempts`(기본 3번)까지 보내므로, 장치가 같은 명령을 두 번 받아도 문제없게 만들거나(같은 상태로 두는 명령 등) 대기 시간을 장치의 처리 시간보다 넉넉히 잡습니다. 앱이 끝날 때 장치를 원래 상태로 돌릴 명령은 `Dispose` 전에 `SendAsync`로 넣어 두면 응답을 기다리지 않고 한 번 보냅니다.
 - `TcpLineClient`는 첫 접속이 실패해도 같은 간격 규칙으로 계속 다시 접속하므로 `Connect`를 한 번만 부릅니다(다시 부르면 간격이 처음으로 돌아감). 랜선이 빠진 것은 약 12초 안에 알아챕니다.
 - `TcpLineClient`는 끊긴 동안의 `Send`를 쌓아 두지 않고 false를 돌려줍니다. 다시 접속한 뒤 예전 명령으로 장치가 움직이지 않게 하려는 것이므로, 접속 뒤에 필요한 명령은 `OnConnected`에서 다시 보냅니다.
+- `OnConnected`·`OnDisconnected`는 다음 프레임에 오므로, 버튼 입력처럼 그보다 먼저 올 수 있는 호출에서 장치를 움직이는 명령을 보내기 전에는 `IsConnected`와 `ConnectionId`(접속될 때마다 1씩 늘어나는 번호)를 읽어 처리한 접속과 같은지 확인합니다. 메인 스레드가 오래 멈춘 사이 끊겼다가 다시 접속까지 끝나면 `IsConnected`만으로는 알 수 없습니다.
 
 ### 창 포커스 복구 (WindowFocusRestorer, Windows 전용)
 

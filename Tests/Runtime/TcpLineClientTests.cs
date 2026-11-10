@@ -157,6 +157,26 @@ namespace HuliacDev.Tests
         });
 
         /// <summary>
+        /// ConnectionId는 접속할 때마다 1씩 늘어야 함. 이벤트를 기다리지 않고 IsConnected와 함께 읽어 재접속을 알아채는 데 씀.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 다시_접속하면_ConnectionId가_늘어난다() => UniTask.ToCoroutine(async () =>
+        {
+            Assert.AreEqual(0, _client.ConnectionId);
+
+            await ConnectAsync();
+            Assert.AreEqual(1, _client.ConnectionId);
+
+            _server.Close();
+            await UniTask.WaitUntil(() => !_client.IsConnected).AwaitWithRealtimeTimeout(3f, "끊김을 알아채지 못함");
+            Assert.AreEqual(1, _client.ConnectionId, "끊길 때는 번호가 바뀌지 않아야 함");
+
+            _server = await AcceptAsync();
+            await UniTask.WaitUntil(() => _client.IsConnected).AwaitWithRealtimeTimeout(3f, "다시 접속하지 않음");
+            Assert.AreEqual(2, _client.ConnectionId);
+        });
+
+        /// <summary>
         /// Disconnect하면 끊김을 알리고, 장치가 받을 수 있어도 다시 접속하지 않아야 함.
         /// </summary>
         [UnityTest]
